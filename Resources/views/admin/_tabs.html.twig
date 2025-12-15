@@ -1,0 +1,21 @@
+{% set tabs = [
+    {
+        id: 'requirements_upload',
+        label: 'Anforderungen hochladen',
+        route: 'sportabzeichen_admin_upload'
+    },
+    {
+        id: 'participants_upload',
+        label: 'Teilnehmer hochladen',
+        route: 'sportabzeichen_admin_upload_participants'
+    }
+] %}
+
+<nav class="nav nav-tabs mb-3">
+    {% for tab in tabs %}
+        <a class="nav-link {{ activeTab == tab.id ? 'active' : '' }}"
+           href="{{ path(tab.route) }}">
+            {{ _(tab.label) }}
+        </a>
+    {% endfor %}
+</nav>
