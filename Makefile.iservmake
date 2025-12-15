@@ -1,0 +1,111 @@
+## Start: (automatic configuration) ##
+
+LOCALE_ROOT=translations
+PO_FILES=translations/%LOCALE%/SportabzeichenBundle.po
+POT_TEMPLATES=translations/templates/SportabzeichenBundle.pot
+LOCALE_EXCLUDES = 
+
+## End: (automatic configuration) ##
+
+## Start: /usr/lib/iserv/buildtools/mk/extract_translations.mk ##
+
+LOCALE_ROOT = translations
+LOCALE_TARGET_ROOT = locale
+DEPENDENCY_TARGETS += translations/templates/SportabzeichenBundle.pot
+
+translations/templates/SportabzeichenBundle.pot: PulsRSportabzeichenBundle.php migrations.php Crud/ParticipantCrud.php Crud/SportabzeichenExamCrud.php Controller/DefaultController.php Controller/ImportController.php Controller/ResultController.php Controller/AnforderungViewController.php Controller/AnforderungUploadController.php Controller/ExamResultController.php Controller/TeilnehmerUploadController.php Controller/ManageController.php Controller/ExamController.php EventListener/MenuListener.php Migrations/Version20250218000100.php Resources/views/default/index.html.twig Resources/views/admin/upload.html.twig Resources/views/admin/upload_teilnehmer.html.twig Resources/views/manage/index.html.twig Resources/views/manage/view.html.twig Resources/views/exams/participants.html.twig Resources/views/exams/index.html.twig Resources/views/exams/add_participant.html.twig Resources/views/exams/new.html.twig Resources/views/results/exam_results.html.twig Resources/views/results/index.html.twig Resources/views/results/edit.html.twig Resources/views/results/exam_list.html.twig Resources/views/results/add.html.twig Resources/views/results/_row.html.twig Resources/views/crud/exam/show.html.twig Resources/views/participants/index.html.twig Resources/config/menu.yaml Resources/config/rights.yml Resources/config/services.yml Resources/public/js/results.js Resources/public/js/exam.js Resources/logs/g Resources/logs/portabzeichen_participants\ p Resources/logs/sportabzeichen_debug.log Databases/sportabzeichen_schema.sql DependencyInjection/PulsRSportabzeichenExtension.php Entity/SportabzeichenParticipant.php Entity/SportabzeichenExamResult.php Entity/SportabzeichenExam.php Entity/SportabzeichenDiscipline.php Entity/SportabzeichenRequirement.php Entity/SportabzeichenExamParticipant.php $(POT_DEPENDENCIES)
+	genpo -x ^locale -x ^system-locale/ -r "translations" -t .
+
+.PHONY: extract_translations
+extract_translations: ## Extract all gettext strings from source code into .pot files
+extract_translations: translations/templates/SportabzeichenBundle.pot
+	@true
+
+## End: /usr/lib/iserv/buildtools/mk/extract_translations.mk ##
+
+## Start: /usr/lib/iserv/buildtools/mk/clean.mk ##
+
+.PHONY: clean
+clean: ## Removes all built caches
+clean: $(CLEAN_TARGETS)
+	@true
+
+.PHONY: distclean
+distclean: ## Removes all built artifacts
+distclean: clean $(DISTCLEAN_TARGETS)
+	@true
+
+## End: /usr/lib/iserv/buildtools/mk/clean.mk ##
+
+## Start: /usr/lib/iserv/buildtools/mk/help.mk ##
+
+.PHONY: help
+help: ## display help messages
+	@cat $(MAKEFILE_LIST) | egrep '^([a-zA-Z0-9_-]*:).*?##(.*)$$' | sort | awk -F "##" '{printf "%-30s %s\n", $$1, $$2}'
+
+.PHONY: list
+list: ## list all supported targets
+	@cat $(MAKEFILE_LIST) | egrep '^([a-zA-Z0-9_-]*:).*?##(.*)$$' | sort | awk -F ": ##" '{ print $$1 }'
+
+## End: /usr/lib/iserv/buildtools/mk/help.mk ##
+
+## Start: /usr/lib/iserv/buildtools/mk/debug.mk ##
+
+.PHONY:	debug
+debug: ## display local make variables defined
+	@$(foreach V, $(sort $(.VARIABLES)), \
+		$(if $(filter-out environment% default automatic,\
+			$(origin $V)), \
+			$(warning $V = $($V) )) \
+	)
+
+.PHONY:	debug-all
+debug-all: ## display all make variables defined
+	@$(foreach V, $(sort $(.VARIABLES)), \
+		$(warning $V = $($V) ) \
+	)
+
+## End: /usr/lib/iserv/buildtools/mk/debug.mk ##
+
+# To allow using "set -o pipefail" in targets
+export SHELL := /bin/bash
+
+.PHONY: run_tools
+run_tools: ## Run all tools (linters and test frameworks)
+run_tools: lint tests
+
+.PHONY: reports
+reports: ## Run all tools (linters and test frameworks) and generate reports
+reports: $(REPORT_TARGETS)
+
+.PHONY: tests
+tests: ## Run all test frameworks
+tests: $(TEST_TARGETS)
+
+.PHONY: lint
+lint: ## Run all linters
+lint: $(LINT_TARGETS)
+
+.PHONY: fix-cs
+fix-cs: ## Run all CS fixers
+fix-cs: $(FIX_CS_TARGETS)
+
+.PHONY: dependencies
+dependencies: ## Build all artifacts
+dependencies: $(DEPENDENCY_TARGETS)
+
+.PHONY: heile
+heile: ## makes the iserv heile
+heile:
+	igit pull
+	igit make fetch_translations
+	igit install
+	aptitude install -f
+	symfony cache:clear
+	iservchk
+
+.DEFAULT_GOAL := default
+.PHONY: default
+default:
+	@echo "Please run a more specific command such as 'make help'" >&2
+	@exit 1
