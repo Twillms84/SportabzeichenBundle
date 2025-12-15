@@ -1,0 +1,41 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}
+Prüfung auswählen
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2>🏁 Prüfung zur Ergebniseingabe auswählen</h2>
+    <hr>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Jahr</th>
+            <th>Datum</th>
+            <th></th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for exam in exams %}
+            <tr>
+                <td>{{ exam.exam_name }}</td>
+                <td>{{ exam.exam_year }}</td>
+                <td>{{ exam.exam_date ? exam.exam_date|date('d.m.Y') : '-' }}</td>
+                <td>
+                    <a href="{{ path('sportabzeichen_results_index', { examId: exam.id }) }}"
+                       class="btn btn-primary btn-sm">
+                        Ergebnisse eingeben
+                    </a>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+{% endblock %}

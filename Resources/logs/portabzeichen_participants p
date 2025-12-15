@@ -1,0 +1,5 @@
+       act        |  id   |  gid  |                 uuid                 | firstname | lastname |          home          | pwadm | created_by_act | created_by |  created   | deleted_by_act | deleted_by | deleted | deleted_days | password_temp |      password_set      | password_admin_set | stat | importid |  type   | auxinfo 
+------------------+-------+-------+--------------------------------------+-----------+----------+------------------------+-------+----------------+------------+------------+----------------+------------+---------+--------------+---------------+------------------------+--------------------+------+----------+---------+---------
+ joel.noah.deeken | 10026 | 10026 | f972b451-d867-414b-919d-8983b660efa7 | Joel Noah | Deeken   | /home/joel.noah.deeken |       | timo.willms    |            | 2025-12-08 |                |            |         |              | t             | 2025-12-08 22:01:45+01 |                    | i    | 1102297  | Schüler | 8c
+(1 Zeile)
+

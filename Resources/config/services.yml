@@ -1,0 +1,22 @@
+# modules/PulsR/SportabzeichenBundle/Resources/config/services.yml
+services:
+    _defaults:
+        autoconfigure: true
+        autowire: true
+        public: false
+
+    PulsR\SportabzeichenBundle\EventListener\MenuListener:
+        tags:
+            - { name: iserv.menu.main }
+
+    PulsR\SportabzeichenBundle\Controller\:
+        resource: '../../Controller/*'
+        public: true
+        tags: ['controller.service_arguments']
+
+    PulsR\SportabzeichenBundle\Crud\:
+        resource: '../../Crud/*'
+        public: true
+        tags: ['iserv.crud']
+        autowire: true
+        autoconfigure: true

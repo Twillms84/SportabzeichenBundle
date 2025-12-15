@@ -1,0 +1,56 @@
+{% extends "@IServCore/page.html.twig" %}
+
+{% block page_title %}
+    Prüfungen
+{% endblock %}
+
+{% block page_content %}
+<div class="content">
+
+    <h1 class="mb-4">Sportabzeichen – Prüfungen</h1>
+
+    {# Neue Prüfung anlegen #}
+    <a href="{{ path('sportabzeichen_exam_new') }}" class="btn btn-primary mb-3">
+        Neue Prüfung anlegen
+    </a>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Datum</th>
+            <th>Jahr</th>
+            <th>Teilnehmer</th>
+            <th>Aktionen</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for exam in exams %}
+            <tr>
+                <td>{{ exam.id }}</td>
+                <td>{{ exam.exam_name }}</td>
+                <td>{{ exam.exam_date ? exam.exam_date|date('d.m.Y') : '-' }}</td>
+                <td>{{ exam.exam_year }}</td>
+                <td>{{ exam.participant_count }}</td>
+
+                <td>
+                    <a href="{{ path('sportabzeichen_exam_participants', { id: exam.id }) }}"
+                       class="btn btn-sm btn-secondary">
+                        Teilnehmer
+                    </a>
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="6" class="text-center text-muted">
+                    Keine Prüfungen vorhanden.
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+{% endblock %}

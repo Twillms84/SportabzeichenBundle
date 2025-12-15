@@ -1,0 +1,29 @@
+{% extends "@IServCrud/default.html.twig" %}
+
+{% block title %}Neue Prüfung{% endblock %}
+
+{% block body %}
+<h1>Neue Prüfung anlegen</h1>
+
+<form method="post">
+
+    <div class="mb-3">
+        <label class="form-label">Name der Prüfung</label>
+        <input type="text" name="examName" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Datum</label>
+        <input type="date" name="examDate" class="form-control">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Jahr</label>
+        <input type="number" name="examYear" class="form-control" required min="2000" max="2100">
+    </div>
+
+    <button class="btn btn-success">Prüfung speichern</button>
+    <a href="{{ path('sportabzeichen_exam_index') }}" class="btn btn-secondary">Abbrechen</a>
+
+</form>
+{% endblock %}

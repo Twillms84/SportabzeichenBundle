@@ -1,0 +1,28 @@
+{% extends "@IServCore/page.html.twig" %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_content %}
+<div class="content">
+    <h2>{{ title }}</h2>
+
+    {% if message %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="mb-4">
+        <div class="mb-3">
+            <label for="csvFile" class="form-label">CSV-Datei auswählen</label>
+            <input type="file" name="csvFile" id="csvFile" class="form-control" accept=".csv" required>
+        </div>
+        <button class="btn btn-primary">📤 Hochladen & Import starten</button>
+    </form>
+
+    <p class="text-muted">
+        Erwartetes CSV-Format: <code>importId,geschlecht,geburtsdatum</code>
+    </p>
+</div>
+{% endblock %}

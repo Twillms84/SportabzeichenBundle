@@ -1,0 +1,61 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}
+    Teilnehmer – {{ exam.exam_name }} ({{ exam.exam_year }})
+{% endblock %}
+
+{% block content %}
+
+<h1>Teilnehmer – {{ exam.exam_name }} ({{ exam.exam_year }})</h1>
+
+<div class="mb-3">
+
+    <a href="{{ path('sportabzeichen_exam_add_participant', {id: exam.id}) }}"
+       class="btn btn-primary">
+        ➕ Teilnehmer manuell hinzufügen
+    </a>
+
+    <form method="post"
+          action="{{ path('sportabzeichen_exam_auto_add_participants', { id: exam.id }) }}"
+          class="d-inline"
+          onsubmit="return confirm('Alle fehlenden Teilnehmer automatisch hinzufügen?');">
+
+        <button class="btn btn-warning">
+            🔄 Fehlende automatisch hinzufügen
+        </button>
+    </form>
+
+</div>
+
+<table class="table table-striped">
+    <thead>
+    <tr>
+        <th>TN-ID</th>
+        <th>Name</th>
+        <th>Alter im Jahr</th>
+        <th>Ergebnisse</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    {% for ep in participants %}
+        <tr>
+            <td>{{ ep.ep_id }}</td>
+            <td>{{ ep.vorname }} {{ ep.nachname }}</td>
+            <td>{{ ep.age_year }}</td>
+            <td>
+                <a href="{{ path('sportabzeichen_results_edit', {
+                    examId: exam.id,
+                    epId: ep.ep_id
+                }) }}" class="btn btn-sm btn-secondary">
+                    Ergebnisse eintragen
+                </a>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="4">Noch keine Teilnehmer.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

@@ -1,0 +1,23 @@
+menu:
+  sportabzeichen:
+    label: 'Sportabzeichen'
+    icon: fa-trophy
+    roles: ['PRIV_SPORTABZEICHEN_RESULTS', 'PRIV_SPORTABZEICHEN_REQUIREMENTS', 'PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS']
+
+  sportabzeichen_results:
+    parent: sportabzeichen
+    label: 'Ergebnisse eintragen'
+    route: sportabzeichen_results_exams
+    roles: ['PRIV_SPORTABZEICHEN_RESULTS']
+
+  sportabzeichen_requirements:
+    parent: sportabzeichen
+    label: 'Anforderungen importieren'
+    route: sportabzeichen_admin_upload
+    roles: ['PRIV_SPORTABZEICHEN_REQUIREMENTS']
+
+  sportabzeichen_participants:
+    parent: sportabzeichen
+    label: 'Teilnehmer verwalten'
+    route: sportabzeichen_participants_index
+    roles: ['PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS']

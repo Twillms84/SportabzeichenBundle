@@ -1,0 +1,24 @@
+{% extends "@IServCrud/default.html.twig" %}
+
+{% block title %}Teilnehmer hinzufügen{% endblock %}
+
+{% block body %}
+<h1>Teilnehmer zu Prüfung hinzufügen</h1>
+
+<form method="post">
+
+    <div class="mb-3">
+        <label class="form-label">Teilnehmer auswählen</label>
+        <select name="participant_id" class="form-select">
+            {% for p in participants %}
+                <option value="{{ p.id }}">
+                    {{ p.vorname }} {{ p.nachname }} ({{ p.geschlecht }})
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button class="btn btn-success">Hinzufügen</button>
+</form>
+
+{% endblock %}

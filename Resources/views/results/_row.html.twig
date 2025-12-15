@@ -1,0 +1,30 @@
+<tr>
+    <td>{{ discipline.name }}</td>
+    <td>{{ discipline.kategorie }}</td>
+    <td>{{ discipline.einheit ?: '-' }}</td>
+
+    <td>
+        <input type="number"
+               step="0.01"
+               class="form-control leistung-input"
+               value="{{ result.leistung ?? '' }}"
+               data-ep="{{ epId }}"
+               data-discipline="{{ discipline.id }}">
+    </td>
+
+    <td>
+        {% if result is not null %}
+            {% if result.stufe == 'Gold' %}
+                <span class="badge bg-warning text-dark">Gold</span>
+            {% elseif result.stufe == 'Silber' %}
+                <span class="badge bg-secondary">Silber</span>
+            {% elseif result.stufe == 'Bronze' %}
+                <span class="badge bg-orange bg-opacity-75 text-dark">Bronze</span>
+            {% else %}
+                -
+            {% endif %}
+        {% else %}
+            -
+        {% endif %}
+    </td>
+</tr>
