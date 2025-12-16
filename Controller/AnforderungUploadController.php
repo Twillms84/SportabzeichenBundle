@@ -170,7 +170,6 @@ SQL;
 
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements_upload',
-            'title'     => 'requirements_upload',
             'message'   => $message,
             'error'     => $error,
         ]);
