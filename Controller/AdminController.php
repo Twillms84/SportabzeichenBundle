@@ -17,7 +17,7 @@ final class AdminController extends AbstractPageController
     #[Route('/', name: 'dashboard')]
     public function dashboard(): Response
     {
-        $this->denyAccessUnlessGranted('sportabzeichen_admin');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         return $this->render('@PulsRSportabzeichen/admin/dashboard.html.twig', [
             'activeTab' => 'requirements_upload',
@@ -30,7 +30,7 @@ final class AdminController extends AbstractPageController
     #[Route('/upload-requirements', name: 'upload')]
     public function uploadRequirements(): Response
     {
-        $this->denyAccessUnlessGranted('sportabzeichen_admin');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements_upload',
@@ -43,7 +43,7 @@ final class AdminController extends AbstractPageController
     #[Route('/upload-participants', name: 'upload_participants')]
     public function uploadParticipants(): Response
     {
-        $this->denyAccessUnlessGranted('sportabzeichen_admin');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'participants_upload',
