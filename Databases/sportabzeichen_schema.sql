@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
 CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
     id              SERIAL PRIMARY KEY,
     jahr            INT NOT NULL,
-    altersklasse    TEXT NOT NULL,
-    geschlecht      TEXT NOT NULL,      -- MALE / FEMALE / DIVERS
+    age_min         INT NOT NULL,
+    age_max         INT NOT NULL,
+    geschlecht      TEXT NOT NULL,      -- MALE / FEMALE 
     auswahlnummer   INT NOT NULL,       -- Reihenfolge im Dropdown
     disziplin       TEXT NOT NULL,
     kategorie       TEXT NOT NULL,
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
 );
 
 CREATE INDEX IF NOT EXISTS idx_req_lookup
-ON sportabzeichen_requirements (jahr, altersklasse, geschlecht, disziplin);
+ON sportabzeichen_requirements (jahr, geschlecht, age_min, age_max, disziplin);
 
 ------------------------------------------------------------
 -- 3. Verknüpfung Teilnehmer ↔ Prüfungen
