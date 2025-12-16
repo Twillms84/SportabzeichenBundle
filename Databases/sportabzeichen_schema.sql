@@ -1,11 +1,11 @@
 --
 -- Sportabzeichen Modul – Datenbankschema
--- Version 1.0.0
+-- Version 2.0.0 (normalisiert)
 -- Kompatibel mit IServ / PostgreSQL
 --
 
 ------------------------------------------------------------
--- 1. Haupttabellen
+-- 1. Prüfungen
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
@@ -17,48 +17,84 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+------------------------------------------------------------
+-- 2. Teilnehmer
+------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     id              SERIAL PRIMARY KEY,
     import_id       TEXT NOT NULL UNIQUE,
     vorname         TEXT,
     nachname        TEXT,
-    geschlecht      TEXT,
+    geschlecht      TEXT CHECK (geschlecht IN ('MALE','FEMALE')),
     geburtsdatum    DATE,
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
 ------------------------------------------------------------
--- 2. Anforderungen (DOSB-Katalog-Daten)
+-- 3. Disziplinen (Stammdaten)
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sportabzeichen_disciplines (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    kategorie       TEXT NOT NULL,
+    einheit         TEXT NOT NULL,
+    berechnungsart  TEXT NOT NULL DEFAULT 'GREATER',
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT uniq_sportabzeichen_disciplines_name
+        UNIQUE (name)
+);
+
+------------------------------------------------------------
+-- 4. Anforderungen
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
     id              SERIAL PRIMARY KEY,
+
+    discipline_id   INT NOT NULL
+        REFERENCES sportabzeichen_disciplines(id)
+        ON DELETE CASCADE,
+
     jahr            INT NOT NULL,
     age_min         INT NOT NULL,
     age_max         INT NOT NULL,
-    geschlecht      TEXT NOT NULL,      -- MALE / FEMALE 
-    auswahlnummer   INT NOT NULL,       -- Reihenfolge im Dropdown
-    disziplin       TEXT NOT NULL,
-    kategorie       TEXT NOT NULL,
+
+    geschlecht      TEXT NOT NULL CHECK (geschlecht IN ('MALE','FEMALE')),
+
+    auswahlnummer   INT NOT NULL,
+
     bronze          DOUBLE PRECISION,
     silber          DOUBLE PRECISION,
     gold            DOUBLE PRECISION,
-    einheit         TEXT,
-    schwimmnachweis BOOLEAN DEFAULT FALSE,
-    berechnungsart  TEXT DEFAULT 'GREATER'
+
+    schwimmnachweis BOOLEAN DEFAULT FALSE
 );
 
+-- Eindeutigkeit für CSV-UPSERT
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_sportabzeichen_requirements
+ON sportabzeichen_requirements
+(discipline_id, jahr, age_min, age_max, geschlecht);
+
+-- Lookup / Performance
 CREATE INDEX IF NOT EXISTS idx_req_lookup
-ON sportabzeichen_requirements (jahr, geschlecht, age_min, age_max, disziplin);
+ON sportabzeichen_requirements
+(jahr, geschlecht, age_min, age_max);
 
 ------------------------------------------------------------
--- 3. Verknüpfung Teilnehmer ↔ Prüfungen
+-- 5. Prüfungs-Teilnehmer
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_participants (
     id              SERIAL PRIMARY KEY,
-    exam_id         INT NOT NULL REFERENCES sportabzeichen_exams(id) ON DELETE CASCADE,
-    participant_id  INT NOT NULL REFERENCES sportabzeichen_participants(id) ON DELETE CASCADE,
+    exam_id         INT NOT NULL
+        REFERENCES sportabzeichen_exams(id)
+        ON DELETE CASCADE,
+    participant_id  INT NOT NULL
+        REFERENCES sportabzeichen_participants(id)
+        ON DELETE CASCADE,
     age_year        INT NOT NULL,
     UNIQUE (exam_id, participant_id)
 );
@@ -67,15 +103,19 @@ CREATE INDEX IF NOT EXISTS idx_exam_participant_exam
 ON sportabzeichen_exam_participants (exam_id);
 
 ------------------------------------------------------------
--- 4. Ergebnisse je Disziplin
+-- 6. Ergebnisse
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_results (
     id              SERIAL PRIMARY KEY,
-    ep_id           INT NOT NULL REFERENCES sportabzeichen_exam_participants(id) ON DELETE CASCADE,
-    disziplin       TEXT NOT NULL,
-    kategorie       TEXT NOT NULL,
-    auswahlnummer   INT NOT NULL,
+
+    ep_id           INT NOT NULL
+        REFERENCES sportabzeichen_exam_participants(id)
+        ON DELETE CASCADE,
+
+    discipline_id   INT NOT NULL
+        REFERENCES sportabzeichen_disciplines(id),
+
     leistung        DOUBLE PRECISION,
     stufe           TEXT
 );
@@ -84,20 +124,23 @@ CREATE INDEX IF NOT EXISTS idx_results_ep
 ON sportabzeichen_exam_results (ep_id);
 
 ------------------------------------------------------------
--- 5. Berechtigungen für IServ / Symfony
+-- 7. Rechte für Symfony / IServ
 ------------------------------------------------------------
 
--- Sequences
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO symfony;
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON
+    sportabzeichen_exams,
+    sportabzeichen_participants,
+    sportabzeichen_disciplines,
+    sportabzeichen_requirements,
+    sportabzeichen_exam_participants,
+    sportabzeichen_exam_results
+TO symfony;
 
--- Tabellen
-GRANT SELECT, INSERT, UPDATE, DELETE ON sportabzeichen_exams TO symfony;
-GRANT SELECT, INSERT, UPDATE, DELETE ON sportabzeichen_participants TO symfony;
-GRANT SELECT, INSERT, UPDATE, DELETE ON sportabzeichen_requirements TO symfony;
-GRANT SELECT, INSERT, UPDATE, DELETE ON sportabzeichen_exam_participants TO symfony;
-GRANT SELECT, INSERT, UPDATE, DELETE ON sportabzeichen_exam_results TO symfony;
+GRANT USAGE, SELECT
+ON ALL SEQUENCES IN SCHEMA public
+TO symfony;
 
 ------------------------------------------------------------
 -- SCHEMA FERTIG
 ------------------------------------------------------------
-

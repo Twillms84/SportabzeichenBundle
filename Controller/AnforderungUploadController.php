@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-#[Route(path: '/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
+#[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class AnforderungUploadController extends AbstractPageController
 {
     private const CATEGORY_MAP = [
@@ -21,19 +21,19 @@ final class AnforderungUploadController extends AbstractPageController
         'SWIMMING'     => 'Schwimmen',
     ];
 
-    #[Route(path: '/upload', name: 'upload')]
+    #[Route('/upload', name: 'upload')]
     public function upload(Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('sportabzeichen_admin');
 
-        $message   = null;
-        $error     = null;
-        $imported  = 0;
-        $skipped   = 0;
+        $message  = null;
+        $error    = null;
+        $imported = 0;
+        $skipped  = 0;
 
-        // ------------------------------------------------------------
+        // --------------------------------------------------------
         // Logging
-        // ------------------------------------------------------------
+        // --------------------------------------------------------
         $logDir = '/var/lib/iserv/sportabzeichen/logs';
         if (!is_dir($logDir)) {
             mkdir($logDir, 0775, true);
@@ -42,15 +42,12 @@ final class AnforderungUploadController extends AbstractPageController
 
         file_put_contents($logFile, "=== Import " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
 
-        // ------------------------------------------------------------
-        // Upload
-        // ------------------------------------------------------------
         if ($request->isMethod('POST')) {
             $file = $request->files->get('csvFile');
 
             if (!$file) {
                 $error = 'Keine Datei ausgewählt.';
-            } elseif (strtolower($file->getClientOriginalExtension() ?? '') !== 'csv') {
+            } elseif (strtolower($file->getClientOriginalExtension()) !== 'csv') {
                 $error = 'Nur CSV-Dateien sind erlaubt.';
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
@@ -60,9 +57,9 @@ final class AnforderungUploadController extends AbstractPageController
                     // Encoding erkennen
                     $sample = fread($handle, 4096);
                     rewind($handle);
-                    $encoding = mb_detect_encoding($sample, ['UTF-8', 'Windows-1252', 'ISO-8859-1'], true);
+                    $encoding = mb_detect_encoding($sample, ['UTF-8','Windows-1252','ISO-8859-1'], true);
 
-                    // Kopfzeile überspringen
+                    // Header überspringen
                     fgetcsv($handle, 0, ',');
 
                     while (($row = fgetcsv($handle, 0, ',')) !== false) {
@@ -72,9 +69,7 @@ final class AnforderungUploadController extends AbstractPageController
                                 continue;
                             }
 
-                            // ------------------------------------------------
-                            // CSV → Variablen
-                            // ------------------------------------------------
+                            // CSV-Zuordnung
                             $jahr        = (int)$row[1];
                             $ageMin      = (int)$row[2];
                             $ageMax      = (int)$row[3];
@@ -85,86 +80,49 @@ final class AnforderungUploadController extends AbstractPageController
                                 default => throw new \RuntimeException('Ungültiges Geschlecht'),
                             };
 
-                            $auswahlNr   = (int)$row[5];
-                            $disziplin   = trim($row[6]);
-                            $catCode     = strtoupper(trim($row[7]));
-                            $kategorie   = self::CATEGORY_MAP[$catCode] ?? $catCode;
+                            $auswahlNr = (int)$row[5];
+                            $disziplin = trim($row[6]);
+
+                            $catCode   = strtoupper(trim($row[7]));
+                            $kategorie = self::CATEGORY_MAP[$catCode] ?? $catCode;
 
                             $bronze  = $row[8]  !== '' ? (float)$row[8]  : null;
                             $silber  = $row[9]  !== '' ? (float)$row[9]  : null;
                             $gold    = $row[10] !== '' ? (float)$row[10] : null;
-                            $einheit = $row[11] !== '' ? trim($row[11]) : null;
+                            $einheit = $row[11] !== '' ? trim($row[11]) : '';
 
-                            $schwimmnachweis = match (strtolower(trim($row[12] ?? ''))) {
-                                '1', 'true', 'yes', 'ja', 'y' => true,
+                            $schwimmnachweis = match (strtolower(trim($row[12]))) {
+                                '1','true','yes','ja','y' => true,
                                 default => false,
                             };
 
-                            $berechnung = strtoupper(trim($row[13] ?? 'GREATER'));
+                            $berechnung = strtoupper(trim($row[13] ?: 'GREATER'));
 
-                            // ------------------------------------------------
-                            // UPSERT
-                            // ------------------------------------------------
+                            // --------------------------------------------
+                            // Disziplin holen oder anlegen
+                            // --------------------------------------------
+                            $disciplineId = $conn->fetchOne(
+                                'SELECT id FROM sportabzeichen_disciplines WHERE name = ?',
+                                [$disziplin]
+                            );
+
+                            if (!$disciplineId) {
+                                $conn->insert('sportabzeichen_disciplines', [
+                                    'name'           => $disziplin,
+                                    'kategorie'      => $kategorie,
+                                    'einheit'        => $einheit,
+                                    'berechnungsart' => $berechnung,
+                                ]);
+
+                                $disciplineId = (int)$conn->lastInsertId();
+                            }
+
+                            // --------------------------------------------
+                            // Requirement upserten
+                            // --------------------------------------------
                             $sql = <<<SQL
 INSERT INTO sportabzeichen_requirements
-(jahr, age_min, age_max, geschlecht, auswahlnummer,
- disziplin, kategorie, bronze, silber, gold,
- einheit, schwimmnachweis, berechnungsart)
+(discipline_id, jahr, age_min, age_max, geschlecht,
+ auswahlnummer, bronze, silber, gold, schwimmnachweis)
 VALUES
-(:jahr, :age_min, :age_max, :geschlecht, :auswahl,
- :disziplin, :kategorie, :bronze, :silber, :gold,
- :einheit, :sn, :berechnung)
-ON CONFLICT (jahr, age_min, age_max, geschlecht, disziplin)
-DO UPDATE SET
- auswahlnummer   = EXCLUDED.auswahlnummer,
- bronze          = EXCLUDED.bronze,
- silber          = EXCLUDED.silber,
- gold            = EXCLUDED.gold,
- einheit         = EXCLUDED.einheit,
- schwimmnachweis = EXCLUDED.schwimmnachweis,
- berechnungsart  = EXCLUDED.berechnungsart
-SQL;
-
-                            $conn->executeStatement($sql, [
-                                'jahr'        => $jahr,
-                                'age_min'     => $ageMin,
-                                'age_max'     => $ageMax,
-                                'geschlecht'  => $geschlecht,
-                                'auswahl'     => $auswahlNr,
-                                'disziplin'   => $disziplin,
-                                'kategorie'   => $kategorie,
-                                'bronze'      => $bronze,
-                                'silber'      => $silber,
-                                'gold'        => $gold,
-                                'einheit'     => $einheit,
-                                'sn'          => $schwimmnachweis,
-                                'berechnung'  => $berechnung,
-                            ]);
-
-                            $imported++;
-
-                        } catch (\Throwable $e) {
-                            $skipped++;
-                            file_put_contents(
-                                $logFile,
-                                "ERROR: {$e->getMessage()} | " . json_encode($row) . "\n",
-                                FILE_APPEND
-                            );
-                        }
-                    }
-
-                    fclose($handle);
-
-                    $message = "Import abgeschlossen: {$imported} importiert, {$skipped} übersprungen.";
-                    file_put_contents($logFile, $message . "\n", FILE_APPEND);
-                }
-            }
-        }
-
-        return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
-            'activeTab' => 'requirements_upload',
-            'message'   => $message,
-            'error'     => $error,
-        ]);
-    }
-}
+(
