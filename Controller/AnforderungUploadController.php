@@ -6,7 +6,7 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFounda    on\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
@@ -170,6 +170,7 @@ SQL;
 
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements_upload',
+            'title'     => 'requirements_upload',
             'message'   => $message,
             'error'     => $error,
         ]);
