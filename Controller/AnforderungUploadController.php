@@ -6,7 +6,7 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use Symfony\Component\HttpFounda    on\Request;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
