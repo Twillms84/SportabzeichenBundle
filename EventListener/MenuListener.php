@@ -21,7 +21,7 @@ final class MenuListener implements MainMenuListenerInterface
         /* ----------------------------------------------------------
          * Ergebnisse eintragen
          * ---------------------------------------------------------- */
-        if ($this->auth->isGranted('sportabzeichen_results')) {
+        if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
             $menu->addChild('sportabzeichen_results', [
                 'route' => 'sportabzeichen_results_exams',
                 'label' => _('Sportabzeichen – Ergebnisse'),
@@ -35,7 +35,7 @@ final class MenuListener implements MainMenuListenerInterface
         /* ----------------------------------------------------------
          * Verwaltung / Administration
          * ---------------------------------------------------------- */
-        if ($this->auth->isGranted('sportabzeichen_admin')) {
+        if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_ADMIN')) {
             $menu->addChild('sportabzeichen_admin', [
                 'route' => 'sportabzeichen_admin_dashboard',
                 'label' => _('Sportabzeichen – Verwaltung'),
