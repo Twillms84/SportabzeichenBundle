@@ -125,4 +125,53 @@ INSERT INTO sportabzeichen_requirements
 (discipline_id, jahr, age_min, age_max, geschlecht,
  auswahlnummer, bronze, silber, gold, schwimmnachweis)
 VALUES
-(
+(:discipline_id, :jahr, :age_min, :age_max, :geschlecht,
+ :auswahl, :bronze, :silber, :gold, :sn)
+ON CONFLICT (discipline_id, jahr, age_min, age_max, geschlecht)
+DO UPDATE SET
+ auswahlnummer   = EXCLUDED.auswahlnummer,
+ bronze          = EXCLUDED.bronze,
+ silber          = EXCLUDED.silber,
+ gold            = EXCLUDED.gold,
+ schwimmnachweis = EXCLUDED.schwimmnachweis
+SQL;
+
+                            $conn->executeStatement($sql, [
+                                'discipline_id' => $disciplineId,
+                                'jahr'          => $jahr,
+                                'age_min'       => $ageMin,
+                                'age_max'       => $ageMax,
+                                'geschlecht'    => $geschlecht,
+                                'auswahl'       => $auswahlNr,
+                                'bronze'        => $bronze,
+                                'silber'        => $silber,
+                                'gold'          => $gold,
+                                'sn'            => $schwimmnachweis,
+                            ]);
+
+                            $imported++;
+
+                        } catch (\Throwable $e) {
+                            $skipped++;
+                            file_put_contents(
+                                $logFile,
+                                "ERROR: {$e->getMessage()} | " . json_encode($row) . "\n",
+                                FILE_APPEND
+                            );
+                        }
+                    }
+
+                    fclose($handle);
+                    $message = "Import abgeschlossen: {$imported} importiert, {$skipped} übersprungen.";
+                    file_put_contents($logFile, $message . "\n", FILE_APPEND);
+                }
+            }
+        }
+
+        return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
+            'activeTab' => 'requirements_upload',
+            'message'   => $message,
+            'error'     => $error,
+        ]);
+    }
+}
