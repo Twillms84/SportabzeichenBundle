@@ -1,0 +1,33 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block page_title %}
+    {{ _('Sportabzeichen – Verwaltung') }}
+{% endblock %}
+
+{% block content %}
+    {# Tabs für den Admin-Bereich #}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">
+                {{ _('Verwaltung') }}
+            </h3>
+        </div>
+
+        <div class="panel-body">
+            <p>
+                {{ _('In diesem Bereich können die Daten für das Sportabzeichen verwaltet werden.') }}
+            </p>
+
+            <ul>
+                <li>{{ _('Anforderungen (DOSB-Katalog) per CSV hochladen') }}</li>
+                <li>{{ _('Teilnehmerdaten per CSV importieren') }}</li>
+            </ul>
+
+            <p class="text-muted">
+                {{ _('Bitte wählen Sie oben einen Reiter aus.') }}
+            </p>
+        </div>
+    </div>
+{% endblock %}
