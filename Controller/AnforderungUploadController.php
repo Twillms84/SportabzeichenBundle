@@ -24,7 +24,7 @@ final class AnforderungUploadController extends AbstractPageController
     #[Route('/upload', name: 'upload')]
     public function upload(Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('sportabzeichen_admin');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         $message  = null;
         $error    = null;
