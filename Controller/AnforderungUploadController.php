@@ -74,11 +74,7 @@ final class AnforderungUploadController extends AbstractPageController
                             $ageMin      = (int)$row[2];
                             $ageMax      = (int)$row[3];
 
-                            $geschlecht = match (strtolower(trim($row[4]))) {
-                                'w' => 'FEMALE',
-                                'm' => 'MALE',
-                                default => throw new \RuntimeException('Ungültiges Geschlecht'),
-                            };
+                            $geschlecht = (strtolower(trim($row[4])));
 
                             $auswahlNr = (int)$row[5];
                             $disziplin = trim($row[6]);
@@ -92,7 +88,7 @@ final class AnforderungUploadController extends AbstractPageController
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
                             // Boolean sauber parsen
-                            $snVal = isset($data[13]) ? strtolower(trim($data[13])) : '';
+                            $snVal = isset($row[13]) ? strtolower(trim($row[13])) : '';
 
                             $schwimmnachweis = match ($snVal) {
                                 '1', 'true', 'yes', 'y', 't', 'wahr', 'ja' => true,
