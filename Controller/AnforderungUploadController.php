@@ -108,13 +108,12 @@ final class AnforderungUploadController extends AbstractPageController
                                 }
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
-                            // Schwimmnachweis
-                            $snRaw = strtolower(trim((string) ($row[13] ?? '')));
-                            $schwimmnachweis = in_array(
-                                $snRaw,
-                                ['1', 'true', 'yes', 'ja', 'y', 't', 'wahr'],
-                                true
-                            );
+                            // Boolean sauber parsen
+                            $snVal = isset($data[13]) ? strtolower(trim($data[13])) : '';
+                            $schwimmnachweis = match ($snVal) {
+                                '1', 'true', 'yes', 'y', 't', 'wahr', 'ja' => true,
+                                default => false,
+                            };
 
                             $berechnung = strtoupper(trim((string) ($row[14] ?? 'GREATER')));
 
