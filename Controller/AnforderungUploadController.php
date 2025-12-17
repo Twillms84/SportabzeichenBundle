@@ -64,7 +64,7 @@ final class AnforderungUploadController extends AbstractPageController
 
                     while (($row = fgetcsv($handle, 0, ',')) !== false) {
                         try {
-                            if (count($row) < 14) {
+                            if (count($row) < 15) {
                                 $skipped++;
                                 continue;
                             }
@@ -89,14 +89,16 @@ final class AnforderungUploadController extends AbstractPageController
                             $bronze  = $row[8]  !== '' ? (float)$row[8]  : null;
                             $silber  = $row[9]  !== '' ? (float)$row[9]  : null;
                             $gold    = $row[10] !== '' ? (float)$row[10] : null;
-                            $einheit = $row[11] !== '' ? trim($row[11]) : '';
+                            $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
-                            $schwimmnachweis = match (strtolower(trim($row[12]))) {
-                                '1','true','yes','ja','y' => true,
+                            $snRaw = strtolower(trim((string)($data[13] ?? '')));
+
+                            $schwimmnachweis = match ($snVal) {
+                                '1', 'true', 'yes', 'y', 't', 'wahr', 'ja' => true,
                                 default => false,
                             };
 
-                            $berechnung = strtoupper(trim($row[13] ?: 'GREATER'));
+                            $berechnung = strtoupper(trim($row[14] ?: 'GREATER'));
 
                             // --------------------------------------------
                             // Disziplin holen oder anlegen
