@@ -167,7 +167,7 @@ SQL;
                                 'bronze'        => $bronze,
                                 'silber'        => $silber,
                                 'gold'          => $gold,
-                                'sn'            => $schwimmnachweis,
+                                'sn'            => (bool)$schwimmnachweis,
                             ]);
 
                             $imported++;
