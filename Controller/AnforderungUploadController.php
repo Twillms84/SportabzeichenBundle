@@ -54,11 +54,6 @@ final class AnforderungUploadController extends AbstractPageController
                 if (!$handle) {
                     $error = 'CSV konnte nicht geöffnet werden.';
                 } else {
-                    // Encoding erkennen
-                    $sample = fread($handle, 4096);
-                    rewind($handle);
-                    $encoding = mb_detect_encoding($sample, ['UTF-8','Windows-1252','ISO-8859-1'], true);
-
                     // Header überspringen
                     fgetcsv($handle, 0, ',');
 
@@ -69,37 +64,59 @@ final class AnforderungUploadController extends AbstractPageController
                                 continue;
                             }
 
+                            // ------------------------------------------------
                             // CSV-Zuordnung
-                            $jahr        = (int)$row[1];
-                            $ageMin      = (int)$row[2];
-                            $ageMax      = (int)$row[3];
+                            // ------------------------------------------------
+                            $jahr   = (int) $row[1];
+                            $ageMin = (int) $row[2];
+                            $ageMax = (int) $row[3];
 
-                            $geschlecht = (strtolower(trim($row[4])));
+                            // Regel: age_max = 0 → 100
+                            if ($ageMax === 0) {
+                                $ageMax = 100;
+                            }
 
-                            $auswahlNr = (int)$row[5];
+                            if ($ageMax < $ageMin) {
+                                throw new \RuntimeException(
+                                    "Ungültiger Altersbereich {$ageMin}-{$ageMax}"
+                                );
+                            }
+
+                            // Geschlecht normalisieren
+                            $geschlechtRaw = strtolower(trim((string) $row[4]));
+                            $geschlecht = match ($geschlechtRaw) {
+                                'w' => 'FEMALE',
+                                'm' => 'MALE',
+                                default => throw new \RuntimeException(
+                                    "Ungültiges Geschlecht '{$geschlechtRaw}'"
+                                ),
+                            };
+
+                            $auswahlNr = (int) $row[5];
                             $disziplin = trim($row[6]);
 
                             $catCode   = strtoupper(trim($row[7]));
                             $kategorie = self::CATEGORY_MAP[$catCode] ?? $catCode;
 
-                            $bronze  = $row[8]  !== '' ? (float)$row[8]  : null;
-                            $silber  = $row[9]  !== '' ? (float)$row[9]  : null;
-                            $gold    = $row[10] !== '' ? (float)$row[10] : null;
+                            $bronze = $row[8]  !== '' ? (float) $row[8]  : null;
+                            $silber = $row[9]  !== '' ? (float) $row[9]  : null;
+                            $gold   = $row[10] !== '' ? (float) $row[10] : null;
+
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
-                            // Boolean sauber parsen
-                            $snVal = isset($row[13]) ? strtolower(trim($row[13])) : '';
+                            // Schwimmnachweis
+                            $snRaw = strtolower(trim((string) ($row[13] ?? '')));
+                            $schwimmnachweis = in_array(
+                                $snRaw,
+                                ['1', 'true', 'yes', 'ja', 'y', 't', 'wahr'],
+                                true
+                            );
 
-                            $schwimmnachweis = match ($snVal) {
-                                '1', 'true', 'yes', 'y', 't', 'wahr', 'ja' => true,
-                                default => false,
-                            };
+                            $berechnung = strtoupper(trim((string) ($row[14] ?? 'GREATER')));
 
-                            $berechnung = strtoupper(trim($row[14] ?: 'GREATER'));
-
-                            // --------------------------------------------
+                            // ------------------------------------------------
                             // Disziplin holen oder anlegen
-                            // --------------------------------------------
+                            // ------------------------------------------------
                             $disciplineId = $conn->fetchOne(
                                 'SELECT id FROM sportabzeichen_disciplines WHERE name = ?',
                                 [$disziplin]
@@ -113,12 +130,12 @@ final class AnforderungUploadController extends AbstractPageController
                                     'berechnungsart' => $berechnung,
                                 ]);
 
-                                $disciplineId = (int)$conn->lastInsertId();
+                                $disciplineId = (int) $conn->lastInsertId();
                             }
 
-                            // --------------------------------------------
+                            // ------------------------------------------------
                             // Requirement upserten
-                            // --------------------------------------------
+                            // ------------------------------------------------
                             $sql = <<<SQL
 INSERT INTO sportabzeichen_requirements
 (discipline_id, jahr, age_min, age_max, geschlecht,
@@ -161,6 +178,7 @@ SQL;
                     }
 
                     fclose($handle);
+
                     $message = "Import abgeschlossen: {$imported} importiert, {$skipped} übersprungen.";
                     file_put_contents($logFile, $message . "\n", FILE_APPEND);
                 }
