@@ -91,7 +91,8 @@ final class AnforderungUploadController extends AbstractPageController
                             $gold    = $row[10] !== '' ? (float)$row[10] : null;
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
-                            $snRaw = strtolower(trim((string)($data[13] ?? '')));
+                            // Boolean sauber parsen
+                            $snVal = isset($data[13]) ? strtolower(trim($data[13])) : '';
 
                             $schwimmnachweis = match ($snVal) {
                                 '1', 'true', 'yes', 'y', 't', 'wahr', 'ja' => true,
