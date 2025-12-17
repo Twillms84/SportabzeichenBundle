@@ -102,6 +102,10 @@ final class AnforderungUploadController extends AbstractPageController
                             $silber = $row[9]  !== '' ? (float) $row[9]  : null;
                             $gold   = $row[10] !== '' ? (float) $row[10] : null;
 
+                            $verband = trim((string) ($row[11] ?? ''));
+                                if ($verband === '') {
+                                    $verband = null;
+                                }
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
 
                             // Schwimmnachweis
@@ -127,6 +131,7 @@ final class AnforderungUploadController extends AbstractPageController
                                     'name'           => $disziplin,
                                     'kategorie'      => $kategorie,
                                     'einheit'        => $einheit,
+                                    'verband'        => $verband,  
                                     'berechnungsart' => $berechnung,
                                 ]);
 
