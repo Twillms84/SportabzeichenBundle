@@ -156,7 +156,9 @@ DO UPDATE SET
  schwimmnachweis = EXCLUDED.schwimmnachweis
 SQL;
 
-                            $conn->executeStatement($sql, [
+                            $conn->executeStatement(
+                            $sql,
+                            [
                                 'discipline_id' => $disciplineId,
                                 'jahr'          => $jahr,
                                 'age_min'       => $ageMin,
@@ -166,8 +168,21 @@ SQL;
                                 'bronze'        => $bronze,
                                 'silber'        => $silber,
                                 'gold'          => $gold,
-                                'sn'            => (bool)$schwimmnachweis,
-                            ]);
+                                'sn'            => $schwimmnachweis,
+                            ],
+                            [
+                                'discipline_id' => \PDO::PARAM_INT,
+                                'jahr'          => \PDO::PARAM_INT,
+                                'age_min'       => \PDO::PARAM_INT,
+                                'age_max'       => \PDO::PARAM_INT,
+                                'geschlecht'    => \PDO::PARAM_STR,
+                                'auswahl'       => \PDO::PARAM_INT,
+                                'bronze'        => \PDO::PARAM_STR,
+                                'silber'        => \PDO::PARAM_STR,
+                                'gold'          => \PDO::PARAM_STR,
+                                'sn'            => \PDO::PARAM_BOOL,   // 🔥 DAS IST DER ENTSCHEIDENDE TEIL
+                            ]
+                        );
 
                             $imported++;
 
