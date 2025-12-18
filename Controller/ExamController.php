@@ -28,7 +28,7 @@ final class ExamController extends AbstractPageController
         ORDER BY e.exam_year DESC'
     );
 
-        return $this->render('@PulsRSportabzeichen/exams/index.html.twig', [
+        return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
             'exams' => $exams,
         ]);
     }
