@@ -1,29 +1,49 @@
-{% extends "@IServCrud/default.html.twig" %}
+{% extends "@IServCore/page.html.twig" %}
 
-{% block title %}Neue Prüfung{% endblock %}
+{% block page_title %}
+    {{ 'Neue Sportabzeichen-Prüfung anlegen'|trans }}
+{% endblock %}
 
-{% block body %}
-<h1>Neue Prüfung anlegen</h1>
+{% block page_content %}
+<div class="content">
 
-<form method="post">
+    <h2>{{ 'Neue Prüfung anlegen'|trans }}</h2>
 
-    <div class="mb-3">
-        <label class="form-label">Name der Prüfung</label>
-        <input type="text" name="examName" class="form-control" required>
-    </div>
+    {% if message %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
 
-    <div class="mb-3">
-        <label class="form-label">Datum</label>
-        <input type="date" name="examDate" class="form-control">
-    </div>
+    <form method="post">
 
-    <div class="mb-3">
-        <label class="form-label">Jahr</label>
-        <input type="number" name="examYear" class="form-control" required min="2000" max="2100">
-    </div>
+        <div class="form-group">
+            <label>Prüfungsjahr</label>
+            <input type="number" name="exam_year" class="form-control"
+                   value="{{ "now"|date("Y") }}" required>
+        </div>
 
-    <button class="btn btn-success">Prüfung speichern</button>
-    <a href="{{ path('sportabzeichen_exam_index') }}" class="btn btn-secondary">Abbrechen</a>
+        <div class="form-group">
+            <label>Prüfungsdatum</label>
+            <input type="date" name="exam_date" class="form-control">
+        </div>
 
-</form>
+        <div class="form-group">
+            <label>IServ-Klasse</label>
+            <select name="class" class="form-control" required>
+                <option value="">-- bitte wählen --</option>
+                {% for c in classes %}
+                    <option value="{{ c.class }}">{{ c.class }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button class="btn btn-primary">
+            Prüfung anlegen & Teilnehmer zuweisen
+        </button>
+
+    </form>
+
+</div>
 {% endblock %}
