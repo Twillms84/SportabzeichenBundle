@@ -55,12 +55,15 @@
 
                     {% for category, items in disciplines %}
 
-                        {# passende Disziplinen für diese Kategorie / Geschlecht / Altersklasse #}
+                        {# passende Disziplinen für diese Kategorie / Geschlecht / Alter #}
                         {% set options = [] %}
                         {% for d in items %}
-                            {% if d.geschlecht == p.gender
+                            {% if
+                                d.geschlecht == p.gender
                                 and p.age_year >= d.age_min
-                                and p.age_year <= d.age_max %}
+                                and p.age_year <= d.age_max
+                            %}
+                                {% set options = options|merge([d]) %}
                             {% endif %}
                         {% endfor %}
 
