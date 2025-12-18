@@ -199,3 +199,15 @@ heile:
 default:
 	@echo "Please run a more specific command such as 'make help'" >&2
 	@exit 1
+
+
+# ---------------------------------------------------------------------------
+# Webpack Build Integration for IServ Modules
+# ---------------------------------------------------------------------------
+
+# Build Webpack assets for this module
+webpack:
+	@echo ">>> Building Webpack assets for PulsR/SportabzeichenBundle..."
+	yarn install --silent
+	yarn run build
+	@echo ">>> Webpack build completed successfully."
