@@ -22,14 +22,14 @@ final class ExamCreateController extends AbstractPageController
         $error   = null;
 
         /* --------------------------------------------------
-         * IServ-Klassen laden (aus auxinfo->class)
+         * Klassen aus IServ laden (auxinfo = Klasse)
          * -------------------------------------------------- */
         $classes = $conn->fetchFirstColumn("
-            SELECT DISTINCT auxinfo->>'class'
+            SELECT DISTINCT auxinfo
             FROM users
-            WHERE auxinfo ? 'class'
-              AND auxinfo->>'class' <> ''
-            ORDER BY auxinfo->>'class'
+            WHERE auxinfo IS NOT NULL
+              AND auxinfo <> ''
+            ORDER BY auxinfo
         ");
 
         /* --------------------------------------------------
@@ -42,14 +42,10 @@ final class ExamCreateController extends AbstractPageController
                 $class    = trim((string) $request->request->get('class'));
 
                 if (!$examYear || !$class) {
-                    throw new \RuntimeException(
-                        'Prüfungsjahr und Klasse sind Pflichtfelder.'
-                    );
+                    throw new \RuntimeException('Prüfungsjahr und Klasse sind Pflichtfelder.');
                 }
 
-                /* --------------------------------------------
-                 * Prüfung anlegen
-                 * -------------------------------------------- */
+                // Prüfung anlegen
                 $conn->insert('sportabzeichen_exams', [
                     'exam_year' => $examYear,
                     'exam_date' => $examDate,
@@ -57,36 +53,33 @@ final class ExamCreateController extends AbstractPageController
 
                 $examId = (int) $conn->lastInsertId();
 
-                /* --------------------------------------------
-                 * IServ-User der Klasse laden
-                 * -------------------------------------------- */
+                /* ------------------------------------------
+                 * Teilnehmer dieser Klasse ermitteln
+                 * ------------------------------------------ */
                 $users = $conn->fetchAllAssociative("
-                    SELECT importid, birthdate
+                    SELECT importid
                     FROM users
-                    WHERE auxinfo->>'class' = :class
+                    WHERE auxinfo = :class
                       AND importid IS NOT NULL
-                      AND birthdate IS NOT NULL
-                ", [
-                    'class' => $class
-                ]);
+                ", ['class' => $class]);
 
-                /* --------------------------------------------
-                 * Teilnehmer zuweisen
-                 * -------------------------------------------- */
-                foreach ($users as $user) {
+                foreach ($users as $u) {
 
-                    // Participant muss vorher importiert worden sein
-                    $participantId = $conn->fetchOne(
-                        'SELECT id FROM sportabzeichen_participants WHERE import_id = ?',
-                        [$user['importid']]
-                    );
+                    // Participant suchen
+                    $participant = $conn->fetchAssociative("
+                        SELECT id, geburtsdatum
+                        FROM sportabzeichen_participants
+                        WHERE import_id = ?
+                    ", [$u['importid']]);
 
-                    if (!$participantId) {
+                    if (!$participant || !$participant['geburtsdatum']) {
                         continue;
                     }
 
-                    $age = $examYear - (int) substr($user['birthdate'], 0, 4);
+                    // Alter berechnen
+                    $age = $examYear - (int) substr($participant['geburtsdatum'], 0, 4);
 
+                    // Zuordnung speichern
                     $conn->executeStatement("
                         INSERT INTO sportabzeichen_exam_participants
                             (exam_id, participant_id, age_year)
@@ -94,7 +87,7 @@ final class ExamCreateController extends AbstractPageController
                         ON CONFLICT DO NOTHING
                     ", [
                         'exam'        => $examId,
-                        'participant' => (int)$participantId,
+                        'participant' => $participant['id'],
                         'age'         => $age,
                     ]);
                 }
