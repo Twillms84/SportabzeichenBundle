@@ -13,13 +13,13 @@ use Symfony\Component\Routing\Annotation\Route;
 /**
  * Verwaltung der Prüfungen + Teilnehmer
  */
-#[Route('/sportabzeichen/exams', name: 'sportabzeichen_exam_')]
+#[Route('/sportabzeichen/exams', name: 'sportabzeichen_exams_')]
 final class ExamController extends AbstractPageController
 {
     /**
      * Liste aller Prüfungen
      */
-    #[Route('/', name: 'index')]
+    #[Route('/', name: 'dashboard')]
     public function index(Connection $conn): Response
     {
     $exams = $conn->fetchAllAssociative(
