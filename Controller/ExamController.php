@@ -22,17 +22,11 @@ final class ExamController extends AbstractPageController
     #[Route('/', name: 'index')]
     public function index(Connection $conn): Response
     {
-        $exams = $conn->fetchAllAssociative("
-            SELECT e.id,
-                   e.exam_name,
-                   e.exam_date,
-                   e.exam_year,
-                   (SELECT COUNT(*) 
-                    FROM sportabzeichen_exam_participants ep 
-                    WHERE ep.exam_id = e.id) AS participant_count
-            FROM sportabzeichen_exams e
-            ORDER BY e.exam_date DESC NULLS LAST, e.exam_name
-        ");
+    $exams = $conn->fetchAllAssociative(
+        'SELECT e.id, e.exam_year, e.exam_date
+        FROM public.sportabzeichen_exams e
+        ORDER BY e.exam_year DESC'
+    );
 
         return $this->render('@PulsRSportabzeichen/exams/index.html.twig', [
             'exams' => $exams,
