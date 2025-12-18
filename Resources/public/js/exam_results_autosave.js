@@ -1,29 +1,20 @@
+import App from 'IServ.App';
+
 /**
- * Sportabzeichen Autosave Script (IServ-kompatibel)
- * --------------------------------------------------
- * Speichert Einzelergebnisse (Disziplin + Leistung)
- * automatisch beim Verlassen des Feldes.
- *
- * Funktioniert ohne Inline-JS (CSP-konform).
- * Entwickelt für PulsR SportabzeichenBundle.
+ * PulsR Sportabzeichen Autosave Modul
+ * -----------------------------------
+ * Speichert Disziplin- und Leistungswerte automatisch beim Verlassen eines Feldes.
+ * Läuft über IServ.CoreJS und CSP-konform.
  */
 
-document.addEventListener('DOMContentLoaded', function () {
-    const fields = document.querySelectorAll('[data-save]');
-    if (!fields.length) return;
+IServ.SportabzeichenAutosave = IServ.register(function() {
 
-    console.log('[Sportabzeichen] Autosave initialisiert für', fields.length, 'Felder');
-
-    /**
-     * Speichert eine einzelne Änderung per Fetch
-     */
-    async function saveChange(el) {
+    function saveChange(el) {
         const epId = el.dataset.epId;
         const type = el.dataset.type;
         const disciplineId = el.dataset.disciplineId || (el.tagName === 'SELECT' ? el.value : null);
         const leistung = type === 'leistung' ? el.value : null;
 
-        // Validierung: ohne Teilnehmer-ID oder Disziplin-ID -> Abbruch
         if (!epId || (!disciplineId && type !== 'discipline')) {
             console.warn('[Sportabzeichen] Ungültige Daten:', epId, disciplineId);
             return;
@@ -35,54 +26,57 @@ document.addEventListener('DOMContentLoaded', function () {
             leistung: leistung
         };
 
-        // visuelles Feedback vorbereiten
         el.classList.remove('saved', 'error');
         el.classList.add('saving');
 
-        try {
-            const res = await fetch(IServ.routes.sportabzeichen_exam_result_save, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-Token': IServ.csrfToken.sportabzeichen_result_save
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || res.statusText);
-            }
-
+        fetch(IServ.routes.sportabzeichen_exam_result_save, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': IServ.csrfToken.sportabzeichen_result_save
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
             el.classList.remove('saving');
             el.classList.add('saved');
-
-            // gespeicherte Markierung kurz anzeigen
             setTimeout(() => el.classList.remove('saved'), 1200);
-        } catch (e) {
-            console.error('[Sportabzeichen] Fehler beim Speichern:', e);
+        })
+        .catch(err => {
+            console.error('[Sportabzeichen] Fehler beim Speichern:', err);
             el.classList.remove('saving');
             el.classList.add('error');
-        }
+        });
     }
 
-    /**
-     * Event Listener für alle Felder:
-     * - "change": wenn Wert geändert und Feld verlassen
-     * - optional auch Dropdown-Änderung
-     */
-    fields.forEach(el => {
-        el.addEventListener('change', function () {
-            saveChange(this);
-        });
+    function init() {
+        const fields = document.querySelectorAll('[data-save]');
+        if (!fields.length) {
+            console.warn('[Sportabzeichen] Keine Autosave-Felder gefunden.');
+            return;
+        }
 
-        // Optional: "Enter" erzwingt sofortiges Speichern
-        el.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this.blur(); // löst "change" aus
-            }
+        console.log('[Sportabzeichen] Autosave aktiviert für', fields.length, 'Felder');
+
+        fields.forEach(el => {
+            el.addEventListener('change', () => saveChange(el));
+
+            el.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    el.blur(); // löst change aus
+                }
+            });
         });
-    });
-});
+    }
+
+    // API für IServ
+    return {
+        init: init
+    };
+
+}()); // Ende Modul-Definition
+
+export default IServ.SportabzeichenAutosave;

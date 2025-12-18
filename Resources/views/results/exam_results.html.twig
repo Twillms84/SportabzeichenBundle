@@ -121,23 +121,7 @@
 </div>
 {% endblock %}
 
-{# --------------------------------------------------------------- #}
-{# Externe JavaScript-Datei einbinden (CSP-konform)                #}
-{# --------------------------------------------------------------- #}
 {% block javascripts %}
     {{ parent() }}
-
-    {# globale JS-Variablen für Ajax #}
-    <script nonce="{{ nonce }}">
-        window.IServ = window.IServ || {};
-        IServ.routes = {
-            sportabzeichen_exam_result_save: '{{ path("sportabzeichen_results_exam_result_save") }}'
-        };
-        IServ.csrfToken = {
-            sportabzeichen_result_save: '{{ csrf_token("sportabzeichen_result_save") }}'
-        };
-    </script>
-
-    {# Lade externe JS-Datei #}
-    <script src="{{ asset('modules/PulsR/SportabzeichenBundle/js/exam_results_autosave.js') }}"></script>
+    {{ asset_js('modules/PulsR/SportabzeichenBundle/js/exam_results_autosave.js') }}
 {% endblock %}
