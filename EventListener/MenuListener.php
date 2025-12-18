@@ -23,8 +23,8 @@ final class MenuListener implements MainMenuListenerInterface
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
             $menu->addChild('sportabzeichen_results', [
-                'route' => 'sportabzeichen_exams_select',
-                'label' => _('Sportabzeichen – Ergebnisse'),
+                'route' => 'sportabzeichen_exams_dashboard',
+                'label' => _('SPA-Ergebnisse'),
                 'extras' => [
                     'icon' => 'table',
                     'icon_style' => 'fas',
@@ -38,7 +38,7 @@ final class MenuListener implements MainMenuListenerInterface
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_ADMIN')) {
             $menu->addChild('sportabzeichen_admin', [
                 'route' => 'sportabzeichen_admin_dashboard',
-                'label' => _('Sportabzeichen – Verwaltung'),
+                'label' => _('SPA–Verwaltung'),
                 'extras' => [
                     'icon' => 'cog',
                     'icon_style' => 'fas',
