@@ -25,10 +25,11 @@ final class ExamCreateController extends AbstractPageController
         // IServ-Klassen laden
         // --------------------------------------------------
         $classes = $conn->fetchAllAssociative(
-            'SELECT DISTINCT class
-             FROM public.users
-             WHERE class IS NOT NULL
-             ORDER BY class'
+            'SELECT DISTINCT auxinfo
+            FROM public.users
+            WHERE auxinfo IS NOT NULL
+            AND auxinfo <> \'\'
+            ORDER BY auxinfo'
         );
 
         // --------------------------------------------------
