@@ -38,7 +38,7 @@
                     <th>Name</th>
                     <th>Alter</th>
 
-                    {# SWIMMING-Kategorie ausblenden #}
+                    {# Nur Kategorien anzeigen, die nicht "SWIMMING" sind #}
                     {% for category, items in disciplines %}
                         {% if category|upper != 'SWIMMING' %}
                             <th>{{ category }}</th>
@@ -49,76 +49,62 @@
 
             <tbody>
             {% for p in participants %}
-
                 {% set epResults = results[p.ep_id] ?? {} %}
 
                 <tr>
                     <td>{{ p.vorname }} {{ p.nachname }}</td>
                     <td>{{ p.age_year }}</td>
 
-                    {# Nur Nicht-SWIMMING Kategorien anzeigen #}
-                    {% for category, items in disciplines if category|upper != 'SWIMMING' %}
+                    {% for category, items in disciplines %}
+                        {% if category|upper != 'SWIMMING' %}
 
-                        {# passende Disziplinen für diese Kategorie / Geschlecht / Alter #}
-                        {% set options = [] %}
-                        {% for d in items %}
-                            {% if
-                                d.geschlecht == p.gender
-                                and p.age_year >= d.age_min
-                                and p.age_year <= d.age_max
-                            %}
-                                {% set options = options|merge([d]) %}
+                            {% set options = [] %}
+                            {% for d in items %}
+                                {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
+                                    {% set options = options|merge([d]) %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% set selectedDiscId = null %}
+                            {% for d in options %}
+                                {% if epResults[d.id] is defined %}
+                                    {% set selectedDiscId = d.id %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% set selectedValue = '' %}
+                            {% if selectedDiscId and epResults[selectedDiscId] is defined %}
+                                {% set selectedValue = epResults[selectedDiscId].leistung %}
                             {% endif %}
-                        {% endfor %}
 
-                        {# falls Ergebnis existiert → Disziplin bestimmen #}
-                        {% set selectedDiscId = null %}
-                        {% for d in options %}
-                            {% if epResults[d.id] is defined %}
-                                {% set selectedDiscId = d.id %}
-                            {% endif %}
-                        {% endfor %}
+                            <td>
+                                {# Disziplin-Dropdown #}
+                                <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
+                                        class="form-select"
+                                        data-save
+                                        data-ep-id="{{ p.ep_id }}"
+                                        data-type="discipline"
+                                        data-category="{{ category }}">
+                                    <option value="">(keine Auswahl)</option>
+                                    {% for d in options %}
+                                        {% set preselect = (selectedDiscId == d.id) or (selectedDiscId is null and d.auswahlnummer == 1) %}
+                                        <option value="{{ d.id }}" {% if preselect %}selected{% endif %}>{{ d.name }}</option>
+                                    {% endfor %}
+                                </select>
 
-                        {# Leistungswert zuordnen #}
-                        {% set selectedValue = '' %}
-                        {% if selectedDiscId and epResults[selectedDiscId] is defined %}
-                            {% set selectedValue = epResults[selectedDiscId].leistung %}
-                        {% endif %}
-
-                        <td>
-
-                            {# Disziplin-Dropdown #}
-                            <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
-                                    class="form-select"
+                                {# Leistungsfeld (automatisch speichern) #}
+                                <input type="number"
+                                    name="results[{{ p.ep_id }}][{{ category }}][leistung]"
+                                    step="0.01"
+                                    class="form-control mt-1"
+                                    value="{{ selectedValue }}"
                                     data-save
                                     data-ep-id="{{ p.ep_id }}"
-                                    data-type="discipline"
-                                    data-category="{{ category }}">
-                                <option value="">(keine Auswahl)</option>
+                                    data-discipline-id="{{ selectedDiscId ?? '' }}"
+                                    data-type="leistung">
+                            </td>
 
-                                {% for d in options %}
-                                    {% set preselect = 
-                                        (selectedDiscId == d.id) 
-                                        or (selectedDiscId is null and d.auswahlnummer == 1)
-                                    %}
-                                    <option value="{{ d.id }}" {% if preselect %}selected{% endif %}>
-                                        {{ d.name }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-
-                            {# Leistungsfeld mit autosave #}
-                            <input type="number"
-                                name="results[{{ p.ep_id }}][{{ category }}][leistung]"
-                                step="0.01"
-                                class="form-control mt-1"
-                                value="{{ selectedValue }}"
-                                data-save
-                                data-ep-id="{{ p.ep_id }}"
-                                data-discipline-id="{{ selectedDiscId ?? '' }}"
-                                data-type="leistung">
-                        </td>
-
+                        {% endif %}
                     {% endfor %}
                 </tr>
 
@@ -131,32 +117,18 @@
                 💾 Alle Ergebnisse speichern
             </button>
         </div>
-
     </form>
-
 </div>
-
-{# --- Autosave Script --- #}
-{% block javascripts %}
-    {{ parent() }}
-    <script src="{{ asset('bundles/sportabzeichen/js/exam_results_autosave.js') }}"></script>
 {% endblock %}
 
-<style>
-input.saved, select.saved {
-    border-color: #28a745;
-    box-shadow: 0 0 3px #28a745;
-}
-input.error, select.error {
-    border-color: #dc3545;
-    box-shadow: 0 0 3px #dc3545;
-}
-</style>
-{% endblock %}
-
+{# --------------------------------------------------------------- #}
+{# Externe JavaScript-Datei einbinden (CSP-konform)                #}
+{# --------------------------------------------------------------- #}
 {% block javascripts %}
     {{ parent() }}
-    <script>
+
+    {# globale JS-Variablen für Ajax #}
+    <script nonce="{{ nonce }}">
         window.IServ = window.IServ || {};
         IServ.routes = {
             sportabzeichen_exam_result_save: '{{ path("sportabzeichen_exam_result_save") }}'
@@ -165,5 +137,7 @@ input.error, select.error {
             sportabzeichen_result_save: '{{ csrf_token("sportabzeichen_result_save") }}'
         };
     </script>
-    <script src="{{ asset('bundles/sportabzeichen/js/exam_results_autosave.js') }}"></script>
+
+    {# Lade externe JS-Datei #}
+    <script src="{{ asset('modules/PulsR/SportabzeichenBundle/js/exam_results_autosave.js') }}"></script>
 {% endblock %}
