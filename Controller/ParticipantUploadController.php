@@ -21,7 +21,8 @@ final class ParticipantUploadController extends AbstractPageController
         $imported = 0;
         $skipped  = 0;
         $error    = null;
-
+        $message  = null;
+        
         if ($request->isMethod('POST')) {
             $file = $request->files->get('csvFile');
 
