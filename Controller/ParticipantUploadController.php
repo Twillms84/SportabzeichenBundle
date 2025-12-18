@@ -84,7 +84,7 @@ SQL,
             }
         }
 
-        return $this->render('@PulsRSportabzeichen/admin/upload_participant.html.twig', [
+        return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'participants_upload',
             'imported'  => $imported,
             'skipped'   => $skipped,
