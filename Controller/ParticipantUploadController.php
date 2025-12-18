@@ -11,9 +11,9 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
-final class TeilnehmerUploadController extends AbstractPageController
+final class ParticipantUploadController extends AbstractPageController
 {
-    #[Route('/upload_teilnehmer', name: 'upload_teilnehmer')]
+    #[Route('/upload_participant', name: 'upload_participant')]
     public function upload(Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
@@ -84,11 +84,12 @@ SQL,
             }
         }
 
-        return $this->render('@PulsRSportabzeichen/admin/upload_teilnehmer.html.twig', [
+        return $this->render('@PulsRSportabzeichen/admin/upload_participant.html.twig', [
             'activeTab' => 'participants_upload',
             'imported'  => $imported,
             'skipped'   => $skipped,
             'error'     => $error,
+            'message' => $message,
         ]);
     }
 
