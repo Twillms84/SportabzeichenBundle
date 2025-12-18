@@ -31,12 +31,15 @@
 
         <div class="form-group">
             <label>IServ-Klasse</label>
-            <select name="class" class="form-control" required>
-                <option value="">-- bitte wählen --</option>
-                {% for c in classes %}
-                    <option value="{{ c.class }}">{{ c.class }}</option>
-                {% endfor %}
-            </select>
+                <select name="class" class="form-control" required>
+                    <option value="">-- Klasse auswählen --</option>
+
+                    {% for className in classes %}
+                        <option value="{{ className }}">
+                            {{ className }}
+                        </option>
+                    {% endfor %}
+                </select>
         </div>
 
         <button class="btn btn-primary">
