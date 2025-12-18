@@ -1,0 +1,17 @@
+{
+  "name": "@iserv/pulsr-sportabzeichen-bundle",
+  "version": "1.0.0",
+  "description": "IServ SportabzeichenBundle – automatische Ergebnisverwaltung mit Autosave",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "scripts": {
+    "build": "encore production",
+    "dev": "encore dev",
+    "watch": "encore dev --watch"
+  },
+  "devDependencies": {
+    "@symfony/webpack-encore": "^4.0.0",
+    "core-js": "^3.37.0",
+    "regenerator-runtime": "^0.13.11"
+  }
+}
