@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
 
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
@@ -53,13 +54,8 @@ final class ExamResultController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        /* ------------------------------
-         * Prüfung laden
-         * ------------------------------ */
         $exam = $conn->fetchAssociative("
-            SELECT *
-            FROM sportabzeichen_exams
-            WHERE id = ?
+            SELECT * FROM sportabzeichen_exams WHERE id = ?
         ", [$examId]);
 
         if (!$exam) {
@@ -161,12 +157,12 @@ final class ExamResultController extends AbstractPageController
             'results'       => $results,
             'classes'       => $classes,
             'selectedClass' => $selectedClass,
-            'nonce' => $nonce, // CSP Nonce für Inline-Script
+            'nonce'         => $nonce,
         ]);
     }
 
     /* --------------------------------------------------------
-     * 3️⃣ Alle Ergebnisse speichern
+     * 3️⃣ Alle Ergebnisse speichern (Submit-Button)
      * -------------------------------------------------------- */
     #[Route('/exam/{examId}/save-all', name: 'save_all', methods: ['POST'])]
     public function saveAll(int $examId, Request $request, Connection $conn): Response
@@ -177,7 +173,6 @@ final class ExamResultController extends AbstractPageController
 
         foreach ($formData as $epId => $categories) {
             foreach ($categories as $data) {
-
                 $disciplineId = $data['discipline'] ?? null;
                 if (!$disciplineId) {
                     continue;
@@ -204,5 +199,48 @@ final class ExamResultController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_results_index', [
             'examId' => $examId
         ]);
+    }
+
+    /* --------------------------------------------------------
+     * 4️⃣ Einzelwert speichern (AJAX Autosave)
+     * -------------------------------------------------------- */
+    #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
+    public function saveExamResult(Request $request, Connection $conn): JsonResponse
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        // CSRF prüfen
+        $token = $request->headers->get('X-CSRF-Token');
+        if (!$this->isCsrfTokenValid('sportabzeichen_result_save', $token)) {
+            return new JsonResponse(['error' => 'Ungültiges CSRF-Token'], 403);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!$data || !isset($data['ep_id'], $data['discipline_id'])) {
+            return new JsonResponse(['error' => 'Ungültige Daten'], 400);
+        }
+
+        $epId = (int) $data['ep_id'];
+        $disciplineId = (int) $data['discipline_id'];
+        $leistung = $data['leistung'] !== null && $data['leistung'] !== '' ? (float) $data['leistung'] : null;
+
+        try {
+            $conn->executeStatement('
+                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
+                VALUES (:ep, :disc, :leistung)
+                ON CONFLICT (ep_id, discipline_id)
+                DO UPDATE SET leistung = EXCLUDED.leistung
+            ', [
+                'ep'       => $epId,
+                'disc'     => $disciplineId,
+                'leistung' => $leistung,
+            ]);
+
+            return new JsonResponse(['status' => 'ok']);
+        } catch (\Throwable $e) {
+            return new JsonResponse([
+                'error' => 'Fehler beim Speichern: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
