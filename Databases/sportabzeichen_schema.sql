@@ -1,6 +1,6 @@
 --
 -- Sportabzeichen Modul – Datenbankschema
--- Version 2.0.0 (normalisiert)
+-- Version 2.1.0 (bereinigt, import_id-basiert)
 -- Kompatibel mit IServ / PostgreSQL
 --
 
@@ -19,15 +19,17 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
 
 ------------------------------------------------------------
 -- 2. Teilnehmer
+-- Referenz über import_id (IServ users.importid)
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     id              SERIAL PRIMARY KEY,
+
     import_id       TEXT NOT NULL UNIQUE,
-    vorname         TEXT,
-    nachname        TEXT,
+
     geschlecht      TEXT CHECK (geschlecht IN ('MALE','FEMALE')),
     geburtsdatum    DATE,
+
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -37,10 +39,12 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_disciplines (
     id              SERIAL PRIMARY KEY,
+
     name            TEXT NOT NULL,
     kategorie       TEXT NOT NULL,
     einheit         TEXT NOT NULL,
     berechnungsart  TEXT NOT NULL DEFAULT 'GREATER',
+
     created_at      TIMESTAMPTZ DEFAULT NOW(),
 
     CONSTRAINT uniq_sportabzeichen_disciplines_name
@@ -48,7 +52,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_disciplines (
 );
 
 ------------------------------------------------------------
--- 4. Anforderungen
+-- 4. Anforderungen (DOSB-Katalog)
 ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
@@ -62,7 +66,8 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
     age_min         INT NOT NULL,
     age_max         INT NOT NULL,
 
-    geschlecht      TEXT NOT NULL CHECK (geschlecht IN ('MALE','FEMALE')),
+    geschlecht      TEXT NOT NULL
+        CHECK (geschlecht IN ('MALE','FEMALE')),
 
     auswahlnummer   INT NOT NULL,
 
@@ -73,7 +78,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_requirements (
     schwimmnachweis BOOLEAN DEFAULT FALSE
 );
 
--- Eindeutigkeit für CSV-UPSERT
+-- Eindeutigkeit (CSV-UPSERT)
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_sportabzeichen_requirements
 ON sportabzeichen_requirements
 (discipline_id, jahr, age_min, age_max, geschlecht);
@@ -89,13 +94,17 @@ ON sportabzeichen_requirements
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_participants (
     id              SERIAL PRIMARY KEY,
+
     exam_id         INT NOT NULL
         REFERENCES sportabzeichen_exams(id)
         ON DELETE CASCADE,
+
     participant_id  INT NOT NULL
         REFERENCES sportabzeichen_participants(id)
         ON DELETE CASCADE,
+
     age_year        INT NOT NULL,
+
     UNIQUE (exam_id, participant_id)
 );
 
