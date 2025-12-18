@@ -1,11 +1,52 @@
 ## Start: (automatic configuration) ##
 
+export JSROOT := .
+POT_DEPENDENCIES += ./node_modules
+ASSETS_MANIFEST=Resources/public/static/manifest.json
+WEBROOT=Resources
+WEBPACK_CONFIGS=webpack.config.js
 LOCALE_ROOT=translations
 PO_FILES=translations/%LOCALE%/SportabzeichenBundle.po
 POT_TEMPLATES=translations/templates/SportabzeichenBundle.pot
-LOCALE_EXCLUDES = 
+LOCALE_EXCLUDES = "(?^:^Resources/public(?:$|/))"
 
 ## End: (automatic configuration) ##
+
+## Start: /usr/lib/iserv/buildtools/mk/js.mk ##
+
+jsdependencies += $(JSROOT)/node_modules
+DISTCLEAN_TARGETS += clean_node_modules
+DEPENDENCY_TARGETS += $(jsdependencies)
+
+ifndef NPMFLAGS
+NPMFLAGS=
+endif
+
+# Check for bun.lockb. Use npm if not present, bun otherwise
+ifeq ($(wildcard $(JSROOT)/bun.lockb),)
+$(JSROOT)/node_modules: $(JSROOT)/package-lock.json
+	cd "$(JSROOT)" && npm ci $(NPMFLAGS) $(NPM_INTERNAL_ARGS) && touch "node_modules"
+$(JSROOT)/package-lock.json: $(PACKAGE_LOCK_DEPENDENCIES)
+	cd "$(JSROOT)" && npm ci $(NPMFLAGS) $(NPM_INTERNAL_ARGS) && touch "package-lock.json"
+else
+# Use npx while bun is not available in the system
+$(JSROOT)/node_modules: $(JSROOT)/bun.lockb
+	cd "$(JSROOT)" && npx bun i --frozen-lockfile $(NPMFLAGS) $(NPM_INTERNAL_ARGS) && touch "node_modules" && touch "package-lock.json"
+$(JSROOT)/bun.lockb: $(PACKAGE_LOCK_DEPENDENCIES)
+	cd "$(JSROOT)" && npx bun i $(NPMFLAGS) $(NPM_INTERNAL_ARGS) && touch "bun.lockb" && touch "package-lock.json"
+endif
+
+.PHONY: npm
+npm: ## Installs NPM dependencies and creates package-lock.json
+npm: $(JSROOT)/node_modules $(JSROOT)/package.json $(JSROOT)/package-lock.json
+	@true
+
+.PHONY: clean_node_modules
+clean_node_modules: ## Removes node_modules folder
+clean_node_modules:
+	rm -rf "$(JSROOT)/node_modules"
+
+## End: /usr/lib/iserv/buildtools/mk/js.mk ##
 
 ## Start: /usr/lib/iserv/buildtools/mk/extract_translations.mk ##
 
@@ -13,8 +54,8 @@ LOCALE_ROOT = translations
 LOCALE_TARGET_ROOT = locale
 DEPENDENCY_TARGETS += translations/templates/SportabzeichenBundle.pot
 
-translations/templates/SportabzeichenBundle.pot: PulsRSportabzeichenBundle.php migrations.php Crud/ParticipantCrud.php Crud/SportabzeichenExamCrud.php Controller/DefaultController.php Controller/ImportController.php Controller/ResultController.php Controller/AnforderungViewController.php Controller/AnforderungUploadController.php Controller/ExamResultController.php Controller/TeilnehmerUploadController.php Controller/ManageController.php Controller/ExamController.php EventListener/MenuListener.php Migrations/Version20250218000100.php Resources/views/default/index.html.twig Resources/views/admin/upload.html.twig Resources/views/admin/upload_teilnehmer.html.twig Resources/views/manage/index.html.twig Resources/views/manage/view.html.twig Resources/views/exams/participants.html.twig Resources/views/exams/index.html.twig Resources/views/exams/add_participant.html.twig Resources/views/exams/new.html.twig Resources/views/results/exam_results.html.twig Resources/views/results/index.html.twig Resources/views/results/edit.html.twig Resources/views/results/exam_list.html.twig Resources/views/results/add.html.twig Resources/views/results/_row.html.twig Resources/views/crud/exam/show.html.twig Resources/views/participants/index.html.twig Resources/config/menu.yaml Resources/config/rights.yml Resources/config/services.yml Resources/public/js/results.js Resources/public/js/exam.js Resources/logs/g Resources/logs/portabzeichen_participants\ p Resources/logs/sportabzeichen_debug.log Databases/sportabzeichen_schema.sql DependencyInjection/PulsRSportabzeichenExtension.php Entity/SportabzeichenParticipant.php Entity/SportabzeichenExamResult.php Entity/SportabzeichenExam.php Entity/SportabzeichenDiscipline.php Entity/SportabzeichenRequirement.php Entity/SportabzeichenExamParticipant.php $(POT_DEPENDENCIES)
-	genpo -x ^locale -x ^system-locale/ -r "translations" -t .
+translations/templates/SportabzeichenBundle.pot: PulsRSportabzeichenBundle.php migrations.php package.json Crud/ParticipantCrud.php Crud/SportabzeichenExamCrud.php Controller/DefaultController.php Controller/ImportController.php Controller/ResultController.php Controller/AnforderungViewController.php Controller/AnforderungUploadController.php Controller/ExamDisciplineSelectController.php Controller/ExamResultController.php Controller/ParticipantUploadController.php Controller/ExamDashboardController.php Controller/ManageController.php Controller/AdminController.php Controller/ExamController.php Controller/ExamCreateController.php EventListener/MenuListener.php Migrations/Version20250218000100.php Resources/webpack.config.js Resources/views/admin/upload_participants.html.twig Resources/views/admin/upload.html.twig Resources/views/admin/_tabs.html.twig Resources/views/admin/dashboard.html.twig Resources/views/legacy/default/index.html.twig Resources/views/manage/index.html.twig Resources/views/manage/view.html.twig Resources/views/exams/participants.html.twig Resources/views/exams/add_participant.html.twig Resources/views/exams/dashboard.html.twig Resources/views/exams/disciplines_select.html.twig Resources/views/exams/new.html.twig Resources/views/results/exam_results.html.twig Resources/views/results/index.html.twig Resources/views/results/portabzeichen_exam_participants\ ep Resources/views/results/_tabs.html.twig Resources/views/results/edit.html.twig Resources/views/results/exam_list.html.twig Resources/views/results/add.html.twig Resources/views/results/_row.html.twig Resources/views/results/portabzeichen_disciplines\ d Resources/views/crud/exam/show.html.twig Resources/views/participants/index.html.twig Resources/config/rights.yml Resources/config/permissions.php Resources/config/services.yml Resources/public/js/results.js Resources/public/js/exam.js Resources/public/js/exam_results_autosave.js Resources/logs/g Resources/logs/portabzeichen_participants\ p Resources/logs/sportabzeichen_debug.log Databases/sportabzeichen_schema.sql DependencyInjection/PulsRSportabzeichenExtension.php Entity/SportabzeichenParticipant.php Entity/SportabzeichenExamResult.php Entity/SportabzeichenExam.php Entity/SportabzeichenDiscipline.php Entity/SportabzeichenRequirement.php Entity/SportabzeichenExamParticipant.php $(POT_DEPENDENCIES)
+	genpo -x "(?^:^Resources/public(?:/))" -x ^Resources/public/static -x ^locale -x ^system-locale/ -r "translations" -t .
 
 .PHONY: extract_translations
 extract_translations: ## Extract all gettext strings from source code into .pot files
@@ -22,6 +63,55 @@ extract_translations: translations/templates/SportabzeichenBundle.pot
 	@true
 
 ## End: /usr/lib/iserv/buildtools/mk/extract_translations.mk ##
+
+## Start: /usr/lib/iserv/buildtools/mk/assets.mk ##
+
+ifndef ASSETS_SRC
+ASSETS_SRC=$(shell find "$(JSROOT)/assets" -type f)
+
+ifdef WEBPACK_CONFIGS
+ASSETS_SRC += $(shell echo "$(WEBPACK_CONFIGS)" | tr ' ' '\n' | xargs -L 1 -r sh -c "echo \"$(WEBROOT)/\$$1\"" --)
+endif
+endif
+ifndef ASSETS_MANIFEST
+ASSETS_MANIFEST=$(WEBROOT)/public/static/manifest.json
+endif
+
+ifdef SYMFONY
+PHPUNIT_DEPENDENCIES+=assets
+endif
+
+DEPENDENCY_TARGETS+=$(ASSETS_MANIFEST)
+DISTCLEAN_TARGETS+=clean_assets
+
+ifdef PROD
+WEBPACK_FLAGS+= --mode=production
+else
+WEBPACK_FLAGS+= --mode=development
+endif
+ifndef BIN_WEBPACK
+BIN_WEBPACK=./tools/webpack
+endif
+
+.PHONY: watch_assets
+watch_assets: ## Build assets and watches for changes
+watch_assets: $(jsdependencies)
+	cd "$(WEBROOT)" && "$(BIN_WEBPACK)" -w $(WEBPACK_FLAGS) $(WEBPACK_INTERNAL_ARGS)
+
+$(ASSETS_MANIFEST): $(ASSETS_SRC) $(jsdependencies)
+	(cd "$(WEBROOT)" && "$(BIN_WEBPACK)" $(WEBPACK_FLAGS) $(WEBPACK_INTERNAL_ARGS)) && touch "$(ASSETS_MANIFEST)"
+
+.PHONY: assets
+assets: ## build assets
+assets: $(ASSETS_MANIFEST)
+	@true
+
+.PHONY: clean_assets
+clean_assets: ## Removes assets built by Webpack
+clean_assets:
+	/usr/lib/iserv/buildtools/rmrfwhennotingit "$$(dirname "$(ASSETS_MANIFEST)")"
+
+## End: /usr/lib/iserv/buildtools/mk/assets.mk ##
 
 ## Start: /usr/lib/iserv/buildtools/mk/clean.mk ##
 

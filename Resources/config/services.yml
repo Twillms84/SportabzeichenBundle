@@ -6,8 +6,10 @@ services:
         public: false
 
     PulsR\SportabzeichenBundle\EventListener\MenuListener:
+        arguments:
+            - '@security.authorization_checker'
         tags:
-            - { name: iserv.menu.main }
+            - { name: kernel.event_listener, event: iserv.menu.main, method: onBuildMainMenu}
 
     PulsR\SportabzeichenBundle\Controller\:
         resource: '../../Controller/*'
