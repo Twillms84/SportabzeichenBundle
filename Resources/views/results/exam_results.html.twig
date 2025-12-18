@@ -39,8 +39,10 @@
                     <th>Alter</th>
 
                     {# SWIMMING-Kategorie ausblenden #}
-                    {% for category, items in disciplines if category|upper != 'SWIMMING' %}
-                        <th>{{ category }}</th>
+                    {% for category, items in disciplines %}
+                        {% if category|upper != 'SWIMMING' %}
+                            <th>{{ category }}</th>
+                        {% endif %}
                     {% endfor %}
                 </tr>
             </thead>
