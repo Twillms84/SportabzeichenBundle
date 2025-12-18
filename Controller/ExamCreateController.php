@@ -21,20 +21,20 @@ final class ExamCreateController extends AbstractPageController
         $message = null;
         $error   = null;
 
-        // --------------------------------------------------
-        // IServ-Klassen laden
-        // --------------------------------------------------
-        $classes = $conn->fetchAllAssociative(
-            'SELECT DISTINCT auxinfo
-            FROM public.users
-            WHERE auxinfo IS NOT NULL
-            AND auxinfo <> \'\'
-            ORDER BY auxinfo'
-        );
+        /* --------------------------------------------------
+         * IServ-Klassen laden (aus auxinfo->class)
+         * -------------------------------------------------- */
+        $classes = $conn->fetchFirstColumn("
+            SELECT DISTINCT auxinfo->>'class'
+            FROM users
+            WHERE auxinfo ? 'class'
+              AND auxinfo->>'class' <> ''
+            ORDER BY auxinfo->>'class'
+        ");
 
-        // --------------------------------------------------
-        // Formular verarbeiten
-        // --------------------------------------------------
+        /* --------------------------------------------------
+         * Formular verarbeiten
+         * -------------------------------------------------- */
         if ($request->isMethod('POST')) {
             try {
                 $examYear = (int) $request->request->get('exam_year');
@@ -42,53 +42,64 @@ final class ExamCreateController extends AbstractPageController
                 $class    = trim((string) $request->request->get('class'));
 
                 if (!$examYear || !$class) {
-                    throw new \RuntimeException('Prüfungsjahr und Klasse sind Pflichtfelder.');
+                    throw new \RuntimeException(
+                        'Prüfungsjahr und Klasse sind Pflichtfelder.'
+                    );
                 }
 
-                // Prüfung anlegen
-                $conn->insert('public.sportabzeichen_exams', [
+                /* --------------------------------------------
+                 * Prüfung anlegen
+                 * -------------------------------------------- */
+                $conn->insert('sportabzeichen_exams', [
                     'exam_year' => $examYear,
                     'exam_date' => $examDate,
                 ]);
 
                 $examId = (int) $conn->lastInsertId();
 
-                // Teilnehmer aus IServ-Klasse übernehmen
-                $users = $conn->fetchAllAssociative(
-                    'SELECT importid, birthday
-                     FROM public.users
-                     WHERE class = :class
-                       AND importid IS NOT NULL',
-                    ['class' => $class]
-                );
+                /* --------------------------------------------
+                 * IServ-User der Klasse laden
+                 * -------------------------------------------- */
+                $users = $conn->fetchAllAssociative("
+                    SELECT importid, birthdate
+                    FROM users
+                    WHERE auxinfo->>'class' = :class
+                      AND importid IS NOT NULL
+                      AND birthdate IS NOT NULL
+                ", [
+                    'class' => $class
+                ]);
 
+                /* --------------------------------------------
+                 * Teilnehmer zuweisen
+                 * -------------------------------------------- */
                 foreach ($users as $user) {
-                    // Participant sicherstellen
+
+                    // Participant muss vorher importiert worden sein
                     $participantId = $conn->fetchOne(
-                        'SELECT id FROM public.sportabzeichen_participants WHERE import_id = ?',
+                        'SELECT id FROM sportabzeichen_participants WHERE import_id = ?',
                         [$user['importid']]
                     );
 
                     if (!$participantId) {
-                        continue; // Teilnehmer wurde nicht hochgeladen
+                        continue;
                     }
 
-                    $age = $examYear - (int) substr($user['birthday'], 0, 4);
+                    $age = $examYear - (int) substr($user['birthdate'], 0, 4);
 
-                    $conn->executeStatement(
-                        'INSERT INTO public.sportabzeichen_exam_participants
-                         (exam_id, participant_id, age_year)
-                         VALUES (:exam, :participant, :age)
-                         ON CONFLICT DO NOTHING',
-                        [
-                            'exam'       => $examId,
-                            'participant'=> $participantId,
-                            'age'        => $age,
-                        ]
-                    );
+                    $conn->executeStatement("
+                        INSERT INTO sportabzeichen_exam_participants
+                            (exam_id, participant_id, age_year)
+                        VALUES (:exam, :participant, :age)
+                        ON CONFLICT DO NOTHING
+                    ", [
+                        'exam'        => $examId,
+                        'participant' => (int)$participantId,
+                        'age'         => $age,
+                    ]);
                 }
 
-                $message = 'Prüfung wurde erfolgreich angelegt.';
+                $message = 'Prüfung wurde erfolgreich angelegt und Teilnehmer zugewiesen.';
 
             } catch (\Throwable $e) {
                 $error = $e->getMessage();
