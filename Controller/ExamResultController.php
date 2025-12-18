@@ -153,6 +153,7 @@ final class ExamResultController extends AbstractPageController
             $results[$r['ep_id']][$r['discipline_id']] = $r;
         }
 
+        $nonce = $request->attributes->get('csp_nonce');
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
             'exam'          => $exam,
             'participants'  => $participants,
