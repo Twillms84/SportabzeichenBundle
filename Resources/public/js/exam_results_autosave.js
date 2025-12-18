@@ -1,40 +1,87 @@
+/**
+ * Sportabzeichen Autosave Script (IServ-kompatibel)
+ * --------------------------------------------------
+ * Speichert Einzelergebnisse (Disziplin + Leistung)
+ * automatisch beim Verlassen des Feldes.
+ *
+ * Funktioniert ohne Inline-JS (CSP-konform).
+ * Entwickelt für PulsR SportabzeichenBundle.
+ */
+
 document.addEventListener('DOMContentLoaded', function () {
-    const inputs = document.querySelectorAll('[data-save]');
-    if (!inputs.length) return;
+    const fields = document.querySelectorAll('[data-save]');
+    if (!fields.length) return;
 
-    inputs.forEach(el => {
-        el.addEventListener('change', async function () {
-            const epId = this.dataset.epId;
-            const type = this.dataset.type;
-            const disciplineId = this.dataset.disciplineId || (this.tagName === 'SELECT' ? this.value : null);
-            const leistung = type === 'leistung' ? this.value : null;
+    console.log('[Sportabzeichen] Autosave initialisiert für', fields.length, 'Felder');
 
-            if (!epId || (!disciplineId && type !== 'discipline')) return;
+    /**
+     * Speichert eine einzelne Änderung per Fetch
+     */
+    async function saveChange(el) {
+        const epId = el.dataset.epId;
+        const type = el.dataset.type;
+        const disciplineId = el.dataset.disciplineId || (el.tagName === 'SELECT' ? el.value : null);
+        const leistung = type === 'leistung' ? el.value : null;
 
-            const payload = {
-                ep_id: epId,
-                discipline_id: disciplineId,
-                leistung: leistung
-            };
+        // Validierung: ohne Teilnehmer-ID oder Disziplin-ID -> Abbruch
+        if (!epId || (!disciplineId && type !== 'discipline')) {
+            console.warn('[Sportabzeichen] Ungültige Daten:', epId, disciplineId);
+            return;
+        }
 
-            try {
-                const res = await fetch(IServ.routes.sportabzeichen_exam_result_save, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-Token': IServ.csrfToken.sportabzeichen_result_save
-                    },
-                    body: JSON.stringify(payload)
-                });
+        const payload = {
+            ep_id: epId,
+            discipline_id: disciplineId,
+            leistung: leistung
+        };
 
-                if (!res.ok) throw new Error(await res.text());
+        // visuelles Feedback vorbereiten
+        el.classList.remove('saved', 'error');
+        el.classList.add('saving');
 
-                this.classList.add('saved');
-                setTimeout(() => this.classList.remove('saved'), 800);
-            } catch (e) {
-                console.error('Fehler beim Speichern:', e);
-                this.classList.add('error');
+        try {
+            const res = await fetch(IServ.routes.sportabzeichen_exam_result_save, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': IServ.csrfToken.sportabzeichen_result_save
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+
+            el.classList.remove('saving');
+            el.classList.add('saved');
+
+            // gespeicherte Markierung kurz anzeigen
+            setTimeout(() => el.classList.remove('saved'), 1200);
+        } catch (e) {
+            console.error('[Sportabzeichen] Fehler beim Speichern:', e);
+            el.classList.remove('saving');
+            el.classList.add('error');
+        }
+    }
+
+    /**
+     * Event Listener für alle Felder:
+     * - "change": wenn Wert geändert und Feld verlassen
+     * - optional auch Dropdown-Änderung
+     */
+    fields.forEach(el => {
+        el.addEventListener('change', function () {
+            saveChange(this);
+        });
+
+        // Optional: "Enter" erzwingt sofortiges Speichern
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur(); // löst "change" aus
             }
         });
     });
