@@ -38,7 +38,8 @@
                     <th>Name</th>
                     <th>Alter</th>
 
-                    {% for category, items in disciplines %}
+                    {# SWIMMING-Kategorie ausblenden #}
+                    {% for category, items in disciplines if category|upper != 'SWIMMING' %}
                         <th>{{ category }}</th>
                     {% endfor %}
                 </tr>
@@ -53,7 +54,8 @@
                     <td>{{ p.vorname }} {{ p.nachname }}</td>
                     <td>{{ p.age_year }}</td>
 
-                    {% for category, items in disciplines %}
+                    {# Nur Nicht-SWIMMING Kategorien anzeigen #}
+                    {% for category, items in disciplines if category|upper != 'SWIMMING' %}
 
                         {# passende Disziplinen für diese Kategorie / Geschlecht / Alter #}
                         {% set options = [] %}
@@ -85,8 +87,11 @@
 
                             {# Disziplin-Dropdown #}
                             <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
-                                    class="form-select">
-
+                                    class="form-select"
+                                    data-save
+                                    data-ep-id="{{ p.ep_id }}"
+                                    data-type="discipline"
+                                    data-category="{{ category }}">
                                 <option value="">(keine Auswahl)</option>
 
                                 {% for d in options %}
@@ -100,12 +105,16 @@
                                 {% endfor %}
                             </select>
 
-                            {# Leistungsfeld #}
+                            {# Leistungsfeld mit autosave #}
                             <input type="number"
                                 name="results[{{ p.ep_id }}][{{ category }}][leistung]"
                                 step="0.01"
                                 class="form-control mt-1"
-                                value="{{ selectedValue }}">
+                                value="{{ selectedValue }}"
+                                data-save
+                                data-ep-id="{{ p.ep_id }}"
+                                data-discipline-id="{{ selectedDiscId ?? '' }}"
+                                data-type="leistung">
                         </td>
 
                     {% endfor %}
@@ -124,4 +133,35 @@
     </form>
 
 </div>
+
+{# --- Autosave Script --- #}
+{% block javascripts %}
+    {{ parent() }}
+    <script src="{{ asset('bundles/sportabzeichen/js/exam_results_autosave.js') }}"></script>
+{% endblock %}
+
+<style>
+input.saved, select.saved {
+    border-color: #28a745;
+    box-shadow: 0 0 3px #28a745;
+}
+input.error, select.error {
+    border-color: #dc3545;
+    box-shadow: 0 0 3px #dc3545;
+}
+</style>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        window.IServ = window.IServ || {};
+        IServ.routes = {
+            sportabzeichen_exam_result_save: '{{ path("sportabzeichen_exam_result_save") }}'
+        };
+        IServ.csrfToken = {
+            sportabzeichen_result_save: '{{ csrf_token("sportabzeichen_result_save") }}'
+        };
+    </script>
+    <script src="{{ asset('bundles/sportabzeichen/js/exam_results_autosave.js') }}"></script>
 {% endblock %}

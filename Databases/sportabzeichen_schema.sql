@@ -126,12 +126,10 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exam_results (
         REFERENCES sportabzeichen_disciplines(id),
 
     leistung        DOUBLE PRECISION,
-    stufe           TEXT
+    stufe           TEXT,
+
+    CONSTRAINT uniq_exam_result UNIQUE (ep_id, discipline_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_results_ep
-ON sportabzeichen_exam_results (ep_id);
-
 ------------------------------------------------------------
 -- 7. Rechte für Symfony / IServ
 ------------------------------------------------------------
