@@ -52,7 +52,7 @@ final class ExamController extends AbstractPageController
                 'exam_date' => $date,
             ]);
 
-            return $this->redirectToRoute('sportabzeichen_exam_index');
+            return $this->redirectToRoute('sportabzeichen_exam_dashboard');
         }
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig');

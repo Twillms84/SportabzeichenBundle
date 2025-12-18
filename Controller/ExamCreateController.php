@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-#[Route('/sportabzeichen/exam', name: 'sportabzeichen_exam_')]
+#[Route('/sportabzeichen/exams', name: 'sportabzeichen_exams_')]
 final class ExamCreateController extends AbstractPageController
 {
     #[Route('/new', name: 'new')]
