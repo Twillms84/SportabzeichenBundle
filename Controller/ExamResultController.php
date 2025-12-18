@@ -14,46 +14,7 @@ use Symfony\Component\Routing\Annotation\Route;
 final class ExamResultController extends AbstractPageController
 {
     /* --------------------------------------------------------
-     * Altersklasse bestimmen
-     * -------------------------------------------------------- */
-    private function mapAgeToAltersklasse(int $age): string
-    {
-        $mapping = [
-            [6, 7,   "AC0607"],
-            [8, 9,   "AC0809"],
-            [10, 11, "AC1011"],
-            [12, 13, "AC1213"],
-            [14, 15, "AC1415"],
-            [16, 17, "AC1617"],
-            [18, 19, "AC1819"],
-            [20, 24, "AC2024"],
-            [25, 29, "AC2529"],
-            [30, 34, "AC3034"],
-            [35, 39, "AC3539"],
-            [40, 44, "AC4044"],
-            [45, 49, "AC4549"],
-            [50, 54, "AC5054"],
-            [55, 59, "AC5559"],
-            [60, 64, "AC6064"],
-            [65, 69, "AC6569"],
-            [70, 74, "AC7074"],
-            [75, 79, "AC7579"],
-            [80, 84, "AC8084"],
-            [85, 89, "AC8589"],
-            [90, 200, "AC9000"],
-        ];
-
-        foreach ($mapping as [$min, $max, $label]) {
-            if ($age >= $min && $age <= $max) {
-                return $label;
-            }
-        }
-        return "AC2024";
-    }
-
-
-    /* --------------------------------------------------------
-     * Klassen für Filter laden
+     * Klassen aus IServ laden
      * -------------------------------------------------------- */
     private function loadClasses(Connection $conn): array
     {
@@ -65,9 +26,8 @@ final class ExamResultController extends AbstractPageController
         ");
     }
 
-
     /* --------------------------------------------------------
-     * 1️⃣ Übersicht Prüfungen
+     * 1️⃣ Prüfungen auswählen
      * -------------------------------------------------------- */
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
@@ -85,7 +45,6 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-
     /* --------------------------------------------------------
      * 2️⃣ Ergebnisse eingeben
      * -------------------------------------------------------- */
@@ -94,7 +53,9 @@ final class ExamResultController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // Prüfung laden
+        /* ------------------------------
+         * Prüfung laden
+         * ------------------------------ */
         $exam = $conn->fetchAssociative("
             SELECT *
             FROM sportabzeichen_exams
@@ -102,11 +63,11 @@ final class ExamResultController extends AbstractPageController
         ", [$examId]);
 
         if (!$exam) {
-            throw $this->createNotFoundException("Prüfung nicht gefunden.");
+            throw $this->createNotFoundException('Prüfung nicht gefunden.');
         }
 
         /* ------------------------------
-         * Klassenfilter anwenden
+         * Klassenfilter
          * ------------------------------ */
         $selectedClass = $request->query->get('class');
         $classes = $this->loadClasses($conn);
@@ -114,48 +75,59 @@ final class ExamResultController extends AbstractPageController
         if ($selectedClass) {
             $participants = $conn->fetchAllAssociative("
                 SELECT ep.id AS ep_id,
-                       p.vorname, p.nachname, p.geschlecht,
                        ep.age_year,
-                       u.auxinfo AS klasse
+                       p.import_id,
+                       p.geschlecht,
+                       u.firstname AS vorname,
+                       u.lastname  AS nachname,
+                       u.auxinfo   AS klasse
                 FROM sportabzeichen_exam_participants ep
                 JOIN sportabzeichen_participants p ON p.id = ep.participant_id
                 JOIN users u ON u.importid = p.import_id
                 WHERE ep.exam_id = ?
                   AND u.auxinfo = ?
-                ORDER BY p.nachname, p.vorname
+                ORDER BY u.lastname, u.firstname
             ", [$examId, $selectedClass]);
         } else {
             $participants = $conn->fetchAllAssociative("
                 SELECT ep.id AS ep_id,
-                       p.vorname, p.nachname, p.geschlecht,
                        ep.age_year,
-                       u.auxinfo AS klasse
+                       p.import_id,
+                       p.geschlecht,
+                       u.firstname AS vorname,
+                       u.lastname  AS nachname,
+                       u.auxinfo   AS klasse
                 FROM sportabzeichen_exam_participants ep
                 JOIN sportabzeichen_participants p ON p.id = ep.participant_id
                 JOIN users u ON u.importid = p.import_id
                 WHERE ep.exam_id = ?
-                ORDER BY p.nachname, p.vorname
+                ORDER BY u.lastname, u.firstname
             ", [$examId]);
         }
 
         /* ------------------------------
-         * Altersklasse & Geschlecht vorbereiten
+         * Geschlecht normalisieren
          * ------------------------------ */
-        foreach ($participants as &$pp) {
-            $pp['altersklasse'] = $this->mapAgeToAltersklasse((int)$pp['age_year']);
-            $g = strtolower(trim($pp['geschlecht']));
-            $pp['gender'] = ($g === 'm' || $g === 'male') ? 'MALE' : 'FEMALE';
+        foreach ($participants as &$p) {
+            $g = strtolower(trim((string) $p['geschlecht']));
+            $p['gender'] = ($g === 'm' || $g === 'male') ? 'MALE' : 'FEMALE';
         }
-        unset($pp);
+        unset($p);
 
         /* ------------------------------
          * Disziplinen + Anforderungen
          * ------------------------------ */
         $rows = $conn->fetchAllAssociative("
-            SELECT d.id, d.name, d.kategorie, d.einheit,
-                   r.altersklasse, r.geschlecht, r.auswahlnummer
+            SELECT d.id,
+                   d.name,
+                   d.kategorie,
+                   d.einheit,
+                   r.geschlecht,
+                   r.age_min,
+                   r.age_max,
+                   r.auswahlnummer
             FROM sportabzeichen_disciplines d
-            JOIN sportabzeichen_requirements r ON d.id = r.discipline_id
+            JOIN sportabzeichen_requirements r ON r.discipline_id = d.id
             WHERE r.jahr = ?
             ORDER BY d.kategorie, r.auswahlnummer, d.name
         ", [$exam['exam_year']]);
@@ -164,13 +136,9 @@ final class ExamResultController extends AbstractPageController
         foreach ($rows as $row) {
             $disciplines[$row['kategorie']][] = $row;
         }
-        foreach ($disciplines as &$items) {
-            usort($items, fn($a, $b) => ($a['auswahlnummer'] <=> $b['auswahlnummer']));
-        }
-        unset($items);
 
         /* ------------------------------
-         * Ergebnisse laden
+         * Vorhandene Ergebnisse laden
          * ------------------------------ */
         $resultsRaw = $conn->fetchAllAssociative("
             SELECT *
@@ -186,53 +154,18 @@ final class ExamResultController extends AbstractPageController
         }
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
-            'exam'         => $exam,
-            'participants' => $participants,
-            'disciplines'  => $disciplines,
-            'results'      => $results,
-            'classes'      => $classes,
-            'selectedClass'=> $selectedClass,
+            'exam'          => $exam,
+            'participants'  => $participants,
+            'disciplines'   => $disciplines,
+            'results'       => $results,
+            'classes'       => $classes,
+            'selectedClass' => $selectedClass,
         ]);
     }
 
-
     /* --------------------------------------------------------
-     * 3️⃣ Einzel speichern
+     * 3️⃣ Alle Ergebnisse speichern
      * -------------------------------------------------------- */
-    #[Route('/save', name: 'save', methods: ['POST'])]
-    public function save(Request $request, Connection $conn): Response
-    {
-        $epId         = (int)$request->request->get('ep_id');
-        $disciplineId = (int)$request->request->get('discipline_id');
-        $leistung     = $request->request->get('leistung');
-
-        if ($leistung === '' || $leistung === null) {
-            $leistung = null;
-        } else {
-            $leistung = (float)$leistung;
-        }
-
-        $exists = $conn->fetchOne("
-            SELECT id FROM sportabzeichen_exam_results
-            WHERE ep_id = ? AND discipline_id = ?
-        ", [$epId, $disciplineId]);
-
-        if ($exists) {
-            $conn->update('sportabzeichen_exam_results', [
-                'leistung' => $leistung
-            ], ['id' => $exists]);
-        } else {
-            $conn->insert('sportabzeichen_exam_results', [
-                'ep_id'         => $epId,
-                'discipline_id' => $disciplineId,
-                'leistung'      => $leistung
-            ]);
-        }
-
-        return new Response('OK');
-    }
-
-
     #[Route('/exam/{examId}/save-all', name: 'save_all', methods: ['POST'])]
     public function saveAll(int $examId, Request $request, Connection $conn): Response
     {
@@ -240,34 +173,34 @@ final class ExamResultController extends AbstractPageController
 
         $formData = $request->request->all('results');
 
-        if (!$formData) {
-            $this->addFlash('warning', 'Keine Daten empfangen.');
-            return $this->redirectToRoute('sportabzeichen_results_index', ['examId' => $examId]);
-        }
+        foreach ($formData as $epId => $categories) {
+            foreach ($categories as $data) {
 
-        foreach ($formData as $epId => $entry) {
+                $disciplineId = $data['discipline'] ?? null;
+                if (!$disciplineId) {
+                    continue;
+                }
 
-            $disciplineId = $entry['discipline'] ?? null;
-            $leistung     = $entry['leistung'] ?? null;
+                $leistung = $data['leistung'];
+                $leistung = ($leistung === '' ? null : (float)$leistung);
 
-            if (!$disciplineId) {
-                continue;
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_results
+                        (ep_id, discipline_id, leistung)
+                    VALUES (:ep, :disc, :leistung)
+                    ON CONFLICT (ep_id, discipline_id)
+                    DO UPDATE SET leistung = EXCLUDED.leistung
+                ", [
+                    'ep'       => (int)$epId,
+                    'disc'     => (int)$disciplineId,
+                    'leistung' => $leistung,
+                ]);
             }
-
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
-                VALUES (:ep, :disc, :l)
-                ON CONFLICT (ep_id, discipline_id)
-                DO UPDATE SET leistung = EXCLUDED.leistung
-            ", [
-                'ep'   => (int)$epId,
-                'disc' => (int)$disciplineId,
-                'l'    => ($leistung === '' ? null : (float)$leistung),
-            ]);
         }
 
-        $this->addFlash('success', 'Alle Ergebnisse gespeichert!');
-
-        return $this->redirectToRoute('sportabzeichen_results_index', ['examId' => $examId]);
+        $this->addFlash('success', 'Alle Ergebnisse gespeichert.');
+        return $this->redirectToRoute('sportabzeichen_results_index', [
+            'examId' => $examId
+        ]);
     }
 }

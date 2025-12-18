@@ -30,34 +30,38 @@
         {# ------------------------------------------------------------
            Prüfung auswählen
            ------------------------------------------------------------ #}
-        <form method="get" class="form-inline mb-4">
-            <div class="form-group">
-                <label for="exam" class="control-label">
-                    {{ 'Prüfung auswählen'|trans }}
-                </label>
+            <form method="get"
+                action="{{ path('sportabzeichen_results_index', { examId: 0 }) }}"
+                class="form-inline mb-4"
+                onsubmit="
+                    this.action = this.action.replace('/0', '/' + this.examId.value);
+                ">
 
-                <select name="exam"
-                        id="exam"
-                        class="form-control"
-                        onchange="this.form.submit()">
-                    <option value="">
-                        -- {{ 'Bitte wählen'|trans }} --
-                    </option>
+                <div class="form-group">
+                    <label for="examId" class="control-label">
+                        {{ 'Prüfung auswählen'|trans }}
+                    </label>
 
-                    {% for exam in exams %}
-                        <option value="{{ exam.id }}"
-                            {% if selectedExam is not null and exam.id == selectedExam %}
-                                selected
-                            {% endif %}>
-                            {{ exam.exam_year }}
-                            {% if exam.exam_name %}
-                                – {{ exam.exam_name }}
-                            {% endif %}
+                    <select name="examId"
+                            id="examId"
+                            class="form-control"
+                            onchange="this.form.submit()">
+
+                        <option value="">
+                            -- {{ 'Bitte wählen'|trans }} --
                         </option>
-                    {% endfor %}
-                </select>
-            </div>
-        </form>
+
+                        {% for exam in exams %}
+                            <option value="{{ exam.id }}">
+                                {{ exam.exam_year }}
+                                {% if exam.exam_name %}
+                                    – {{ exam.exam_name }}
+                                {% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
 
         {# ------------------------------------------------------------
            FALL 2: Prüfung ausgewählt + Teilnehmer vorhanden
