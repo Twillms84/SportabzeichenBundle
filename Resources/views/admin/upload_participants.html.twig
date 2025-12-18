@@ -1,10 +1,14 @@
 {% extends "@IServCore/page.html.twig" %}
 
-{% block page_title %}{{ title }}{% endblock %}
+{% block page_title %}
+        {{ 'Sportabzeichen – Teilnehmerdaten hochladen'|trans }}
+{% endblock %}
 
 {% block page_content %}
 <div class="content">
-    <h2>{{ title }}</h2>
+    <h2>
+        {{ 'Sportabzeichen – Teilnehmerdaten hochladen'|trans }}
+    </h2>
 
     {% if message %}
         <div class="alert alert-success">{{ message }}</div>
