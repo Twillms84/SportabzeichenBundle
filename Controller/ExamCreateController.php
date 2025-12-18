@@ -38,6 +38,11 @@ final class ExamCreateController extends AbstractPageController
         if ($request->isMethod('POST')) {
             try {
                 $examYear = (int) $request->request->get('exam_year');
+
+                // 🔒 Normalisieren: 25 → 2025
+                if ($examYear < 100) {
+                    $examYear += 2000;
+                }
                 $examDate = $request->request->get('exam_date') ?: null;
                 $class    = trim((string) $request->request->get('class'));
 
