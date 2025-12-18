@@ -23,7 +23,7 @@ final class MenuListener implements MainMenuListenerInterface
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
             $menu->addChild('sportabzeichen_results', [
-                'route' => 'sportabzeichen_results_exams',
+                'route' => 'sportabzeichen_exams_select',
                 'label' => _('Sportabzeichen – Ergebnisse'),
                 'extras' => [
                     'icon' => 'table',
