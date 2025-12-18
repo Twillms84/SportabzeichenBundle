@@ -160,6 +160,7 @@ final class ExamResultController extends AbstractPageController
             'results'       => $results,
             'classes'       => $classes,
             'selectedClass' => $selectedClass,
+            'nonce' => $nonce, // CSP Nonce für Inline-Script
         ]);
     }
 
