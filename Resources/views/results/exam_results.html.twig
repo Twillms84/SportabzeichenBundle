@@ -58,9 +58,9 @@
                         {# passende Disziplinen für diese Kategorie / Geschlecht / Altersklasse #}
                         {% set options = [] %}
                         {% for d in items %}
-                            {% if d.altersklasse == p.altersklasse and d.geschlecht == p.gender %}
-                                {% set options = options|merge([d]) %}
-                            {% endif %}
+                        {% if d.geschlecht == p.gender
+                        and p.age_year >= d.age_min
+                        and p.age_year <= d.age_max %}
                         {% endfor %}
 
                         {# falls Ergebnis existiert → Disziplin bestimmen #}
