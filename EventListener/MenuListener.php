@@ -22,7 +22,7 @@ final class MenuListener implements MainMenuListenerInterface
          * Ergebnisse eintragen
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
-            $menu->addChild('sportabzeichen_results', [
+            $menu->addChild('sportabzeichen_exams', [
                 'route' => 'sportabzeichen_exams_dashboard',
                 'label' => _('SPA-Ergebnisse'),
                 'extras' => [
