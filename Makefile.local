@@ -1,0 +1,9 @@
+# ---------------------------------------------------------------------------
+# Local Make targets for PulsR/SportabzeichenBundle (persist after template update)
+# ---------------------------------------------------------------------------
+
+webpack:
+	@echo ">>> Building Webpack assets for PulsR/SportabzeichenBundle..."
+	yarn install --silent
+	yarn run build
+	@echo ">>> Webpack build completed successfully."
