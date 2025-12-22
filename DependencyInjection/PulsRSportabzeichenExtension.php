@@ -3,14 +3,13 @@ namespace PulsR\SportabzeichenBundle\DependencyInjection;
 
 use IServ\CoreBundle\DependencyInjection\IServBaseExtension;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 
-final class PulsRSportabzeichenExtension extends IServBaseExtension
+final class PulsRSportabzeichenExtension extends IServBaseExtension implements PrependExtensionInterface
 {
-    public function load(array $configs, ContainerBuilder $container): void
+    public function prepend(ContainerBuilder $container): void
     {
-        parent::load($configs, $container);
-
-        // IServ-kompatible Asset-Registrierung
+        // Hier wird die Konfiguration VOR der load-Phase injiziert
         $container->prependExtensionConfig('framework', [
             'assets' => [
                 'packages' => [
@@ -20,6 +19,12 @@ final class PulsRSportabzeichenExtension extends IServBaseExtension
                 ],
             ],
         ]);
+    }
+
+    public function load(array $configs, ContainerBuilder $container): void
+    {
+        // Standardmäßig Services laden (services.yaml etc.)
+        parent::load($configs, $container);
     }
 
     public function getAlias(): string
