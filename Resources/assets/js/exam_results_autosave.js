@@ -1,78 +1,62 @@
 (function($) {
-    console.log("[Sportabzeichen] Skript geladen");
-
     const saveChange = function(el) {
-        // Erst im Moment des Speicherns prüfen wir, ob die Daten da sind
-        if (!window.IServ || !IServ.routes || !IServ.routes.sportabzeichen_exam_result_save) {
-            console.error("[Sportabzeichen] Abbruch: IServ.routes nicht definiert. Bitte Seite neu laden.");
-            $(el).css('background-color', '#ffcdd2');
-            return;
-        }
+        // Wir holen uns die Route und das Token direkt aus dem Formular-Attribut
+        const $form = $(el).closest('form');
+        const route = $form.data('global-route');
+        const token = $form.data('global-token');
 
         const epId = el.dataset.epId;
         const type = el.dataset.type;
+        // Falls es die Leistung ist, brauchen wir die Disziplin-ID
         const disciplineId = el.dataset.disciplineId || (el.tagName === 'SELECT' ? el.value : null);
         const leistung = el.value;
 
-        if (!epId || !disciplineId) return;
+        // Nur senden, wenn wir wissen, für wen (epId) und was (disciplineId)
+        if (!epId || !disciplineId || !route) return;
 
+        // Optisches Feedback: Gelb = "Speichert..."
         $(el).css('background-color', '#fff9c4'); 
 
-        const payload = {
-            ep_id: epId,
-            discipline_id: disciplineId,
-            leistung: leistung,
-            type: type
-        };
-
-        fetch(IServ.routes.sportabzeichen_exam_result_save, {
+        fetch(route, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-Token': IServ.csrfToken.sportabzeichen_result_save
+                'X-CSRF-Token': token
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                ep_id: epId,
+                discipline_id: disciplineId,
+                leistung: leistung
+            })
         })
-        .then(res => {
-            if (!res.ok) throw new Error('Server Fehler');
-            return res.json();
-        })
+        .then(response => response.json())
         .then(data => {
-            $(el).css('background-color', '#c8e6c9');
-            setTimeout(() => $(el).css('background-color', ''), 1000);
+            if (data.status === 'ok') {
+                // Optisches Feedback: Grün = "In DB gespeichert!"
+                $(el).css('background-color', '#c8e6c9');
+                setTimeout(() => $(el).css('background-color', ''), 800);
+            } else {
+                throw new Error(data.error);
+            }
         })
-        .catch(err => {
+        .catch(error => {
+            // Optisches Feedback: Rot = "Fehler!"
             $(el).css('background-color', '#ffcdd2');
-            console.error("[Sportabzeichen] Fehler:", err);
+            console.error("Speicherfehler:", error);
         });
     };
 
-    const initAutosave = function(context) {
-        const fields = (context || document).querySelectorAll('[data-save]');
-        
-        fields.forEach(el => {
-            // Event für Änderungen (Input & Select)
-            $(el).off('change.autosave').on('change.autosave', function() {
-                // Wenn es ein Select ist, aktualisiere das zugehörige Input-Feld
-                if (this.tagName === 'SELECT' && this.dataset.targetInput) {
-                    const target = document.getElementById(this.dataset.targetInput);
-                    if (target) target.dataset.disciplineId = this.value;
-                }
-                saveChange(this);
-            });
-        });
-    };
-
-    // Warten bis alles bereit ist
-    $(document).ready(function() {
-        if (window.IServ && typeof IServ.setup === 'function') {
-            IServ.setup(function(context) {
-                initAutosave(context);
-            });
-        } else {
-            initAutosave();
+    // Events binden
+    $(document).on('change', '[data-save]', function() {
+        // Falls Dropdown geändert wird, das zugehörige Input-Feld aktualisieren
+        if (this.tagName === 'SELECT' && this.dataset.targetInput) {
+            const target = document.getElementById(this.dataset.targetInput);
+            if (target) {
+                target.dataset.disciplineId = this.value;
+                // Wenn bereits ein Wert im Feld steht, auch diesen speichern
+                if (target.value !== "") saveChange(target);
+            }
         }
+        saveChange(this);
     });
-
 })(jQuery);
