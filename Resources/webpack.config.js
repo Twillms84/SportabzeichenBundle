@@ -5,11 +5,8 @@ const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 module.exports = {
     mode: 'production',
     entry: {
-        // Bestehendes Autosave
         'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
-        // NEU: Scoring Logik
         'js/exam_results_scoring': './assets/js/exam_results_scoring.js',
-        // NEU: CSS für die Medaillenfarben
         'css/sportabzeichen_results': './assets/css/results.css'
     },
     output: {
@@ -20,7 +17,8 @@ module.exports = {
     plugins: [
         new WebpackManifestPlugin({
             fileName: 'manifest.json',
-            publicPath: '' // In IServ Bundles oft leer lassen, da der Asset-Helper den Präfix setzt
+            // WICHTIG: Diesen Pfad so lassen, wie er in der funktionierenden Version war!
+            publicPath: 'assets/pulsr-sportabzeichen/' 
         }),
         new MiniCssExtractPlugin({
             filename: '[name].[contenthash:8].css'
@@ -36,11 +34,10 @@ module.exports = {
                     options: { presets: ['@babel/preset-env'] }
                 }
             },
-            // NEU: Regel für CSS-Dateien
             {
                 test: /\.css$/,
                 use: [MiniCssExtractPlugin.loader, 'css-loader']
             }
         ]
     }
-}
+};
