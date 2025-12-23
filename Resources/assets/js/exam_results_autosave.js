@@ -1,26 +1,33 @@
 (function($) {
-    const saveChange = function(el) {
-        // Wir holen uns die Route und das Token direkt aus dem Formular-Attribut
-        const $form = $(el).closest('form');
-        const route = $form.data('global-route');
-        const token = $form.data('global-token');
+    console.log("[Sportabzeichen] Skript-Datei wurde vom Browser gelesen.");
 
+    const saveChange = function(el) {
+        const form = document.getElementById('autosave-form');
+        if (!form) {
+            console.error("[Sportabzeichen] Fehler: Formular 'autosave-form' nicht gefunden!");
+            return;
+        }
+
+        const route = form.dataset.globalRoute;
+        const token = form.dataset.globalToken;
         const epId = el.dataset.epId;
-        const type = el.dataset.type;
-        // Falls es die Leistung ist, brauchen wir die Disziplin-ID
         const disciplineId = el.dataset.disciplineId || (el.tagName === 'SELECT' ? el.value : null);
         const leistung = el.value;
 
-        // Nur senden, wenn wir wissen, für wen (epId) und was (disciplineId)
-        if (!epId || !disciplineId || !route) return;
+        console.log(`[Sportabzeichen] Sende Daten: EP=${epId}, Disc=${disciplineId}, Wert=${leistung}`);
 
-        // Optisches Feedback: Gelb = "Speichert..."
+        if (!epId || !disciplineId || !route) {
+            console.warn("[Sportabzeichen] Abbruch: Fehlende Daten für den Versand.");
+            return;
+        }
+
         $(el).css('background-color', '#fff9c4'); 
 
         fetch(route, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-Token': token
             },
             body: JSON.stringify({
@@ -29,34 +36,52 @@
                 leistung: leistung
             })
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'ok') {
-                // Optisches Feedback: Grün = "In DB gespeichert!"
-                $(el).css('background-color', '#c8e6c9');
-                setTimeout(() => $(el).css('background-color', ''), 800);
-            } else {
-                throw new Error(data.error);
-            }
+        .then(res => {
+            if (!res.ok) throw new Error('Server antwortete mit Fehler ' + res.status);
+            return res.json();
         })
-        .catch(error => {
-            // Optisches Feedback: Rot = "Fehler!"
+        .then(data => {
+            console.log("[Sportabzeichen] Erfolg: In DB gespeichert.");
+            $(el).css('background-color', '#c8e6c9');
+            setTimeout(() => $(el).css('background-color', ''), 800);
+        })
+        .catch(err => {
             $(el).css('background-color', '#ffcdd2');
-            console.error("Speicherfehler:", error);
+            console.error("[Sportabzeichen] AJAX Fehler:", err);
         });
     };
 
-    // Events binden
-    $(document).on('change', '[data-save]', function() {
-        // Falls Dropdown geändert wird, das zugehörige Input-Feld aktualisieren
-        if (this.tagName === 'SELECT' && this.dataset.targetInput) {
-            const target = document.getElementById(this.dataset.targetInput);
-            if (target) {
-                target.dataset.disciplineId = this.value;
-                // Wenn bereits ein Wert im Feld steht, auch diesen speichern
-                if (target.value !== "") saveChange(target);
-            }
-        }
-        saveChange(this);
+    const initAutosave = function(context) {
+        const root = context || document;
+        const fields = root.querySelectorAll('[data-save]');
+        
+        console.log(`[Sportabzeichen] Initialisiere ${fields.length} Felder.`);
+
+        fields.forEach(el => {
+            $(el).off('change.autosave').on('change.autosave', function() {
+                if (this.tagName === 'SELECT' && this.dataset.targetInput) {
+                    const target = document.getElementById(this.dataset.targetInput);
+                    if (target) {
+                        target.dataset.disciplineId = this.value;
+                    }
+                }
+                saveChange(this);
+            });
+        });
+    };
+
+    // Wir probieren mehrere Wege, um sicherzugehen, dass es startet
+    $(document).ready(function() {
+        console.log("[Sportabzeichen] Document Ready");
+        initAutosave();
     });
+
+    // IServ Pjax Support
+    if (window.IServ && typeof IServ.setup === 'function') {
+        IServ.setup(function(context) {
+            console.log("[Sportabzeichen] IServ.setup aufgerufen");
+            initAutosave(context);
+        });
+    }
+
 })(jQuery);
