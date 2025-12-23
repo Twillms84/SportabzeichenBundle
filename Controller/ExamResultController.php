@@ -187,17 +187,24 @@ final class ExamResultController extends AbstractPageController
             $medal = 'none';
 
             if ($scoreData && $leistung !== null) {
-                $isGreater = (strtoupper($scoreData['berechnungsart']) === 'GREATER');
+                // Wir holen die Berechnungsart (GREATER oder SMALLER/LOWER)
+                $art = strtoupper($scoreData['berechnungsart']); 
                 
-                // Hilfsfunktion für den Vergleich
-                $check = function($val, $target) use ($isGreater) {
-                    if ($target === null) return false;
-                    return $isGreater ? ($val >= $target) : ($val <= $target);
-                };
+                $g = $scoreData['gold'];
+                $s = $scoreData['silber'];
+                $b = $scoreData['bronze'];
 
-                if ($check($leistung, $scoreData['gold'])) { $points = 3; $medal = 'gold'; }
-                elseif ($check($leistung, $scoreData['silber'])) { $points = 2; $medal = 'silver'; }
-                elseif ($check($leistung, $scoreData['bronze'])) { $points = 1; $medal = 'bronze'; }
+                if ($art === 'GREATER') {
+                    // Weite/Höhe/Anzahl: Mehr ist besser
+                    if ($leistung >= $g && $g > 0) { $points = 3; $medal = 'gold'; }
+                    elseif ($leistung >= $s && $s > 0) { $points = 2; $medal = 'silver'; }
+                    elseif ($leistung >= $b && $b > 0) { $points = 1; $medal = 'bronze'; }
+                } else {
+                    // Zeit: Weniger ist besser (SMALLER / LOWER)
+                    if ($leistung <= $g && $g > 0) { $points = 3; $medal = 'gold'; }
+                    elseif ($leistung <= $s && $s > 0) { $points = 2; $medal = 'silver'; }
+                    elseif ($leistung <= $b && $b > 0) { $points = 1; $medal = 'bronze'; }
+                }
             }
 
             // 3. Stufe und Points in DB schreiben
