@@ -1,8 +1,30 @@
-/* Dezente Hintergrundfarben für die Eingabefelder */
-.medal-gold { background-color: #fff4b3 !important; border-color: #ffd700 !important; }
-.medal-silver { background-color: #f2f2f2 !important; border-color: #c0c0c0 !important; }
-.medal-bronze { background-color: #f9e6d3 !important; border-color: #cd7f32 !important; }
-.medal-none { background-color: #ffffff !important; }
+/* Medaillen-Farben mit hoher Priorität */
+.medal-gold, .medal-gold:focus {
+    background-color: #ffd700 !important;
+    color: #000 !important;
+    border-color: #d4af37 !important;
+}
 
-/* Kleiner Indikator-Ring oder Fokus-Effekt */
-input[data-save] { transition: background-color 0.5s ease, border-color 0.5s ease; }
+.medal-silver, .medal-silver:focus {
+    background-color: #c0c0c0 !important;
+    color: #000 !important;
+    border-color: #a0a0a0 !important;
+}
+
+.medal-bronze, .medal-bronze:focus {
+    background-color: #cd7f32 !important;
+    color: #fff !important;
+    border-color: #8b4513 !important;
+}
+
+/* Standard-Stil für leere Felder */
+.medal-none {
+    background-color: #ffffff !important;
+    color: #0a0808 !important;
+}
+
+/* Damit das Input-Feld die gesamte Zelle füllt */
+.discipline-selector, .result-input {
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
