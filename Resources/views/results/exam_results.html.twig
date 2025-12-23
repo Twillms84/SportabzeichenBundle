@@ -20,7 +20,10 @@
     </script>
 
     {# Klassenfilter #}
-    <form method="get" class="mb-3 d-flex align-items-center gap-2">
+    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
+      method="post"
+      data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
+      data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
         <label class="fw-bold mb-0 me-2">Klasse:</label>
         <select name="class" class="form-select w-auto d-inline">
             <option value="">(Alle Klassen)</option>
