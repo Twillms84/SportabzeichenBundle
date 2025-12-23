@@ -4,17 +4,19 @@
     Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})
 {% endblock %}
 
+{% block stylesheets %}
+    {{ parent() }}
+    {# Lädt das generierte CSS für die Medaillenfarben #}
+    {{ iserv_bundle_css('PulsRSportabzeichen', 'css/sportabzeichen_results') }}
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
 
     <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
 
-    {# Klassenfilter #}
-<form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
-      method="post"
-      id="autosave-form"
-      data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
-      data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
+    {# 1. Klassenfilter (Nur GET-Request zum Filtern) #}
+    <form method="get" class="mb-3 d-flex align-items-center gap-2">
         <label class="fw-bold mb-0 me-2">Klasse:</label>
         <select name="class" class="form-select w-auto d-inline">
             <option value="">(Alle Klassen)</option>
@@ -27,7 +29,13 @@
         <button type="submit" class="btn btn-primary">Filtern</button>
     </form>
 
-    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" method="post">
+    {# 2. Hauptformular für die Tabelle mit Autosave-Attributes #}
+    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
+          method="post"
+          id="autosave-form"
+          data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
+          data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
+
         <table class="table table-bordered align-middle mt-3">
             <thead>
                 <tr>
@@ -51,6 +59,7 @@
                     {% for category, items in disciplines %}
                         {% if category|upper != 'SWIMMING' %}
 
+                            {# Verfügbare Disziplinen für diesen Teilnehmer filtern #}
                             {% set options = [] %}
                             {% for d in items %}
                                 {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -58,7 +67,7 @@
                                 {% endif %}
                             {% endfor %}
 
-                            {# Logik zur Vorselektion der Disziplin #}
+                            {# Aktuelle Auswahl und Leistung ermitteln #}
                             {% set selectedDiscId = null %}
                             {% for d in options %}
                                 {% if epResults[d.id] is defined %}
@@ -66,21 +75,32 @@
                                 {% endif %}
                             {% endfor %}
 
-                            {# Standardmäßig erste Disziplin wählen, wenn noch nichts gespeichert ist #}
+                            {# Default: Erste Disziplin nehmen, falls keine gespeichert #}
                             {% if selectedDiscId is null and options|length > 0 %}
                                 {% set selectedDiscId = options[0].id %}
                             {% endif %}
 
                             {% set selectedValue = '' %}
+                            {% set medalClass = 'medal-none' %}
+                            
                             {% if selectedDiscId and epResults[selectedDiscId] is defined %}
-                                {% set selectedValue = epResults[selectedDiscId].leistung %}
+                                {% set resObj = epResults[selectedDiscId] %}
+                                {% set selectedValue = resObj.leistung %}
+                                
+                                {# Medaillen-Klasse für das Laden der Seite berechnen #}
+                                {% if resObj.points is defined %}
+                                    {% if resObj.points == 3 %}{% set medalClass = 'medal-gold' %}
+                                    {% elseif resObj.points == 2 %}{% set medalClass = 'medal-silver' %}
+                                    {% elseif resObj.points == 1 %}{% set medalClass = 'medal-bronze' %}
+                                    {% endif %}
+                                {% endif %}
                             {% endif %}
 
                             <td>
-                                {# Disziplin-Dropdown: ID-Zuweisung hilft dem JS beim Abgleichen #}
+                                {# Disziplin-Dropdown #}
                                 <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
                                         id="disc-select-{{ p.ep_id }}-{{ loop.index }}"
-                                        class="form-select discipline-selector"
+                                        class="form-select discipline-selector {{ medalClass }}"
                                         data-save
                                         data-ep-id="{{ p.ep_id }}"
                                         data-type="discipline"
@@ -97,7 +117,7 @@
                                 <input type="text" 
                                     id="leistung-input-{{ p.ep_id }}-{{ loop.index }}"
                                     name="results[{{ p.ep_id }}][{{ category }}][leistung]"
-                                    class="form-control mt-1"
+                                    class="form-control mt-1 {{ medalClass }}"
                                     placeholder="Wert"
                                     value="{{ selectedValue }}"
                                     data-save
@@ -124,6 +144,8 @@
 
 {% block javascripts %}
     {{ parent() }}
-    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
-    <script src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
+    {# Lädt das Autosave-Skript (Senden der Daten) #}
+    {{ iserv_bundle_js('PulsRSportabzeichen', 'js/exam_results_autosave') }}
+    {# Lädt das Scoring-Skript (Farben umschalten basierend auf Server-Antwort) #}
+    {{ iserv_bundle_js('PulsRSportabzeichen', 'js/exam_results_scoring') }}
 {% endblock %}
