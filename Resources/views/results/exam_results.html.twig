@@ -139,6 +139,6 @@
 {% block javascripts %}
     {{ parent() }}
     {# Nutze asset() für beide JS-Dateien #}
-    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
-    <script src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
+    <script type="text/javascript" src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script type="text/javascript" src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
