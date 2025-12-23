@@ -9,19 +9,10 @@
 
     <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
 
-    {# 1. Routen und Tokens für JS bereitstellen #}
-    <script nonce="{{ nonce }}">
-        window.IServ = window.IServ || {};
-        window.IServ.routes = window.IServ.routes || {};
-        window.IServ.csrfToken = window.IServ.csrfToken || {};
-        
-        window.IServ.routes.sportabzeichen_exam_result_save = "{{ path('sportabzeichen_results_exam_result_save') }}";
-        window.IServ.csrfToken.sportabzeichen_result_save = "{{ csrf_token('sportabzeichen_result_save') }}";
-    </script>
-
     {# Klassenfilter #}
-    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
+<form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
       method="post"
+      id="autosave-form"
       data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
       data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
         <label class="fw-bold mb-0 me-2">Klasse:</label>
