@@ -14,9 +14,9 @@ use Symfony\Component\Routing\Annotation\Route;
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
 final class ExamResultController extends AbstractPageController
 {
-    /* --------------------------------------------------------
+    /**
      * Klassen aus IServ laden
-     * -------------------------------------------------------- */
+     */
     private function loadClasses(Connection $conn): array
     {
         return $conn->fetchAllAssociative("
@@ -27,9 +27,9 @@ final class ExamResultController extends AbstractPageController
         ");
     }
 
-    /* --------------------------------------------------------
+    /**
      * 1️⃣ Prüfungen auswählen
-     * -------------------------------------------------------- */
+     */
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
@@ -46,9 +46,9 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /* --------------------------------------------------------
+    /**
      * 2️⃣ Ergebnisse eingeben
-     * -------------------------------------------------------- */
+     */
     #[Route('/exam/{examId}', name: 'index', methods: ['GET'])]
     public function index(int $examId, Request $request, Connection $conn): Response
     {
@@ -62,9 +62,6 @@ final class ExamResultController extends AbstractPageController
             throw $this->createNotFoundException('Prüfung nicht gefunden.');
         }
 
-        /* ------------------------------
-         * Klassenfilter
-         * ------------------------------ */
         $selectedClass = $request->query->get('class');
         $classes = $this->loadClasses($conn);
 
@@ -101,18 +98,12 @@ final class ExamResultController extends AbstractPageController
             ", [$examId]);
         }
 
-        /* ------------------------------
-         * Geschlecht normalisieren
-         * ------------------------------ */
         foreach ($participants as &$p) {
             $g = strtolower(trim((string) $p['geschlecht']));
             $p['gender'] = ($g === 'm' || $g === 'male') ? 'MALE' : 'FEMALE';
         }
         unset($p);
 
-        /* ------------------------------
-         * Disziplinen + Anforderungen
-         * ------------------------------ */
         $rows = $conn->fetchAllAssociative("
             SELECT d.id,
                    d.name,
@@ -133,9 +124,6 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$row['kategorie']][] = $row;
         }
 
-        /* ------------------------------
-         * Vorhandene Ergebnisse laden
-         * ------------------------------ */
         $resultsRaw = $conn->fetchAllAssociative("
             SELECT *
             FROM sportabzeichen_exam_results
@@ -161,9 +149,9 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /* --------------------------------------------------------
-     * 3️⃣ Alle Ergebnisse speichern (Submit-Button)
-     * -------------------------------------------------------- */
+    /**
+     * 3️⃣ Alle Ergebnisse speichern (Submit-Button Fallback)
+     */
     #[Route('/exam/{examId}/save-all', name: 'save_all', methods: ['POST'])]
     public function saveAll(int $examId, Request $request, Connection $conn): Response
     {
@@ -178,8 +166,8 @@ final class ExamResultController extends AbstractPageController
                     continue;
                 }
 
-                $leistung = $data['leistung'];
-                $leistung = ($leistung === '' ? null : (float)$leistung);
+                $rawLeistung = $data['leistung'] ?? '';
+                $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_exam_results
@@ -201,15 +189,15 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /* --------------------------------------------------------
+    /**
      * 4️⃣ Einzelwert speichern (AJAX Autosave)
-     * -------------------------------------------------------- */
+     */
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request, Connection $conn): JsonResponse
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // CSRF prüfen
+        // CSRF-Token aus dem Header validieren
         $token = $request->headers->get('X-CSRF-Token');
         if (!$this->isCsrfTokenValid('sportabzeichen_result_save', $token)) {
             return new JsonResponse(['error' => 'Ungültiges CSRF-Token'], 403);
@@ -222,7 +210,12 @@ final class ExamResultController extends AbstractPageController
 
         $epId = (int) $data['ep_id'];
         $disciplineId = (int) $data['discipline_id'];
-        $leistung = $data['leistung'] !== null && $data['leistung'] !== '' ? (float) $data['leistung'] : null;
+        
+        // Komma-Korrektur: Verarbeitet Eingaben wie "12,5" zu "12.5"
+        $rawLeistung = $data['leistung'] ?? '';
+        $leistung = ($rawLeistung !== null && $rawLeistung !== '') 
+            ? (float) str_replace(',', '.', (string)$rawLeistung) 
+            : null;
 
         try {
             $conn->executeStatement('
@@ -236,7 +229,7 @@ final class ExamResultController extends AbstractPageController
                 'leistung' => $leistung,
             ]);
 
-            return new JsonResponse(['status' => 'ok']);
+            return new JsonResponse(['status' => 'ok', 'leistung_saved' => $leistung]);
         } catch (\Throwable $e) {
             return new JsonResponse([
                 'error' => 'Fehler beim Speichern: ' . $e->getMessage(),
