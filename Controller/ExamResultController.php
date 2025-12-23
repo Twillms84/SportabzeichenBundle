@@ -146,37 +146,40 @@ final class ExamResultController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        $data = json_decode($request->getContent(), true);
-        $epId = $data['ep_id'] ?? null;
-        $disciplineId = $data['discipline_id'] ?? null;
-        $rawLeistung = $data['leistung'] ?? '';
+        $content = json_decode($request->getContent(), true);
+        $epId = $content['ep_id'] ?? null;
+        $disciplineId = $content['discipline_id'] ?? null;
+        $rawLeistung = $content['leistung'] ?? null;
 
         if (!$epId || !$disciplineId) {
-            return new JsonResponse(['error' => 'Ungültige Daten'], 400);
+            return new JsonResponse(['error' => 'Fehlende Daten'], 400);
         }
 
-        // Token-Prüfung (Optional, falls im JS implementiert)
-        $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
+        $leistung = ($rawLeistung === '' || $rawLeistung === null) ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
         try {
-            // 1. Speichern
+            // 1. Leistung speichern
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
                 VALUES (:ep, :disc, :leistung)
                 ON CONFLICT (ep_id, discipline_id)
                 DO UPDATE SET leistung = EXCLUDED.leistung
-            ", ['ep' => $epId, 'disc' => $disciplineId, 'leistung' => $leistung]);
+            ", ['ep' => (int)$epId, 'disc' => (int)$disciplineId, 'leistung' => $leistung]);
 
-            // 2. Scoring berechnen
+            // 2. Anforderungen UND Berechnungsart laden
             $scoreData = $conn->fetchAssociative("
-                SELECT r.bronze, r.silber, r.gold, d.einheit
+                SELECT r.bronze, r.silber, r.gold, d.berechnungsart
                 FROM sportabzeichen_requirements r
                 JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
                 JOIN sportabzeichen_exam_participants ep ON ep.id = :ep
-                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
                 WHERE r.discipline_id = :disc 
                   AND r.jahr = (SELECT exam_year FROM sportabzeichen_exams WHERE id = ep.exam_id)
-                  AND r.geschlecht = (CASE WHEN p.geschlecht IN ('m', 'male') THEN 'MALE' ELSE 'FEMALE' END)
+                  AND r.geschlecht = (
+                      SELECT CASE WHEN p.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END 
+                      FROM sportabzeichen_participants p 
+                      JOIN sportabzeichen_exam_participants ep2 ON ep2.participant_id = p.id 
+                      WHERE ep2.id = :ep
+                  )
                   AND ep.age_year BETWEEN r.age_min AND r.age_max
             ", ['ep' => $epId, 'disc' => $disciplineId]);
 
@@ -184,33 +187,30 @@ final class ExamResultController extends AbstractPageController
             $medal = 'none';
 
             if ($scoreData && $leistung !== null) {
-                $einheit = strtolower($scoreData['einheit']);
-                $isTime = in_array($einheit, ['sek', 's', 'min', 'm']);
+                $isGreater = (strtoupper($scoreData['berechnungsart']) === 'GREATER');
+                
+                // Hilfsfunktion für den Vergleich
+                $check = function($val, $target) use ($isGreater) {
+                    if ($target === null) return false;
+                    return $isGreater ? ($val >= $target) : ($val <= $target);
+                };
 
-                if ($isTime) {
-                    // Niedriger ist besser (Sprint, Laufen)
-                    if ($leistung <= $scoreData['gold'] && $scoreData['gold'] > 0) { $points = 3; $medal = 'gold'; }
-                    elseif ($leistung <= $scoreData['silber'] && $scoreData['silber'] > 0) { $points = 2; $medal = 'silver'; }
-                    elseif ($leistung <= $scoreData['bronze'] && $scoreData['bronze'] > 0) { $points = 1; $medal = 'bronze'; }
-                } else {
-                    // Höher ist besser (Weitsprung, Wurf)
-                    if ($leistung >= $scoreData['gold'] && $scoreData['gold'] > 0) { $points = 3; $medal = 'gold'; }
-                    elseif ($leistung >= $scoreData['silber'] && $scoreData['silber'] > 0) { $points = 2; $medal = 'silver'; }
-                    elseif ($leistung >= $scoreData['bronze'] && $scoreData['bronze'] > 0) { $points = 1; $medal = 'bronze'; }
-                }
+                if ($check($leistung, $scoreData['gold'])) { $points = 3; $medal = 'gold'; }
+                elseif ($check($leistung, $scoreData['silber'])) { $points = 2; $medal = 'silver'; }
+                elseif ($check($leistung, $scoreData['bronze'])) { $points = 1; $medal = 'bronze'; }
             }
 
-            // 3. Punkte in DB aktualisieren
+            // 3. Stufe und Points in DB schreiben
             $conn->executeStatement("
                 UPDATE sportabzeichen_exam_results 
-                SET points = ? 
+                SET points = ?, stufe = ? 
                 WHERE ep_id = ? AND discipline_id = ?
-            ", [$points, $epId, $disciplineId]);
+            ", [$points, strtoupper($medal), $epId, $disciplineId]);
 
             return new JsonResponse([
                 'status' => 'ok',
                 'points' => $points,
-                'medal'  => $medal
+                'medal' => $medal
             ]);
 
         } catch (\Throwable $e) {
