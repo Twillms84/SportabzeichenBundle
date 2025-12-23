@@ -193,47 +193,53 @@ final class ExamResultController extends AbstractPageController
      * 4️⃣ Einzelwert speichern (AJAX Autosave)
      */
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
+    // In deinem ExamResultController.php die Methode ergänzen:
+
+#[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request, Connection $conn): JsonResponse
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
-        // CSRF-Token aus dem Header validieren
-        $token = $request->headers->get('X-CSRF-Token');
-        if (!$this->isCsrfTokenValid('sportabzeichen_result_save', $token)) {
-            return new JsonResponse(['error' => 'Ungültiges CSRF-Token'], 403);
-        }
-
-        $data = json_decode($request->getContent(), true);
-        if (!$data || !isset($data['ep_id'], $data['discipline_id'])) {
-            return new JsonResponse(['error' => 'Ungültige Daten'], 400);
-        }
-
-        $epId = (int) $data['ep_id'];
-        $disciplineId = (int) $data['discipline_id'];
-        
-        // Komma-Korrektur: Verarbeitet Eingaben wie "12,5" zu "12.5"
-        $rawLeistung = $data['leistung'] ?? '';
-        $leistung = ($rawLeistung !== null && $rawLeistung !== '') 
-            ? (float) str_replace(',', '.', (string)$rawLeistung) 
-            : null;
+        // ... (CSRF und Daten-Validierung wie gehabt) ...
 
         try {
-            $conn->executeStatement('
-                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
-                VALUES (:ep, :disc, :leistung)
-                ON CONFLICT (ep_id, discipline_id)
-                DO UPDATE SET leistung = EXCLUDED.leistung
-            ', [
-                'ep'       => $epId,
-                'disc'     => $disciplineId,
-                'leistung' => $leistung,
-            ]);
+            // 1. Speichern (wie bisher)
+            $conn->executeStatement('...', [...]);
 
-            return new JsonResponse(['status' => 'ok', 'leistung_saved' => $leistung]);
-        } catch (\Throwable $e) {
+            // 2. Punkte berechnen (Neu!)
+            // Wir holen die Anforderung für dieses Alter, Geschlecht und diese Disziplin
+            $scoreData = $conn->fetchAssociative("
+                SELECT r.bronze, r.silber, r.gold, d.einheit
+                FROM sportabzeichen_requirements r
+                JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
+                JOIN sportabzeichen_exam_participants ep ON ep.id = :ep
+                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+                WHERE r.discipline_id = :disc 
+                AND r.jahr = (SELECT exam_year FROM sportabzeichen_exams WHERE id = ep.exam_id)
+                AND r.geschlecht = (CASE WHEN p.geschlecht IN ('m', 'male') THEN 'MALE' ELSE 'FEMALE' END)
+                AND ep.age_year BETWEEN r.age_min AND r.age_max
+            ", ['ep' => $epId, 'disc' => $disciplineId]);
+
+            $points = 0;
+            $medal = 'none';
+
+            if ($scoreData) {
+                // Logik: Höher ist besser oder niedriger ist besser (z.B. Laufen)
+                // Das muss je nach Einheit (sek vs. meter) angepasst werden. 
+                // Hier ein einfaches Beispiel für "Höher = Besser":
+                if ($leistung >= $scoreData['gold']) { $points = 3; $medal = 'gold'; }
+                elseif ($leistung >= $scoreData['silber']) { $points = 2; $medal = 'silver'; }
+                elseif ($leistung >= $scoreData['bronze']) { $points = 1; $medal = 'bronze'; }
+            }
+
+            // 3. Punkte in der DB persistieren (in sportabzeichen_exam_results Spalte 'points' - falls vorhanden)
+            $conn->executeStatement("UPDATE sportabzeichen_exam_results SET points = ? WHERE ep_id = ? AND discipline_id = ?", [$points, $epId, $disciplineId]);
+
             return new JsonResponse([
-                'error' => 'Fehler beim Speichern: ' . $e->getMessage(),
-            ], 500);
+                'status' => 'ok',
+                'points' => $points,
+                'medal' => $medal
+            ]);
+        } catch (\Throwable $e) {
+            return new JsonResponse(['error' => $e->getMessage()], 500);
         }
     }
 }

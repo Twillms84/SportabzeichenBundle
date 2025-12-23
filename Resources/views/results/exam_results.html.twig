@@ -124,6 +124,6 @@
 
 {% block javascripts %}
     {{ parent() }}
-    {# Hier laden wir die von Webpack generierte Datei mit dem richtigen Package-Namen #}
-    <script type="text/javascript" src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}

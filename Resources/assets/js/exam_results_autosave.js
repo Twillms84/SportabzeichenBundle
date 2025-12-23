@@ -44,6 +44,11 @@
             console.log("[Sportabzeichen] Erfolg: In DB gespeichert.");
             $(el).css('background-color', '#c8e6c9');
             setTimeout(() => $(el).css('background-color', ''), 800);
+            
+            $(document).trigger('autosave:success', {
+            element: el,
+            response: data
+    });
         })
         .catch(err => {
             $(el).css('background-color', '#ffcdd2');
