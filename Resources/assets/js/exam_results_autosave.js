@@ -2,14 +2,20 @@
     console.log("[Sportabzeichen] Skript geladen");
 
     const saveChange = function(el) {
+        // Erst im Moment des Speicherns prüfen wir, ob die Daten da sind
+        if (!window.IServ || !IServ.routes || !IServ.routes.sportabzeichen_exam_result_save) {
+            console.error("[Sportabzeichen] Abbruch: IServ.routes nicht definiert. Bitte Seite neu laden.");
+            $(el).css('background-color', '#ffcdd2');
+            return;
+        }
+
         const epId = el.dataset.epId;
         const type = el.dataset.type;
         const disciplineId = el.dataset.disciplineId || (el.tagName === 'SELECT' ? el.value : null);
         const leistung = el.value;
 
-        if (!epId) return;
+        if (!epId || !disciplineId) return;
 
-        // Visuelles Feedback: Feld gelb markieren während des Speicherns
         $(el).css('background-color', '#fff9c4'); 
 
         const payload = {
@@ -33,13 +39,10 @@
             return res.json();
         })
         .then(data => {
-            // Erfolg: Feld kurz grün, dann normal
             $(el).css('background-color', '#c8e6c9');
             setTimeout(() => $(el).css('background-color', ''), 1000);
-            console.log("[Sportabzeichen] Gespeichert:", epId);
         })
         .catch(err => {
-            // Fehler: Feld rot
             $(el).css('background-color', '#ffcdd2');
             console.error("[Sportabzeichen] Fehler:", err);
         });
@@ -47,16 +50,22 @@
 
     const initAutosave = function(context) {
         const fields = (context || document).querySelectorAll('[data-save]');
-        console.log("[Sportabzeichen] Init für " + fields.length + " Felder");
-
+        
         fields.forEach(el => {
+            // Event für Änderungen (Input & Select)
             $(el).off('change.autosave').on('change.autosave', function() {
+                // Wenn es ein Select ist, aktualisiere das zugehörige Input-Feld
+                if (this.tagName === 'SELECT' && this.dataset.targetInput) {
+                    const target = document.getElementById(this.dataset.targetInput);
+                    if (target) target.dataset.disciplineId = this.value;
+                }
                 saveChange(this);
             });
         });
     };
 
-    $(function() {
+    // Warten bis alles bereit ist
+    $(document).ready(function() {
         if (window.IServ && typeof IServ.setup === 'function') {
             IServ.setup(function(context) {
                 initAutosave(context);
