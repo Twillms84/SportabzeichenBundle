@@ -14,9 +14,6 @@ use Symfony\Component\Routing\Annotation\Route;
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
 final class ExamResultController extends AbstractPageController
 {
-    /**
-     * Klassen aus IServ laden
-     */
     private function loadClasses(Connection $conn): array
     {
         return $conn->fetchAllAssociative("
@@ -27,9 +24,6 @@ final class ExamResultController extends AbstractPageController
         ");
     }
 
-    /**
-     * 1️⃣ Prüfungen auswählen
-     */
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
@@ -46,18 +40,12 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /**
-     * 2️⃣ Ergebnisse eingeben
-     */
     #[Route('/exam/{examId}', name: 'index', methods: ['GET'])]
     public function index(int $examId, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        $exam = $conn->fetchAssociative("
-            SELECT * FROM sportabzeichen_exams WHERE id = ?
-        ", [$examId]);
-
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
         if (!$exam) {
             throw $this->createNotFoundException('Prüfung nicht gefunden.');
         }
@@ -65,38 +53,23 @@ final class ExamResultController extends AbstractPageController
         $selectedClass = $request->query->get('class');
         $classes = $this->loadClasses($conn);
 
+        $sql = "
+            SELECT ep.id AS ep_id, ep.age_year, p.import_id, p.geschlecht,
+                   u.firstname AS vorname, u.lastname AS nachname, u.auxinfo AS klasse
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+            JOIN users u ON u.importid = p.import_id
+            WHERE ep.exam_id = ?
+        ";
+        
+        $params = [$examId];
         if ($selectedClass) {
-            $participants = $conn->fetchAllAssociative("
-                SELECT ep.id AS ep_id,
-                       ep.age_year,
-                       p.import_id,
-                       p.geschlecht,
-                       u.firstname AS vorname,
-                       u.lastname  AS nachname,
-                       u.auxinfo   AS klasse
-                FROM sportabzeichen_exam_participants ep
-                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-                JOIN users u ON u.importid = p.import_id
-                WHERE ep.exam_id = ?
-                  AND u.auxinfo = ?
-                ORDER BY u.lastname, u.firstname
-            ", [$examId, $selectedClass]);
-        } else {
-            $participants = $conn->fetchAllAssociative("
-                SELECT ep.id AS ep_id,
-                       ep.age_year,
-                       p.import_id,
-                       p.geschlecht,
-                       u.firstname AS vorname,
-                       u.lastname  AS nachname,
-                       u.auxinfo   AS klasse
-                FROM sportabzeichen_exam_participants ep
-                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-                JOIN users u ON u.importid = p.import_id
-                WHERE ep.exam_id = ?
-                ORDER BY u.lastname, u.firstname
-            ", [$examId]);
+            $sql .= " AND u.auxinfo = ?";
+            $params[] = $selectedClass;
         }
+        $sql .= " ORDER BY u.lastname, u.firstname";
+
+        $participants = $conn->fetchAllAssociative($sql, $params);
 
         foreach ($participants as &$p) {
             $g = strtolower(trim((string) $p['geschlecht']));
@@ -105,14 +78,7 @@ final class ExamResultController extends AbstractPageController
         unset($p);
 
         $rows = $conn->fetchAllAssociative("
-            SELECT d.id,
-                   d.name,
-                   d.kategorie,
-                   d.einheit,
-                   r.geschlecht,
-                   r.age_min,
-                   r.age_max,
-                   r.auswahlnummer
+            SELECT d.id, d.name, d.kategorie, d.einheit, r.geschlecht, r.age_min, r.age_max, r.auswahlnummer
             FROM sportabzeichen_disciplines d
             JOIN sportabzeichen_requirements r ON r.discipline_id = d.id
             WHERE r.jahr = ?
@@ -125,11 +91,8 @@ final class ExamResultController extends AbstractPageController
         }
 
         $resultsRaw = $conn->fetchAllAssociative("
-            SELECT *
-            FROM sportabzeichen_exam_results
-            WHERE ep_id IN (
-                SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?
-            )
+            SELECT * FROM sportabzeichen_exam_results
+            WHERE ep_id IN (SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?)
         ", [$examId]);
 
         $results = [];
@@ -137,7 +100,6 @@ final class ExamResultController extends AbstractPageController
             $results[$r['ep_id']][$r['discipline_id']] = $r;
         }
 
-        $nonce = $request->attributes->get('csp_nonce');
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
             'exam'          => $exam,
             'participants'  => $participants,
@@ -145,67 +107,67 @@ final class ExamResultController extends AbstractPageController
             'results'       => $results,
             'classes'       => $classes,
             'selectedClass' => $selectedClass,
-            'nonce'         => $nonce,
+            'nonce'         => $request->attributes->get('csp_nonce'),
         ]);
     }
 
-    /**
-     * 3️⃣ Alle Ergebnisse speichern (Submit-Button Fallback)
-     */
     #[Route('/exam/{examId}/save-all', name: 'save_all', methods: ['POST'])]
     public function saveAll(int $examId, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
         $formData = $request->request->all('results');
 
         foreach ($formData as $epId => $categories) {
             foreach ($categories as $data) {
                 $disciplineId = $data['discipline'] ?? null;
-                if (!$disciplineId) {
-                    continue;
-                }
+                if (!$disciplineId) continue;
 
                 $rawLeistung = $data['leistung'] ?? '';
                 $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
                 $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_results
-                        (ep_id, discipline_id, leistung)
+                    INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
                     VALUES (:ep, :disc, :leistung)
                     ON CONFLICT (ep_id, discipline_id)
                     DO UPDATE SET leistung = EXCLUDED.leistung
-                ", [
-                    'ep'       => (int)$epId,
-                    'disc'     => (int)$disciplineId,
-                    'leistung' => $leistung,
-                ]);
+                ", ['ep' => (int)$epId, 'disc' => (int)$disciplineId, 'leistung' => $leistung]);
             }
         }
 
         $this->addFlash('success', 'Alle Ergebnisse gespeichert.');
-        return $this->redirectToRoute('sportabzeichen_results_index', [
-            'examId' => $examId
-        ]);
+        return $this->redirectToRoute('sportabzeichen_results_index', ['examId' => $examId]);
     }
 
     /**
-     * 4️⃣ Einzelwert speichern (AJAX Autosave)
+     * AJAX Autosave mit Scoring
      */
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
-    // In deinem ExamResultController.php die Methode ergänzen:
-
-#[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request, Connection $conn): JsonResponse
     {
-        // ... (CSRF und Daten-Validierung wie gehabt) ...
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        $data = json_decode($request->getContent(), true);
+        $epId = $data['ep_id'] ?? null;
+        $disciplineId = $data['discipline_id'] ?? null;
+        $rawLeistung = $data['leistung'] ?? '';
+
+        if (!$epId || !$disciplineId) {
+            return new JsonResponse(['error' => 'Ungültige Daten'], 400);
+        }
+
+        // Token-Prüfung (Optional, falls im JS implementiert)
+        $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
         try {
-            // 1. Speichern (wie bisher)
-            $conn->executeStatement('...', [...]);
+            // 1. Speichern
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
+                VALUES (:ep, :disc, :leistung)
+                ON CONFLICT (ep_id, discipline_id)
+                DO UPDATE SET leistung = EXCLUDED.leistung
+            ", ['ep' => $epId, 'disc' => $disciplineId, 'leistung' => $leistung]);
 
-            // 2. Punkte berechnen (Neu!)
-            // Wir holen die Anforderung für dieses Alter, Geschlecht und diese Disziplin
+            // 2. Scoring berechnen
             $scoreData = $conn->fetchAssociative("
                 SELECT r.bronze, r.silber, r.gold, d.einheit
                 FROM sportabzeichen_requirements r
@@ -213,31 +175,44 @@ final class ExamResultController extends AbstractPageController
                 JOIN sportabzeichen_exam_participants ep ON ep.id = :ep
                 JOIN sportabzeichen_participants p ON p.id = ep.participant_id
                 WHERE r.discipline_id = :disc 
-                AND r.jahr = (SELECT exam_year FROM sportabzeichen_exams WHERE id = ep.exam_id)
-                AND r.geschlecht = (CASE WHEN p.geschlecht IN ('m', 'male') THEN 'MALE' ELSE 'FEMALE' END)
-                AND ep.age_year BETWEEN r.age_min AND r.age_max
+                  AND r.jahr = (SELECT exam_year FROM sportabzeichen_exams WHERE id = ep.exam_id)
+                  AND r.geschlecht = (CASE WHEN p.geschlecht IN ('m', 'male') THEN 'MALE' ELSE 'FEMALE' END)
+                  AND ep.age_year BETWEEN r.age_min AND r.age_max
             ", ['ep' => $epId, 'disc' => $disciplineId]);
 
             $points = 0;
             $medal = 'none';
 
-            if ($scoreData) {
-                // Logik: Höher ist besser oder niedriger ist besser (z.B. Laufen)
-                // Das muss je nach Einheit (sek vs. meter) angepasst werden. 
-                // Hier ein einfaches Beispiel für "Höher = Besser":
-                if ($leistung >= $scoreData['gold']) { $points = 3; $medal = 'gold'; }
-                elseif ($leistung >= $scoreData['silber']) { $points = 2; $medal = 'silver'; }
-                elseif ($leistung >= $scoreData['bronze']) { $points = 1; $medal = 'bronze'; }
+            if ($scoreData && $leistung !== null) {
+                $einheit = strtolower($scoreData['einheit']);
+                $isTime = in_array($einheit, ['sek', 's', 'min', 'm']);
+
+                if ($isTime) {
+                    // Niedriger ist besser (Sprint, Laufen)
+                    if ($leistung <= $scoreData['gold'] && $scoreData['gold'] > 0) { $points = 3; $medal = 'gold'; }
+                    elseif ($leistung <= $scoreData['silber'] && $scoreData['silber'] > 0) { $points = 2; $medal = 'silver'; }
+                    elseif ($leistung <= $scoreData['bronze'] && $scoreData['bronze'] > 0) { $points = 1; $medal = 'bronze'; }
+                } else {
+                    // Höher ist besser (Weitsprung, Wurf)
+                    if ($leistung >= $scoreData['gold'] && $scoreData['gold'] > 0) { $points = 3; $medal = 'gold'; }
+                    elseif ($leistung >= $scoreData['silber'] && $scoreData['silber'] > 0) { $points = 2; $medal = 'silver'; }
+                    elseif ($leistung >= $scoreData['bronze'] && $scoreData['bronze'] > 0) { $points = 1; $medal = 'bronze'; }
+                }
             }
 
-            // 3. Punkte in der DB persistieren (in sportabzeichen_exam_results Spalte 'points' - falls vorhanden)
-            $conn->executeStatement("UPDATE sportabzeichen_exam_results SET points = ? WHERE ep_id = ? AND discipline_id = ?", [$points, $epId, $disciplineId]);
+            // 3. Punkte in DB aktualisieren
+            $conn->executeStatement("
+                UPDATE sportabzeichen_exam_results 
+                SET points = ? 
+                WHERE ep_id = ? AND discipline_id = ?
+            ", [$points, $epId, $disciplineId]);
 
             return new JsonResponse([
                 'status' => 'ok',
                 'points' => $points,
-                'medal' => $medal
+                'medal'  => $medal
             ]);
+
         } catch (\Throwable $e) {
             return new JsonResponse(['error' => $e->getMessage()], 500);
         }
