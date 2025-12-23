@@ -6,8 +6,8 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    {# Lädt das generierte CSS für die Medaillenfarben #}
-    {{ iserv_bundle_css('PulsRSportabzeichen', 'css/sportabzeichen_results') }}
+    {# Nutze asset() mit dem Pfad aus dem Webpack-Manifest #}
+    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
 {% block content %}
@@ -132,20 +132,13 @@
             {% endfor %}
             </tbody>
         </table>
-
-        <div class="text-end mt-3">
-            <button type="submit" class="btn btn-success btn-lg">
-                💾 Alle Ergebnisse speichern
-            </button>
-        </div>
     </form>
 </div>
 {% endblock %}
 
 {% block javascripts %}
     {{ parent() }}
-    {# Lädt das Autosave-Skript (Senden der Daten) #}
-    {{ iserv_bundle_js('PulsRSportabzeichen', 'js/exam_results_autosave') }}
-    {# Lädt das Scoring-Skript (Farben umschalten basierend auf Server-Antwort) #}
-    {{ iserv_bundle_js('PulsRSportabzeichen', 'js/exam_results_scoring') }}
+    {# Nutze asset() für beide JS-Dateien #}
+    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
