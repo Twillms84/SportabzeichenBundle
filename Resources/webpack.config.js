@@ -1,21 +1,43 @@
-let merge = require('webpack-merge');
-let path = require('path');
+const path = require('path');
+const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
-// Wir suchen die IServ-Basis-Config dort, wo sie auf dem Server wirklich liegt
-const baseConfigPath = '/usr/share/iserv/web/vendor/iserv/core-bundle/Resources/webpack/webpack.config.base.js';
-let baseConfig = require(baseConfigPath);
-
-let webpackConfig = {
-    // Hier listest du alle deine Dateien auf
+module.exports = {
+    mode: 'production',
+    // Hier gibst du deine Quelldatei an
     entry: {
-        'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
-        // 'js/andere_datei': './assets/js/andere_datei.js', 
+        'js/exam_results_autosave': './assets/js/exam_results_autosave.js'
     },
     output: {
-        // WICHTIG für Drittanbieter: Direkt in den IServ-Asset-Ordner
+        // Ziel: Der offizielle IServ-Asset-Ordner für dein Modul
         path: path.resolve('/usr/share/iserv/web/public/assets/pulsr-sportabzeichen'),
-        publicPath: '/assets/pulsr-sportabzeichen/'
+        // Die URL, unter der die Dateien erreichbar sind
+        publicPath: '/assets/pulsr-sportabzeichen/',
+        filename: '[name].[contenthash:8].js',
+        clean: true
+    },
+    plugins: [
+        new WebpackManifestPlugin({
+            fileName: 'manifest.json'
+        }),
+        new MiniCssExtractPlugin({
+            filename: '[name].[contenthash:8].css'
+        })
+    ],
+    module: {
+        rules: [
+            {
+                test: /\.js$/,
+                exclude: /node_modules/,
+                use: {
+                    loader: 'babel-loader',
+                    options: { presets: ['@babel/preset-env'] }
+                }
+            },
+            {
+                test: /\.css$/,
+                use: [MiniCssExtractPlugin.loader, 'css-loader']
+            }
+        ]
     }
 };
-
-module.exports = merge(baseConfig.get(__dirname), webpackConfig);
