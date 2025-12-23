@@ -9,36 +9,36 @@
 
     <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
 
-    {# Klassenfilter ------------------------------------------------ #}
+    {# 1. Routen und Tokens für JS bereitstellen #}
+    <script nonce="{{ nonce }}">
+        window.IServ = window.IServ || {};
+        window.IServ.routes = window.IServ.routes || {};
+        window.IServ.csrfToken = window.IServ.csrfToken || {};
+        
+        window.IServ.routes.sportabzeichen_exam_result_save = "{{ path('sportabzeichen_results_exam_result_save') }}";
+        window.IServ.csrfToken.sportabzeichen_result_save = "{{ csrf_token('sportabzeichen_result_save') }}";
+    </script>
+
+    {# Klassenfilter #}
     <form method="get" class="mb-3 d-flex align-items-center gap-2">
         <label class="fw-bold mb-0 me-2">Klasse:</label>
-
         <select name="class" class="form-select w-auto d-inline">
             <option value="">(Alle Klassen)</option>
             {% for c in classes %}
-                <option value="{{ c.klasse }}"
-                    {% if selectedClass == c.klasse %}selected{% endif %}
-                >
+                <option value="{{ c.klasse }}" {% if selectedClass == c.klasse %}selected{% endif %}>
                     {{ c.klasse }}
                 </option>
             {% endfor %}
         </select>
-
         <button type="submit" class="btn btn-primary">Filtern</button>
     </form>
 
-
-    {# Ergebnistabelle und Speichern -------------------------------- #}
-    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}"
-          method="post">
-
+    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" method="post">
         <table class="table table-bordered align-middle mt-3">
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Alter</th>
-
-                    {# Nur Kategorien anzeigen, die nicht "SWIMMING" sind #}
                     {% for category, items in disciplines %}
                         {% if category|upper != 'SWIMMING' %}
                             <th>{{ category }}</th>
@@ -50,7 +50,6 @@
             <tbody>
             {% for p in participants %}
                 {% set epResults = results[p.ep_id] ?? {} %}
-
                 <tr>
                     <td>{{ p.vorname }} {{ p.nachname }}</td>
                     <td>{{ p.age_year }}</td>
@@ -65,6 +64,7 @@
                                 {% endif %}
                             {% endfor %}
 
+                            {# Logik zur Vorselektion der Disziplin #}
                             {% set selectedDiscId = null %}
                             {% for d in options %}
                                 {% if epResults[d.id] is defined %}
@@ -72,42 +72,49 @@
                                 {% endif %}
                             {% endfor %}
 
+                            {# Standardmäßig erste Disziplin wählen, wenn noch nichts gespeichert ist #}
+                            {% if selectedDiscId is null and options|length > 0 %}
+                                {% set selectedDiscId = options[0].id %}
+                            {% endif %}
+
                             {% set selectedValue = '' %}
                             {% if selectedDiscId and epResults[selectedDiscId] is defined %}
                                 {% set selectedValue = epResults[selectedDiscId].leistung %}
                             {% endif %}
 
                             <td>
-                                {# Disziplin-Dropdown #}
+                                {# Disziplin-Dropdown: ID-Zuweisung hilft dem JS beim Abgleichen #}
                                 <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
-                                        class="form-select"
+                                        id="disc-select-{{ p.ep_id }}-{{ loop.index }}"
+                                        class="form-select discipline-selector"
                                         data-save
                                         data-ep-id="{{ p.ep_id }}"
                                         data-type="discipline"
-                                        data-category="{{ category }}">
+                                        data-target-input="leistung-input-{{ p.ep_id }}-{{ loop.index }}">
                                     <option value="">(keine Auswahl)</option>
                                     {% for d in options %}
-                                        {% set preselect = (selectedDiscId == d.id) or (selectedDiscId is null and d.auswahlnummer == 1) %}
-                                        <option value="{{ d.id }}" {% if preselect %}selected{% endif %}>{{ d.name }}</option>
+                                        <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %}>
+                                            {{ d.name }}
+                                        </option>
                                     {% endfor %}
                                 </select>
 
-                                {# Leistungsfeld (automatisch speichern) #}
-                                <input type="number"
+                                {# Leistungsfeld #}
+                                <input type="text" 
+                                    id="leistung-input-{{ p.ep_id }}-{{ loop.index }}"
                                     name="results[{{ p.ep_id }}][{{ category }}][leistung]"
-                                    step="0.01"
                                     class="form-control mt-1"
+                                    placeholder="Wert"
                                     value="{{ selectedValue }}"
                                     data-save
                                     data-ep-id="{{ p.ep_id }}"
-                                    data-discipline-id="{{ selectedDiscId ?? '' }}"
+                                    data-discipline-id="{{ selectedDiscId }}"
                                     data-type="leistung">
                             </td>
 
                         {% endif %}
                     {% endfor %}
                 </tr>
-
             {% endfor %}
             </tbody>
         </table>
@@ -123,6 +130,6 @@
 
 {% block javascripts %}
     {{ parent() }}
+    {# Hier laden wir die von Webpack generierte Datei mit dem richtigen Package-Namen #}
     <script type="text/javascript" src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
-
