@@ -1,33 +1,40 @@
-(function($) {
-    console.log("[Scoring] Scoring-Modul aktiv.");
+// exam_results_scoring.js
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("Scoring Script geladen...");
 
-    $(document).on('autosave:success', function(e, data) {
-        // Das betroffene Element (input oder select)
-        const $el = $(data.element);
-        
-        // Die vom Server berechnete Medaille (gold, silver, bronze, none)
-        const medal = data.response.medal; 
+    const form = document.getElementById('autosave-form');
+    if (!form) return;
 
-        console.log(`[Scoring] Ergebnis empfangen: ${medal} für Feld`, data.element);
+    form.addEventListener('change', function(event) {
+        const target = event.target;
+        if (!target.hasAttribute('data-save')) return;
 
-        // 1. Alle alten Medaillen-Klassen entfernen, damit sie sich nicht überlagern
-        $el.removeClass('medal-gold medal-silver medal-bronze medal-none');
+        console.log("Änderung erkannt an:", target.id, "Wert:", target.value);
 
-        // 2. Die neue Klasse basierend auf der Server-Antwort setzen
-        if (medal && medal !== 'none') {
-            $el.addClass(`medal-${medal}`);
-        } else {
-            // Falls keine Medaille erreicht wurde oder das Feld geleert wurde
-            $el.addClass('medal-none');
-        }
+        // Hier rufen wir deine Speicher-Funktion auf (die in exam_results_autosave.js liegen sollte)
+        // WICHTIG: Nach dem erfolgreichen AJAX-Request muss die Farbe aktualisiert werden.
+    });
+});
 
-        // 3. Optional: Falls du das Dropdown ebenfalls färben willst, 
-        // wenn das Input-Feld sich ändert:
-        if ($el.data('type') === 'leistung') {
-            // Finde das zugehörige Dropdown in der gleichen Tabellenzelle
-            const $dropdown = $el.closest('td').find('select.discipline-selector');
-            $dropdown.removeClass('medal-gold medal-silver medal-bronze medal-none');
-            $dropdown.addClass(`medal-${medal || 'none'}`);
+// Diese Funktion sollte am Ende deines AJAX-Success Callbacks aufgerufen werden
+function updateMedalUI(epId, discId, medal, points, inputId) {
+    console.log(`Update UI: EP=${epId}, Disc=${discId}, Medal=${medal}, Pts=${points}`);
+
+    // Finde das Input-Feld und das dazugehörige Select-Feld
+    const inputField = document.getElementById(inputId);
+    // Das Select-Feld hat in deinem Twig eine ID, die wir finden müssen (z.B. über die Zelle)
+    const cell = inputField.closest('td');
+    const selectField = cell.querySelector('select');
+
+    // 1. Alle alten Medaillen-Klassen entfernen
+    const classesToRemove = ['medal-gold', 'medal-silver', 'medal-bronze', 'medal-none'];
+    [inputField, selectField].forEach(el => {
+        if (el) {
+            el.classList.remove(...classesToRemove);
+            // 2. Neue Klasse hinzufügen
+            const newClass = 'medal-' + medal.toLowerCase();
+            el.classList.add(newClass);
+            console.log(`Klasse ${newClass} an ${el.tagName} gesetzt.`);
         }
     });
-})(jQuery);
+}
