@@ -11,7 +11,6 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
-
     <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
 
     {# 1. Filter-Sektion #}
@@ -70,7 +69,7 @@
                         {% for category, items in disciplines %}
                             {% if category|upper != 'SWIMMING' %}
 
-                                {# 1. Passende Disziplinen für diesen Teilnehmer vorfiltern #}
+                                {# 1. Passende Disziplinen vorfiltern #}
                                 {% set options = [] %}
                                 {% for d in items %}
                                     {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -78,7 +77,7 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# 2. Ermitteln, welche Disziplin aktuell gespeichert ist #}
+                                {# 2. Aktuell gespeicherte Disziplin finden #}
                                 {% set selectedDiscId = null %}
                                 {% for d in options %}
                                     {% if epResults[d.id] is defined %}
@@ -86,7 +85,7 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Fallback: Erste Option wählen, wenn nichts gespeichert ist #}
+                                {# Fallback auf erste Option #}
                                 {% if selectedDiscId is null and options|length > 0 %}
                                     {% set selectedDiscId = options[0].id %}
                                 {% endif %}
@@ -98,23 +97,26 @@
                                 {% if selectedDiscId and epResults[selectedDiscId] is defined %}
                                     {% set resObj = epResults[selectedDiscId] %}
                                     {% set selectedValue = resObj.leistung %}
+                                    {% set p_points = resObj.points ?? 0 %}
                                     
-                                    {# Punkte aus DB (jetzt via Trigger berechnet) #}
-                                    {% set points = resObj.points ?? 0 %}
-                                    {% if points == 3 %}{% set medalClass = 'medal-gold' %}
-                                    {% elseif points == 2 %}{% set medalClass = 'medal-silver' %}
-                                    {% elseif points == 1 %}{% set medalClass = 'medal-bronze' %}
+                                    {% if p_points == 3 %}{% set medalClass = 'medal-gold' %}
+                                    {% elseif p_points == 2 %}{% set medalClass = 'medal-silver' %}
+                                    {% elseif p_points == 1 %}{% set medalClass = 'medal-bronze' %}
                                     {% endif %}
                                 {% endif %}
 
+                                {# Eindeutige IDs für die Verknüpfung #}
+                                {% set selectId = "select-" ~ p.ep_id ~ "-" ~ loop.index %}
+                                {% set inputId = "input-" ~ p.ep_id ~ "-" ~ loop.index %}
+
                                 <td class="p-2 text-center" style="min-width: 150px;">
-                                    {# Dropdown für Disziplinwahl #}
-                                    <select name="results[{{ p.ep_id }}][{{ category }}][discipline]"
+                                    <select id="{{ selectId }}"
+                                            name="results[{{ p.ep_id }}][{{ category }}][discipline]"
                                             class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}"
                                             data-save
                                             data-ep-id="{{ p.ep_id }}"
                                             data-type="discipline"
-                                            data-target-input="input-{{ p.ep_id }}-{{ loop.parent.loop.index }}-{{ loop.index }}">
+                                            data-target-input="{{ inputId }}">
                                         <option value="">(keine)</option>
                                         {% for d in options %}
                                             <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %}>
@@ -123,19 +125,17 @@
                                         {% endfor %}
                                     </select>
 
-                                    {# Eingabefeld für Leistung #}
                                     <input type="text" 
-                                           id="input-{{ p.ep_id }}-{{ loop.parent.loop.index }}-{{ loop.index }}"
+                                           id="{{ inputId }}"
                                            name="results[{{ p.ep_id }}][{{ category }}][leistung]"
                                            class="form-control form-control-sm text-center fw-bold {{ medalClass }}"
                                            placeholder="---"
                                            value="{{ selectedValue }}"
                                            data-save
                                            data-ep-id="{{ p.ep_id }}"
-                                           data-discipline-id="{{ selectedDiscId }}"
-                                           data-type="leistung">
+                                           data-type="leistung"
+                                           data-discipline-select="{{ selectId }}">
                                 </td>
-
                             {% endif %}
                         {% endfor %}
                     </tr>
@@ -145,10 +145,4 @@
         </div>
     </form>
 </div>
-{% endblock %}
-
-{% block javascripts %}
-    {{ parent() }}
-    <script type="text/javascript" src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
-    <script type="text/javascript" src="{{ asset('js/exam_results_scoring.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
