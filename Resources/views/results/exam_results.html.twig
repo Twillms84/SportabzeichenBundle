@@ -9,8 +9,14 @@
     <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
     <style>
         .req-hint { font-size: 0.75rem; color: #666; display: block; margin-top: 2px; }
-        .total-points-badge { font-size: 0.85rem; }
-        .col-discipline { min-width: 150px; }
+        .total-points-badge { font-size: 0.85rem; font-weight: bold; }
+        .col-discipline { min-width: 160px; }
+        
+        /* Medaillen-Farben für die Felder */
+        .medal-gold { background-color: #fff9db !important; border-color: #ffd700 !important; color: #856404 !important; }
+        .medal-silber { background-color: #f8f9fa !important; border-color: #c0c0c0 !important; color: #383d41 !important; }
+        .medal-bronze { background-color: #fff4e6 !important; border-color: #cd7f32 !important; color: #78341a !important; }
+        .medal-none { background-color: #ffffff !important; }
     </style>
 {% endblock %}
 
@@ -66,7 +72,7 @@
                 {% for p in participants %}
                     {% set epResults = results[p.ep_id] ?? {} %}
                     
-                    {# Berechnung der Gesamtpunkte für diesen Teilnehmer #}
+                    {# Berechnung der Gesamtpunkte beim Laden der Seite #}
                     {% set totalPoints = 0 %}
                     {% for res in epResults %}
                         {% set totalPoints = totalPoints + (res.points|default(0)) %}
@@ -75,7 +81,9 @@
                     <tr>
                         <td class="fw-bold">
                             {{ p.vorname }} {{ p.nachname }} 
-                            <span class="badge bg-info text-dark total-points-badge ms-2" title="Gesamtpunkte">
+                            <span class="badge bg-info text-dark total-points-badge ms-2" 
+                                  id="total-points-{{ p.ep_id }}" 
+                                  title="Gesamtpunkte">
                                 {{ totalPoints }} Pkt.
                             </span>
                             <br><small class="text-muted">{{ p.klasse }}</small>
@@ -84,7 +92,7 @@
 
                         {% for category, items in disciplines %}
                             {% if category|upper != 'SWIMMING' %}
-                                {# Filtern der Disziplinen nach Geschlecht und Alter #}
+                                {# Disziplinen filtern #}
                                 {% set options = [] %}
                                 {% for d in items %}
                                     {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -92,7 +100,7 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Ermittlung der aktuell gewählten Disziplin in dieser Kategorie #}
+                                {# Gewählte Disziplin finden #}
                                 {% set selectedDiscId = null %}
                                 {% for d in options %}
                                     {% if epResults[d.id] is defined %}
@@ -104,8 +112,9 @@
                                     {% set selectedDiscId = options[0].id %}
                                 {% endif %}
 
-                                {# Daten für das aktuelle Ergebnis holen #}
+                                {# Ergebnis-Daten vorbereiten #}
                                 {% set selectedValue = '' %}
+                                {% set selectedPoints = 0 %}
                                 {% set medalClass = 'medal-none' %}
                                 {% set currentReq = null %}
                                 
@@ -118,6 +127,7 @@
                                 {% if selectedDiscId and epResults[selectedDiscId] is defined %}
                                     {% set resObj = epResults[selectedDiscId] %}
                                     {% set selectedValue = resObj.leistung %}
+                                    {% set selectedPoints = resObj.points|default(0) %}
                                     {% set medalClass = 'medal-' ~ (resObj.stufe|default('none')|lower) %}
                                 {% endif %}
 
@@ -149,11 +159,12 @@
                                            data-save
                                            data-ep-id="{{ p.ep_id }}"
                                            data-type="leistung"
-                                           data-discipline-select="{{ selectId }}">
+                                           data-discipline-select="{{ selectId }}"
+                                           data-current-points="{{ selectedPoints }}">
 
-                                    {# Anzeige der benötigten Werte für Bronze, Silber, Gold #}
+                                    {# Anzeige der Anforderungen #}
                                     {% if currentReq %}
-                                        <div class="req-hint mt-1">
+                                        <div class="req-hint mt-1 d-flex justify-content-center gap-1">
                                             <span class="badge border text-dark" style="background-color: #cd7f32; color: white !important;" title="Bronze">{{ currentReq.bronze }}</span>
                                             <span class="badge border text-dark" style="background-color: #c0c0c0;" title="Silber">{{ currentReq.silber }}</span>
                                             <span class="badge border text-dark" style="background-color: #ffd700;" title="Gold">{{ currentReq.gold }}</span>
