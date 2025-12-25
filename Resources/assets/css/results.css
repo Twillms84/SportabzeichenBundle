@@ -1,8 +1,28 @@
-.col-name { min-width: 180px; }
-.col-age { width: 50px; }
-.col-discipline { min-width: 150px; }
+/* In deinem <style> Block im Twig-Template */
 
-.medal-gold { background-color: #ffd700 !important; color: #000 !important; }
-.medal-silver { background-color: #c0c0c0 !important; color: #000 !important; }
-.medal-bronze { background-color: #cd7f32 !important; color: #fff !important; }
-.medal-none { background-color: #ffffff !important; color: #000 !important; }
+/* Standard IServ/Bootstrap Optik beibehalten */
+.discipline-selector, .form-control {
+    background-color: inherit; /* Nutzt den Standard-Hintergrund von IServ */
+}
+
+/* Nur bei Erfolg überschreiben */
+.medal-gold { 
+    background-color: #ffd700 !important; 
+    color: #000 !important; 
+    border-color: #b8860b !important;
+}
+.medal-silber { 
+    background-color: #c0c0c0 !important; 
+    color: #000 !important; 
+    border-color: #808080 !important;
+}
+.medal-bronze { 
+    background-color: #cd7f32 !important; 
+    color: #fff !important; 
+    border-color: #8b4513 !important;
+}
+
+/* Wenn nichts erreicht wurde, keine spezielle Farbe */
+.medal-none { 
+    background-color: transparent !important; 
+}
