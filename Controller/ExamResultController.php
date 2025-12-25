@@ -25,64 +25,90 @@ final class ExamResultController extends AbstractPageController
     }
 
     /**
-     * Zentrale Berechnungslogik für Punkte und Stufe
-     */
-    private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
-    {
-        if ($leistung === null || $leistung <= 0) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
-
-        // Basisdaten des Teilnehmers und der Prüfung holen
-        $data = $conn->fetchAssociative("
-            SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart
-            FROM sportabzeichen_exam_participants ep
-            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-            JOIN sportabzeichen_disciplines d ON d.id = ?
-            WHERE ep.id = ?
-        ", [$disciplineId, $epId]);
-
-        if (!$data) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
-
-        // Geschlecht normalisieren für Requirements-Tabelle (MALE/FEMALE)
-        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
-        
-        // Passende Anforderung suchen
-        $req = $conn->fetchAssociative("
-            SELECT gold, silber, bronze 
-            FROM sportabzeichen_requirements 
-            WHERE discipline_id = ? 
-              AND jahr = ? 
-              AND geschlecht = ? 
-              AND ? BETWEEN age_min AND age_max
-            LIMIT 1
-        ", [$disciplineId, $data['exam_year'], $gender, $data['age_year']]);
-
-        if (!$req) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
-
-        $points = 0;
-        $stufe = 'NONE';
-        $calcType = strtoupper((string)$data['berechnungsart']);
-
-        if ($calcType === 'SMALLER') {
-            // Zeit-Logik (weniger ist besser)
-            if ($leistung <= (float)$req['gold'] && (float)$req['gold'] > 0) { $points = 3; $stufe = 'GOLD'; }
-            elseif ($leistung <= (float)$req['silber'] && (float)$req['silber'] > 0) { $points = 2; $stufe = 'SILBER'; }
-            elseif ($leistung <= (float)$req['bronze'] && (float)$req['bronze'] > 0) { $points = 1; $stufe = 'BRONZE'; }
-        } else {
-            // Weiten/Ausdauer-Logik (mehr ist besser)
-            if ($leistung >= (float)$req['gold']) { $points = 3; $stufe = 'GOLD'; }
-            elseif ($leistung >= (float)$req['silber']) { $points = 2; $stufe = 'SILBER'; }
-            elseif ($leistung >= (float)$req['bronze']) { $points = 1; $stufe = 'BRONZE'; }
-        }
-
-        return ['points' => $points, 'stufe' => $stufe];
+ * Zentrale Berechnungslogik für Punkte und Stufe
+ */
+private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
+{
+    if ($leistung === null || $leistung <= 0) {
+        return ['points' => 0, 'stufe' => 'NONE'];
     }
+
+    // Basisdaten des Teilnehmers und der Prüfung holen
+    $data = $conn->fetchAssociative("
+        SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart
+        FROM sportabzeichen_exam_participants ep
+        JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+        JOIN sportabzeichen_disciplines d ON d.id = ?
+        WHERE ep.id = ?
+    ", [$disciplineId, $epId]);
+
+    if (!$data) {
+        return ['points' => 0, 'stufe' => 'NONE'];
+    }
+
+    // Geschlecht normalisieren für Requirements-Tabelle (MALE/FEMALE)
+    $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
+    
+    // Passende Anforderung suchen
+    $req = $conn->fetchAssociative("
+        SELECT gold, silber, bronze 
+        FROM sportabzeichen_requirements 
+        WHERE discipline_id = ? 
+          AND jahr = ? 
+          AND geschlecht = ? 
+          AND ? BETWEEN age_min AND age_max
+        LIMIT 1
+    ", [$disciplineId, (int)$data['exam_year'], $gender, (int)$data['age_year']]);
+
+    if (!$req) {
+        return ['points' => 0, 'stufe' => 'NONE'];
+    }
+
+    $points = 0;
+    $stufe = 'NONE';
+    $calcType = strtoupper((string)$data['berechnungsart']);
+
+    // Werte in ein Array laden, um sie sortieren zu können
+    $levels = [
+        (float)$req['gold'],
+        (float)$req['silber'],
+        (float)$req['bronze']
+    ];
+    // Nullen entfernen, falls Anforderungen unvollständig sind
+    $levels = array_filter($levels, fn($v) => $v > 0);
+
+    if (empty($levels)) {
+        return ['points' => 0, 'stufe' => 'NONE'];
+    }
+
+    if ($calcType === 'SMALLER') {
+        // ZEIT-LOGIK: Der kleinste Wert ist der beste (Gold)
+        sort($levels); // Aufsteigend sortieren: [10, 12, 15] -> Gold ist 10
+        
+        $goldVal   = $levels[0] ?? 0;
+        $silberVal = $levels[1] ?? 0;
+        $bronzeVal = $levels[2] ?? 0;
+
+        if ($leistung <= $goldVal && $goldVal > 0) { $points = 3; $stufe = 'GOLD'; }
+        elseif ($leistung <= $silberVal && $silberVal > 0) { $points = 2; $stufe = 'SILBER'; }
+        elseif ($leistung <= $bronzeVal && $bronzeVal > 0) { $points = 1; $stufe = 'BRONZE'; }
+        
+    } else {
+        // WEITEN/AUSDAUER-LOGIK: Der größte Wert ist der beste (Gold)
+        rsort($levels); // Absteigend sortieren: [50, 40, 30] -> Gold ist 50
+        
+        $goldVal   = $levels[0] ?? 0;
+        $silberVal = $levels[1] ?? 0;
+        $bronzeVal = $levels[2] ?? 0;
+
+        if ($leistung >= $goldVal && $goldVal > 0) { $points = 3; $stufe = 'GOLD'; }
+        elseif ($leistung >= $silberVal && $silberVal > 0) { $points = 2; $stufe = 'SILBER'; }
+        elseif ($leistung >= $bronzeVal && $bronzeVal > 0) { $points = 1; $stufe = 'BRONZE'; }
+    }
+
+    return ['points' => $points, 'stufe' => $stufe];
+}
 
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
