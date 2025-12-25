@@ -1,11 +1,7 @@
-/* In sportabzeichen_results.css */
+.col-name { min-width: 180px; }
+.col-age { width: 50px; }
+.col-discipline { min-width: 150px; }
 
-/* Breite über Klassen statt Inline-Styles */
-.col-name { min-width: 180px !important; }
-.col-age { width: 50px !important; }
-.col-discipline { min-width: 150px !important; }
-
-/* Medaillen-Farben (hast du schon, aber sicherheitshalber mit !important) */
 .medal-gold { background-color: #ffd700 !important; color: #000 !important; }
 .medal-silver { background-color: #c0c0c0 !important; color: #000 !important; }
 .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; }

@@ -13,7 +13,6 @@
 <div class="container-fluid mt-4">
     <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
 
-    {# 1. Filter-Sektion #}
     <div class="card mb-4">
         <div class="card-body">
             <form method="get" class="row g-3 align-items-center">
@@ -38,7 +37,6 @@
         </div>
     </div>
 
-    {# 2. Datentabelle #}
     <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
           method="post"
           id="autosave-form"
@@ -92,7 +90,6 @@
                                 {% if selectedDiscId and epResults[selectedDiscId] is defined %}
                                     {% set resObj = epResults[selectedDiscId] %}
                                     {% set selectedValue = resObj.leistung %}
-                                    {# Nutze die Stufe direkt für die Klasse #}
                                     {% set medalClass = 'medal-' ~ (resObj.stufe|default('none')|lower) %}
                                 {% endif %}
 

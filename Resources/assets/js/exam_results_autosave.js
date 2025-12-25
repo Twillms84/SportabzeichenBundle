@@ -28,7 +28,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const disciplineId = selectEl.value;
         const leistung = inputEl.value;
 
-        if (!disciplineId) return;
+        // Falls Disziplin leer, nur UI zurücksetzen
+        if (!disciplineId) {
+            updateMedalUI(cell, 'none');
+            return;
+        }
 
         console.log(`[Autosave] Sende EP=${epId}, Disc=${disciplineId}, Wert=${leistung}`);
 
@@ -47,12 +51,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
 
+            if (!response.ok) {
+                throw new Error('Netzwerk-Antwort war nicht OK');
+            }
+
             const data = await response.json();
             console.log("[Server Response]", data);
 
             if (data.status === 'ok') {
                 updateMedalUI(cell, data.medal);
-                // Optional: Falls du die Punkte irgendwo im UI anzeigen willst (data.points)
+            } else {
+                console.error("Server-Fehler:", data.error);
             }
         } catch (e) {
             console.error("[Error]", e);

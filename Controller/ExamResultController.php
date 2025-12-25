@@ -14,9 +14,6 @@ use Symfony\Component\Routing\Annotation\Route;
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
 final class ExamResultController extends AbstractPageController
 {
-    /**
-     * Lädt alle verfügbaren Klassen für das Filter-Dropdown
-     */
     private function loadClasses(Connection $conn): array
     {
         return $conn->fetchAllAssociative("
@@ -27,9 +24,6 @@ final class ExamResultController extends AbstractPageController
         ");
     }
 
-    /**
-     * Übersicht der vorhandenen Prüfungen
-     */
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
@@ -46,9 +40,6 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /**
-     * Die Ergebnistabelle für eine spezifische Prüfung
-     */
     #[Route('/exam/{examId}', name: 'index', methods: ['GET'])]
     public function index(int $examId, Request $request, Connection $conn): Response
     {
@@ -62,7 +53,6 @@ final class ExamResultController extends AbstractPageController
         $selectedClass = $request->query->get('class');
         $classes = $this->loadClasses($conn);
 
-        // Teilnehmer laden
         $sql = "
             SELECT ep.id AS ep_id, ep.age_year, p.import_id, p.geschlecht,
                    u.firstname AS vorname, u.lastname AS nachname, u.auxinfo AS klasse
@@ -81,14 +71,12 @@ final class ExamResultController extends AbstractPageController
 
         $participants = $conn->fetchAllAssociative($sql, $params);
 
-        // Gender-Mapping für Twig
         foreach ($participants as &$p) {
             $g = strtolower(trim((string) $p['geschlecht']));
-            $p['gender'] = ($g === 'm' || $g === 'male' || $g === 'male') ? 'MALE' : 'FEMALE';
+            $p['gender'] = (str_starts_with($g, 'm')) ? 'MALE' : 'FEMALE';
         }
         unset($p);
 
-        // Disziplinen und Anforderungen laden
         $rows = $conn->fetchAllAssociative("
             SELECT d.id, d.name, d.kategorie, d.einheit, r.geschlecht, r.age_min, r.age_max, r.auswahlnummer
             FROM sportabzeichen_disciplines d
@@ -102,7 +90,6 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$row['kategorie']][] = $row;
         }
 
-        // Bestehende Ergebnisse inkl. POINTS und STUFE laden (wichtig für Initial-Farben)
         $epIds = array_column($participants, 'ep_id');
         $results = [];
         if (!empty($epIds)) {
@@ -127,9 +114,6 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /**
-     * AJAX Autosave: Wird bei jeder Feldänderung aufgerufen
-     */
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request, Connection $conn): JsonResponse
     {
@@ -149,8 +133,6 @@ final class ExamResultController extends AbstractPageController
             : (float)str_replace(',', '.', (string)$rawLeistung);
 
         try {
-            // DB-INSERT/UPDATE
-            // Der Trigger 'trg_calculate_points' berechnet automatisch Points und Stufe
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
                 VALUES (:ep, :disc, :leistung)
@@ -158,16 +140,16 @@ final class ExamResultController extends AbstractPageController
                 DO UPDATE SET leistung = EXCLUDED.leistung
             ", ['ep' => (int)$epId, 'disc' => (int)$disciplineId, 'leistung' => $leistung]);
 
-            // Frisch berechnete Werte vom Trigger aus der DB abholen
-            $updated = $conn->fetchAssociative("
+            // Korrigiert: Variable $resultFromDb definiert
+            $resultFromDb = $conn->fetchAssociative("
                 SELECT points, stufe FROM sportabzeichen_exam_results 
                 WHERE ep_id = ? AND discipline_id = ?
             ", [$epId, $disciplineId]);
 
             return new JsonResponse([
-            'status' => 'ok',
-            'points' => (int)$resultFromDb['points'], // Hier kommen die 3, 2 oder 1 her
-            'medal'  => strtolower($resultFromDb['stufe'])
+                'status' => 'ok',
+                'points' => (int)($resultFromDb['points'] ?? 0),
+                'medal'  => strtolower($resultFromDb['stufe'] ?? 'none')
             ]);
 
         } catch (\Throwable $e) {
@@ -175,9 +157,6 @@ final class ExamResultController extends AbstractPageController
         }
     }
 
-    /**
-     * Fallback: Manueller Save-Button für alle Felder
-     */
     #[Route('/exam/{examId}/save-all', name: 'save_all', methods: ['POST'])]
     public function saveAll(int $examId, Request $request, Connection $conn): Response
     {
@@ -188,7 +167,6 @@ final class ExamResultController extends AbstractPageController
             foreach ($categories as $data) {
                 $disciplineId = $data['discipline'] ?? null;
                 if (!$disciplineId) continue;
-
                 $rawLeistung = $data['leistung'] ?? '';
                 $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
