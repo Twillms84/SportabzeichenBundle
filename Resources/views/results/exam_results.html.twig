@@ -61,7 +61,7 @@
                         <th class="col-name">Name & Gesamtpunkte</th>
                         <th class="col-age">Alter</th>
                         {% for category, items in disciplines %}
-                            {% if category|upper != 'SWIMMING' % and category != 'Schwimmen' %}
+                            {% if category|upper != 'SWIMMING' and category != 'Schwimmen' %}
                                 <th class="text-center">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
@@ -91,7 +91,7 @@
                         <td class="text-center">{{ p.age_year }}</td>
 
                         {% for category, items in disciplines %}
-                            {% if category|upper != 'SWIMMING' % and category != 'Schwimmen' %}
+                            {% if category|upper != 'SWIMMING' and category != 'Schwimmen' %}
                                 {# Disziplinen filtern #}
                                 {% set options = [] %}
                                 {% for d in items %}
