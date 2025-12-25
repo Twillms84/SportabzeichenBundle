@@ -33,6 +33,44 @@ document.addEventListener('DOMContentLoaded', function() {
         badge.textContent = `${total} Pkt.`;
     }
 
+    function updateSwimmingProof(epId) {
+    const row = document.querySelector(`tr[data-ep-id="${epId}"]`);
+    const birthYear = parseInt(row.getAttribute('data-birth-year'));
+    const examYear = 2025; // Oder dynamisch aus dem Header ziehen
+    const proofBadgeContainer = row.querySelector('.my-1'); // Der Container für die Badges
+
+    let hasProof = false;
+
+    // Alle Disziplin-Spalten in dieser Zeile prüfen
+    row.querySelectorAll('.col-discipline').forEach(col => {
+        const select = col.querySelector('select');
+        const input = col.querySelector('input');
+        const selectedOption = select.options[select.selectedIndex];
+        
+        // Check: Ist es eine Schwimm-Disziplin UND sind Punkte > 0?
+        // (Das 'data-current-points' Attribut sollte dein JS beim Speichern im Input aktualisieren)
+        const points = parseInt(input.getAttribute('data-current-points')) || 0;
+        const isSwimming = selectedOption.getAttribute('data-is-swimming') === '1';
+
+        if (isSwimming && points > 0) {
+            hasProof = true;
+        }
+    });
+
+    // UI aktualisieren
+    let validityYear = (examYear - birthYear < 18) ? (birthYear + 18) : (examYear + 5);
+    
+    const badgeHtml = hasProof 
+        ? `<span class="badge bg-success" style="font-size: 0.65rem;">🏊 Nachweis bis ${validityYear}</span>`
+        : `<span class="badge bg-danger" style="font-size: 0.65rem;">❌ Schwimmnachweis fehlt</span>`;
+    
+    // Hier den alten Schwimm-Badge gezielt ersetzen
+    const oldBadge = proofBadgeContainer.querySelector('.badge.bg-success, .badge.bg-danger');
+    if (oldBadge) {
+        oldBadge.outerHTML = badgeHtml;
+        }
+    }
+
     form.addEventListener('change', async function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;

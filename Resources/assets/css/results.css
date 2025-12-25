@@ -41,6 +41,14 @@
     width: 150px !important; /* Festgelegte Breite für die 4 Kategorien */
 }
 
+.col-name .badge {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
 /* Dropdown-Inhalt abschneiden */
 .discipline-selector {
     width: 100% !important;
