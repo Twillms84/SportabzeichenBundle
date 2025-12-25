@@ -26,3 +26,25 @@
 .medal-none { 
     background-color: transparent !important; 
 }
+
+/* Erzealte die Tabelle dazu, Spaltenbreiten strikt einzuhalten */
+.table-results {
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Breiten definieren */
+.col-name { width: 220px; }
+.col-age  { width: 60px; }
+
+.col-discipline { 
+    width: 150px !important; /* Festgelegte Breite für die 4 Kategorien */
+}
+
+/* Dropdown-Inhalt abschneiden */
+.discipline-selector {
+    width: 100% !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
