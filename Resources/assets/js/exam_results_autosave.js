@@ -1,5 +1,5 @@
 /**
- * Sportabzeichen Autosave & Scoring System
+ * Sportabzeichen Autosave & Scoring System (Combined)
  */
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('autosave-form');
@@ -9,15 +9,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = form.getAttribute('data-global-token');
 
     /**
-     * Kern-Funktion: Sendet Daten an den Server
+     * UI-Funktion: Aktualisiert die Farben (Gold, Silber, Bronze) in der gesamten Zelle
+     */
+    function updateMedalUI(sourceElement, medal) {
+        // Wir suchen die umschließende Zelle (td), um alle darin enthaltenen Felder zu färben
+        const cell = sourceElement.closest('td');
+        if (!cell) return;
+
+        const medalClass = 'medal-' + (medal ? medal.toLowerCase() : 'none');
+        const inputs = cell.querySelectorAll('select, input');
+
+        console.log(`[UI] Setze Klasse: ${medalClass}`);
+
+        inputs.forEach(el => {
+            // WICHTIG: Erst alle alten Medaillen-Klassen entfernen, damit die neue greift
+            el.classList.remove('medal-gold', 'medal-silver', 'medal-bronze', 'medal-none');
+            el.classList.add(medalClass);
+        });
+    }
+
+    /**
+     * Kern-Funktion: Sendet Daten per AJAX an den Server
      */
     async function saveData(epId, disciplineId, leistung, sourceElement) {
-        if (!disciplineId) {
-            console.warn("Speichern abgebrochen: Keine Disziplin-ID vorhanden.");
+        // Falls keine Disziplin gewählt ist, UI zurücksetzen und abbrechen
+        if (!disciplineId || disciplineId === "") {
+            updateMedalUI(sourceElement, 'none');
             return;
         }
 
-        console.log(`DEBUG: Sende EP=${epId}, Disc=${disciplineId}, Wert=${leistung}`);
+        console.log(`[Ajax] Sende EP=${epId}, Disc=${disciplineId}, Wert=${leistung}`);
 
         try {
             const response = await fetch(saveRoute, {
@@ -29,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({
                     ep_id: epId,
                     discipline_id: disciplineId,
-                    leistung: leistung,
+                    leistung: leistung.toString().replace(',', '.'), // Komma-Korrektur für DB
                     _token: csrfToken
                 })
             });
@@ -37,66 +58,45 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok') {
-                console.log("DEBUG: Server-Antwort erhalten:", data);
+                console.log("[Ajax] Antwort vom Server:", data);
+                // WICHTIG: Wir nutzen die 'medal' aus der Antwort, die der DB-Trigger berechnet hat
                 updateMedalUI(sourceElement, data.medal);
             } else {
-                console.error("Server-Fehler:", data.error);
+                console.error("[Ajax] Fehler:", data.error);
             }
         } catch (error) {
-            console.error("Netzwerk-Fehler:", error);
+            console.error("[Ajax] Netzwerk-Fehler:", error);
         }
     }
 
     /**
-     * UI-Funktion: Aktualisiert die Farben (Gold, Silber, Bronze)
-     */
-    function updateMedalUI(element, medal) {
-        const cell = element.closest('td');
-        const inputs = cell.querySelectorAll('select, input');
-        const medalClass = 'medal-' + (medal ? medal.toLowerCase() : 'none');
-
-        console.log(`DEBUG: Setze Farbe ${medalClass} für Zelle.`);
-
-        inputs.forEach(el => {
-            // Entferne alle alten Medaillen-Klassen
-            el.classList.remove('medal-gold', 'medal-silver', 'medal-bronze', 'medal-none');
-            // Füge die neue Klasse hinzu
-            el.classList.add(medalClass);
-        });
-    }
-
-    /**
-     * Event-Listener für Änderungen (Dropdown oder Input)
+     * Event-Listener: Reagiert auf jede Änderung im Formular
      */
     form.addEventListener('change', function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
-        let disciplineId, leistung, sourceElement = el;
+        const cell = el.closest('td');
+        
+        // Wir suchen die Elemente IMMER live in der Zelle, um keine alten IDs zu nutzen
+        const selectEl = cell.querySelector('select');
+        const inputEl = cell.querySelector('input[type="text"]');
 
-        if (el.getAttribute('data-type') === 'discipline') {
-            // FALL A: Disziplin wurde geändert
-            disciplineId = el.value;
-            const inputId = el.getAttribute('data-target-input');
-            const inputEl = document.getElementById(inputId);
-            leistung = inputEl.value;
-        } else {
-            // FALL B: Leistung wurde geändert
-            leistung = el.value;
-            const selectId = el.getAttribute('data-discipline-select');
-            const selectEl = document.getElementById(selectId);
-            disciplineId = selectEl.value;
-        }
+        const disciplineId = selectEl.value;
+        const leistung = inputEl.value;
 
-        saveData(epId, disciplineId, leistung, sourceElement);
+        // Speichern auslösen
+        saveData(epId, disciplineId, leistung, el);
     });
 
-    // Optional: Enter-Taste im Input-Feld abfangen
+    /**
+     * Enter-Taste abfangen, damit sie wie ein Verlassen des Feldes (blur) wirkt
+     */
     form.addEventListener('keypress', function(event) {
         if (event.key === 'Enter') {
             event.preventDefault();
-            event.target.blur(); // Triggert das 'change' Event
+            event.target.blur(); 
         }
     });
 });
