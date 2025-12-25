@@ -6,54 +6,52 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    {# Jetzt laden wir ALLES über diese eine Datei #}
     <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
+    <style>
+        /* Erzwungene Tabellen-Architektur für feste Breiten */
+        .table-fixed-layout {
+            table-layout: fixed !important;
+            width: 100% !important;
+        }
+
+        /* Spaltenbreiten */
+        .col-name { width: 250px; }
+        .col-age  { width: 60px; }
+        .col-discipline { width: 160px !important; }
+
+        /* Dropdown & Input bändigen */
+        .discipline-selector {
+            width: 100% !important;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .total-points-badge { font-size: 0.85rem; font-weight: bold; }
+        .req-hint { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
+        
+        /* Medaillen-Farben */
+        .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border-color: #b8860b !important; }
+        .medal-silber { background-color: #c0c0c0 !important; color: #000 !important; border-color: #808080 !important; }
+        .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border-color: #8b4513 !important; }
+    </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})</h2>
+    <h2>🏅 Ergebnisse – {{ exam.exam_name }}</h2>
 
-    {# Filter-Card #}
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3 align-items-center">
-                <div class="col-auto">
-                    <label class="fw-bold">Klasse filtern:</label>
-                </div>
-                <div class="col-auto">
-                    <select name="class" class="form-select w-auto">
-                        <option value="">(Alle Klassen)</option>
-                        {% for c in classes %}
-                            <option value="{{ c.klasse }}" {% if selectedClass == c.klasse %}selected{% endif %}>
-                                {{ c.klasse }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Filtern</button>
-                    <a href="{{ path('sportabzeichen_results_index', {examId: exam.id}) }}" class="btn btn-outline-secondary">Reset</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {# Hauptformular #}
-    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" 
-          method="post" id="autosave-form"
-          data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
-          data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
-
+    <form action="{{ path('sportabzeichen_results_save_all', {examId: exam.id}) }}" method="post" id="autosave-form">
         <div class="table-responsive">
-            <table class="table table-striped table-hover table-bordered align-middle">
+            <table class="table table-striped table-hover table-bordered align-middle table-fixed-layout">
                 <thead class="table-light">
                     <tr>
-                        <th class="col-name">Name & Gesamtpunkte</th>
-                        <th class="col-age">Alter</th>
+                        <th class="col-name">Name & Nachweise</th>
+                        <th class="col-age text-center">Alter</th>
                         {% for category, items in disciplines %}
-                            {% if category|upper != 'SWIMMING' and category != 'Schwimmen' %}
-                                <th class="text-center">{{ category }}</th>
+                            {# Sicherer Filter gegen SWIMMING (auch mit Leerzeichen/Großschreibung) #}
+                            {% if category|trim|upper != 'SWIMMING' and category|trim != 'Schwimmen' %}
+                                <th class="text-center col-discipline">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
                     </tr>
@@ -61,19 +59,23 @@
 
                 <tbody>
                 {% for p in participants %}
+                    {# 1. DATEN VORBEREITEN #}
                     {% set epResults = results[p.ep_id] ?? {} %}
                     
-                    {# 1. Check Schwimmnachweis #}
+                    {# 2. PUNKTE & SCHWIMMEN BERECHNEN (bevor wir irgendwas ausgeben!) #}
+                    {% set totalPoints = 0 %}
                     {% set hasSwimmingProof = false %}
                     {% set proofValidUntil = null %}
-                    
+
                     {% for resId, resData in epResults %}
-                        {# Wir prüfen, ob das Resultat den Nachweis erbringt #}
-                        {# Hinweis: Du musst sicherstellen, dass 'schwimmnachweis' im Result-Objekt/Requirement mitgeliefert wird #}
+                        {# Punkte zählen (wenn nicht Schwimmen) #}
+                        {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim != 'Schwimmen' %}
+                            {% set totalPoints = totalPoints + (resData.points|default(0)) %}
+                        {% endif %}
+
+                        {# Schwimm-Logik: Mind. Bronze erreicht? #}
                         {% if resData.schwimmnachweis|default(false) and resData.stufe|default('none') != 'none' %}
                             {% set hasSwimmingProof = true %}
-                            
-                            {# Gültigkeit berechnen #}
                             {% if p.age_year < 18 %}
                                 {% set birthYear = exam.exam_year - p.age_year %}
                                 {% set proofValidUntil = birthYear + 18 %}
@@ -84,29 +86,85 @@
                     {% endfor %}
 
                     <tr>
-                        <td class="col-name text-wrap">
+                        {# NAME SPALTE #}
+                        <td class="text-wrap">
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
-                            <div class="mt-1">
+                            <div class="my-1">
                                 {% if hasSwimmingProof %}
-                                    <span class="badge bg-success" style="font-size: 0.7rem;">
-                                        🏊 Schwimmnachweis gültig bis {{ proofValidUntil }}
+                                    <span class="badge bg-success" style="font-size: 0.65rem;">
+                                        🏊 Nachweis bis {{ proofValidUntil }}
                                     </span>
                                 {% else %}
-                                    <span class="badge bg-danger" style="font-size: 0.7rem;">
+                                    <span class="badge bg-danger" style="font-size: 0.65rem;">
                                         ❌ Schwimmnachweis fehlt
                                     </span>
                                 {% endif %}
+                                <span class="badge bg-info text-dark ms-1" style="font-size: 0.65rem;" id="total-points-{{ p.ep_id }}">
+                                    {{ totalPoints }} Pkt.
+                                </span>
                             </div>
-                            <small class="text-muted">{{ p.klasse }} | {{ totalPoints }} Pkt.</small>
+                            <small class="text-muted">{{ p.klasse }}</small>
                         </td>
-                        
-                        <td class="col-age text-center">{{ p.age_year }}</td>
 
+                        <td class="text-center">{{ p.age_year }}</td>
+
+                        {# DISZIPLIN SPALTEN #}
                         {% for category, items in disciplines %}
-                            {# Der sicherere Check gegen SWIMMING #}
                             {% if category|trim|upper != 'SWIMMING' and category|trim != 'Schwimmen' %}
-                                <td class="col-discipline p-2">
-                                    {# ... dein Select und Input ... #}
+                                
+                                {% set options = [] %}
+                                {% for d in items %}
+                                    {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
+                                        {% set options = options|merge([d]) %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% set selectedDiscId = null %}
+                                {% for d in options %}
+                                    {% if epResults[d.id] is defined %}{% set selectedDiscId = d.id %}{% endif %}
+                                {% endfor %}
+                                
+                                {% if selectedDiscId is null and options|length > 0 %}
+                                    {% set selectedDiscId = options[0].id %}
+                                {% endif %}
+
+                                {% set selectedValue = '' %}
+                                {% set medalClass = '' %}
+                                {% set currentReq = null %}
+                                
+                                {% for d in options %}
+                                    {% if d.id == selectedDiscId %}{% set currentReq = d %}{% endif %}
+                                {% endfor %}
+
+                                {% if selectedDiscId and epResults[selectedDiscId] is defined %}
+                                    {% set resObj = epResults[selectedDiscId] %}
+                                    {% set selectedValue = resObj.leistung %}
+                                    {% set stufe = resObj.stufe|default('none')|lower %}
+                                    {% if stufe in ['gold', 'silber', 'bronze'] %}
+                                        {% set medalClass = 'medal-' ~ stufe %}
+                                    {% endif %}
+                                {% endif %}
+
+                                <td class="p-2 col-discipline">
+                                    <select class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}"
+                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
+                                        <option value="">(keine)</option>
+                                        {% for d in options %}
+                                            <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %}>{{ d.name }}</option>
+                                        {% endfor %}
+                                    </select>
+
+                                    <input type="text" class="form-control form-control-sm text-center fw-bold {{ medalClass }}"
+                                           placeholder="---" value="{{ selectedValue }}"
+                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung">
+
+                                    {% if currentReq %}
+                                        <div class="req-hint d-flex justify-content-center gap-1">
+                                            <span class="badge border bg-bronze" style="background-color: #cd7f32; color: white;">{{ currentReq.bronze }}</span>
+                                            <span class="badge border bg-light text-dark">{{ currentReq.silber }}</span>
+                                            <span class="badge border bg-warning text-dark">{{ currentReq.gold }}</span>
+                                        </div>
+                                    {% endif %}
                                 </td>
                             {% endif %}
                         {% endfor %}
