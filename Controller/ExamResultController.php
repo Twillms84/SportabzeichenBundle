@@ -145,7 +145,7 @@ final class ExamResultController extends AbstractPageController
         $rows = $conn->fetchAllAssociative("
             SELECT d.id, d.name, d.kategorie, d.einheit, 
                 r.geschlecht, r.age_min, r.age_max, r.auswahlnummer,
-                r.gold, r.silber, r.bronze  -- <--- DIESE DREI FELDER HINZUFÜGEN
+                r.gold, r.silber, r.bronze r.schwimmnachweis  -- <--- DIESE DREI FELDER HINZUFÜGEN
             FROM sportabzeichen_disciplines d
             JOIN sportabzeichen_requirements r ON r.discipline_id = d.id
             WHERE r.jahr = ?
