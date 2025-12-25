@@ -107,6 +107,31 @@ final class AnforderungUploadController extends AbstractPageController
                                     $verband = null;
                                 }
                             $einheit = $row[12] !== '' ? trim($row[12]) : '';
+                            $berechnung = strtoupper(trim((string) ($row[14] ?? 'BIGGER'))); // Standard auf BIGGER
+
+                            // 1. Disziplin suchen
+                            $disciplineId = $conn->fetchOne(
+                                'SELECT id FROM sportabzeichen_disciplines WHERE name = ?',
+                                [$disziplin]
+                            );
+
+                            if (!$disciplineId) {
+                                // Neu anlegen
+                                $conn->insert('sportabzeichen_disciplines', [
+                                    'name'           => $disziplin,
+                                    'kategorie'      => $kategorie,
+                                    'einheit'        => $einheit,
+                                    'verband'        => $verband,  
+                                    'berechnungsart' => $berechnung, // Hier wird es gesetzt
+                                ]);
+                                $disciplineId = (int) $conn->lastInsertId();
+                            } else {
+                                // 🔥 WICHTIG: Bestehende Disziplin aktualisieren, falls Berechnungsart falsch/leer
+                                $conn->update('sportabzeichen_disciplines', 
+                                    ['berechnungsart' => $berechnung], 
+                                    ['id' => $disciplineId]
+                                );
+                            }
 
                             // Boolean sauber parsen
                             $snVal = isset($row[13]) ? strtolower(trim($row[13])) : '';
