@@ -49,8 +49,8 @@
             <table class="table table-bordered align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th style="min-width: 180px;">Name</th>
-                        <th style="width: 50px;">Alter</th>
+                        <th class="col-name">Name</th>
+                        <th class="col-age">Alter</th>
                         {% for category, items in disciplines %}
                             {% if category|upper != 'SWIMMING' %}
                                 <th class="text-center">{{ category }}</th>
@@ -68,8 +68,6 @@
 
                         {% for category, items in disciplines %}
                             {% if category|upper != 'SWIMMING' %}
-
-                                {# 1. Passende Disziplinen vorfiltern #}
                                 {% set options = [] %}
                                 {% for d in items %}
                                     {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -77,7 +75,6 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# 2. Aktuell gespeicherte Disziplin finden #}
                                 {% set selectedDiscId = null %}
                                 {% for d in options %}
                                     {% if epResults[d.id] is defined %}
@@ -85,31 +82,24 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Fallback auf erste Option #}
                                 {% if selectedDiscId is null and options|length > 0 %}
                                     {% set selectedDiscId = options[0].id %}
                                 {% endif %}
 
-                                {# 3. Medaillen-Daten initialisieren #}
                                 {% set selectedValue = '' %}
                                 {% set medalClass = 'medal-none' %}
                                 
                                 {% if selectedDiscId and epResults[selectedDiscId] is defined %}
                                     {% set resObj = epResults[selectedDiscId] %}
                                     {% set selectedValue = resObj.leistung %}
-                                    {% set p_points = resObj.points ?? 0 %}
-                                    
-                                    {% if p_points == 3 %}{% set medalClass = 'medal-gold' %}
-                                    {% elseif p_points == 2 %}{% set medalClass = 'medal-silver' %}
-                                    {% elseif p_points == 1 %}{% set medalClass = 'medal-bronze' %}
-                                    {% endif %}
+                                    {# Nutze die Stufe direkt für die Klasse #}
+                                    {% set medalClass = 'medal-' ~ (resObj.stufe|default('none')|lower) %}
                                 {% endif %}
 
-                                {# Eindeutige IDs für die Verknüpfung #}
                                 {% set selectId = "select-" ~ p.ep_id ~ "-" ~ loop.index %}
                                 {% set inputId = "input-" ~ p.ep_id ~ "-" ~ loop.index %}
 
-                                <td class="p-2 text-center" style="min-width: 150px;">
+                                <td class="p-2 text-center col-discipline">
                                     <select id="{{ selectId }}"
                                             name="results[{{ p.ep_id }}][{{ category }}][discipline]"
                                             class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}"

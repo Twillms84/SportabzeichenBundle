@@ -165,9 +165,9 @@ final class ExamResultController extends AbstractPageController
             ", [$epId, $disciplineId]);
 
             return new JsonResponse([
-                'status' => 'ok',
-                'points' => $updated['points'] ?? 0,
-                'medal'  => strtolower($updated['stufe'] ?? 'none')
+            'status' => 'ok',
+            'points' => (int)$resultFromDb['points'], // Hier kommen die 3, 2 oder 1 her
+            'medal'  => strtolower($resultFromDb['stufe'])
             ]);
 
         } catch (\Throwable $e) {

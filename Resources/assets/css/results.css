@@ -1,30 +1,12 @@
-/* Medaillen-Farben mit hoher Priorität */
-.medal-gold, .medal-gold:focus {
-    background-color: #ffd700 !important;
-    color: #000 !important;
-    border-color: #d4af37 !important;
-}
+/* In sportabzeichen_results.css */
 
-.medal-silver, .medal-silver:focus {
-    background-color: #c0c0c0 !important;
-    color: #000 !important;
-    border-color: #a0a0a0 !important;
-}
+/* Breite über Klassen statt Inline-Styles */
+.col-name { min-width: 180px !important; }
+.col-age { width: 50px !important; }
+.col-discipline { min-width: 150px !important; }
 
-.medal-bronze, .medal-bronze:focus {
-    background-color: #cd7f32 !important;
-    color: #fff !important;
-    border-color: #8b4513 !important;
-}
-
-/* Standard-Stil für leere Felder */
-.medal-none {
-    background-color: #ffffff !important;
-    color: #0a0808 !important;
-}
-
-/* Damit das Input-Feld die gesamte Zelle füllt */
-.discipline-selector, .result-input {
-    border-radius: 4px;
-    transition: background-color 0.3s ease;
-}
+/* Medaillen-Farben (hast du schon, aber sicherheitshalber mit !important) */
+.medal-gold { background-color: #ffd700 !important; color: #000 !important; }
+.medal-silver { background-color: #c0c0c0 !important; color: #000 !important; }
+.medal-bronze { background-color: #cd7f32 !important; color: #fff !important; }
+.medal-none { background-color: #ffffff !important; color: #000 !important; }
