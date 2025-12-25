@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'sportabzeichen_exam_results')]
+#[ORM\UniqueConstraint(name: 'uniq_exam_discipline', columns: ['ep_id', 'discipline_id'])]
 class SportabzeichenExamResult
 {
     #[ORM\Id]

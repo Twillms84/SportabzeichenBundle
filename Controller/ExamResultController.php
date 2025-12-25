@@ -24,6 +24,66 @@ final class ExamResultController extends AbstractPageController
         ");
     }
 
+    /**
+     * Zentrale Berechnungslogik für Punkte und Stufe
+     */
+    private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
+    {
+        if ($leistung === null || $leistung <= 0) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        // Basisdaten des Teilnehmers und der Prüfung holen
+        $data = $conn->fetchAssociative("
+            SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+            JOIN sportabzeichen_disciplines d ON d.id = ?
+            WHERE ep.id = ?
+        ", [$disciplineId, $epId]);
+
+        if (!$data) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        // Geschlecht normalisieren für Requirements-Tabelle (MALE/FEMALE)
+        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
+        
+        // Passende Anforderung suchen
+        $req = $conn->fetchAssociative("
+            SELECT gold, silber, bronze 
+            FROM sportabzeichen_requirements 
+            WHERE discipline_id = ? 
+              AND jahr = ? 
+              AND geschlecht = ? 
+              AND ? BETWEEN age_min AND age_max
+            LIMIT 1
+        ", [$disciplineId, $data['exam_year'], $gender, $data['age_year']]);
+
+        if (!$req) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        $points = 0;
+        $stufe = 'NONE';
+        $calcType = strtoupper((string)$data['berechnungsart']);
+
+        if ($calcType === 'SMALLER') {
+            // Zeit-Logik (weniger ist besser)
+            if ($leistung <= (float)$req['gold'] && (float)$req['gold'] > 0) { $points = 3; $stufe = 'GOLD'; }
+            elseif ($leistung <= (float)$req['silber'] && (float)$req['silber'] > 0) { $points = 2; $stufe = 'SILBER'; }
+            elseif ($leistung <= (float)$req['bronze'] && (float)$req['bronze'] > 0) { $points = 1; $stufe = 'BRONZE'; }
+        } else {
+            // Weiten/Ausdauer-Logik (mehr ist besser)
+            if ($leistung >= (float)$req['gold']) { $points = 3; $stufe = 'GOLD'; }
+            elseif ($leistung >= (float)$req['silber']) { $points = 2; $stufe = 'SILBER'; }
+            elseif ($leistung >= (float)$req['bronze']) { $points = 1; $stufe = 'BRONZE'; }
+        }
+
+        return ['points' => $points, 'stufe' => $stufe];
+    }
+
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
@@ -120,8 +180,8 @@ final class ExamResultController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
         $content = json_decode($request->getContent(), true);
-        $epId = $content['ep_id'] ?? null;
-        $disciplineId = $content['discipline_id'] ?? null;
+        $epId = (int)($content['ep_id'] ?? 0);
+        $disciplineId = (int)($content['discipline_id'] ?? 0);
         $rawLeistung = $content['leistung'] ?? null;
 
         if (!$epId || !$disciplineId) {
@@ -132,24 +192,30 @@ final class ExamResultController extends AbstractPageController
             ? null 
             : (float)str_replace(',', '.', (string)$rawLeistung);
 
+        // PHP-Berechnung statt SQL-Trigger
+        $calc = $this->calculatePointsAndStufe($conn, $epId, $disciplineId, $leistung);
+
         try {
             $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
-                VALUES (:ep, :disc, :leistung)
+                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe)
+                VALUES (:ep, :disc, :leistung, :points, :stufe)
                 ON CONFLICT (ep_id, discipline_id)
-                DO UPDATE SET leistung = EXCLUDED.leistung
-            ", ['ep' => (int)$epId, 'disc' => (int)$disciplineId, 'leistung' => $leistung]);
-
-            // Korrigiert: Variable $resultFromDb definiert
-            $resultFromDb = $conn->fetchAssociative("
-                SELECT points, stufe FROM sportabzeichen_exam_results 
-                WHERE ep_id = ? AND discipline_id = ?
-            ", [$epId, $disciplineId]);
+                DO UPDATE SET 
+                    leistung = EXCLUDED.leistung,
+                    points = EXCLUDED.points,
+                    stufe = EXCLUDED.stufe
+            ", [
+                'ep'       => $epId, 
+                'disc'     => $disciplineId, 
+                'leistung' => $leistung,
+                'points'   => $calc['points'],
+                'stufe'    => $calc['stufe']
+            ]);
 
             return new JsonResponse([
                 'status' => 'ok',
-                'points' => (int)($resultFromDb['points'] ?? 0),
-                'medal'  => strtolower($resultFromDb['stufe'] ?? 'none')
+                'points' => $calc['points'],
+                'medal'  => strtolower($calc['stufe'])
             ]);
 
         } catch (\Throwable $e) {
@@ -165,21 +231,34 @@ final class ExamResultController extends AbstractPageController
 
         foreach ($formData as $epId => $categories) {
             foreach ($categories as $data) {
-                $disciplineId = $data['discipline'] ?? null;
+                $disciplineId = (int)($data['discipline'] ?? 0);
                 if (!$disciplineId) continue;
+                
                 $rawLeistung = $data['leistung'] ?? '';
                 $leistung = $rawLeistung === '' ? null : (float)str_replace(',', '.', (string)$rawLeistung);
 
+                // Auch hier: PHP-Berechnung nutzen
+                $calc = $this->calculatePointsAndStufe($conn, (int)$epId, $disciplineId, $leistung);
+
                 $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung)
-                    VALUES (:ep, :disc, :leistung)
+                    INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe)
+                    VALUES (:ep, :disc, :leistung, :points, :stufe)
                     ON CONFLICT (ep_id, discipline_id)
-                    DO UPDATE SET leistung = EXCLUDED.leistung
-                ", ['ep' => (int)$epId, 'disc' => (int)$disciplineId, 'leistung' => $leistung]);
+                    DO UPDATE SET 
+                        leistung = EXCLUDED.leistung,
+                        points = EXCLUDED.points,
+                        stufe = EXCLUDED.stufe
+                ", [
+                    'ep'       => (int)$epId, 
+                    'disc'     => $disciplineId, 
+                    'leistung' => $leistung,
+                    'points'   => $calc['points'],
+                    'stufe'    => $calc['stufe']
+                ]);
             }
         }
 
-        $this->addFlash('success', 'Alle Ergebnisse gespeichert.');
+        $this->addFlash('success', 'Alle Ergebnisse gespeichert und berechnet.');
         return $this->redirectToRoute('sportabzeichen_results_index', ['examId' => $examId]);
     }
 }
