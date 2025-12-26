@@ -34,8 +34,10 @@ select.medal-bronze, input.medal-bronze {
 }
 
 select.medal-none, input.medal-none { 
-    background-color: #ffffff !important; 
-    color: #000 !important;
+    background-color: transparent !important; 
+    background-image: none !important; /* Entfernt Bootstrap-Pfeil-Hintergrund falls nötig */
+    border: 1px solid #dee2e6 !important;
+    color: inherit !important;
 }
 
 /* Eingabefelder */
