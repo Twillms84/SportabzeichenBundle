@@ -70,13 +70,45 @@
 
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                    {# ... Deine Logik für options/selectedDiscId/medalClass ... #}
+                                    {# 1. VARIABLEN INITIALISIEREN (Verhindert den "does not exist" Fehler) #}
+                                    {% set options = [] %}
+                                    {% set selectedDiscId = null %}
+                                    {% set selectedValue = '' %}
+                                    {% set medalClass = 'medal-none' %} {# Standardwert #}
+                                    {% set currentReq = null %}
+
+                                    {# 2. Passende Disziplinen für Alter/Geschlecht filtern #}
+                                    {% for d in items %}
+                                        {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
+                                            {% set options = options|merge([d]) %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# 3. Bestehendes Ergebnis suchen und Werte/Medaille setzen #}
+                                    {% for d in options %}
+                                        {% if epResults[d.id] is defined %}
+                                            {% set selectedDiscId = d.id %}
+                                            {% set currentReq = d %}
+                                            {% set selectedValue = epResults[d.id].leistung %}
+                                            {% set stufe = epResults[d.id].stufe|default('none')|lower %}
+                                            {% if stufe in ['gold', 'silber', 'bronze'] %}
+                                                {% set medalClass = 'medal-' ~ stufe %}
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# 4. Fallback: Erste Disziplin als Vorauswahl, falls noch nichts gespeichert #}
+                                    {% if selectedDiscId is null and options|length > 0 %}
+                                        {% set selectedDiscId = options[0].id %}
+                                        {% set currentReq = options[0] %}
+                                    {% endif %}
+
                                     <td class="p-1 col-discipline text-center">
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
                                                 class="form-select discipline-selector mb-1 {{ medalClass }}" 
-                                                data-save 
-                                                data-p-id="{{ p.ep_id }}" {# WICHTIG: Vereinheitlicht #}
-                                                data-cat="{{ category }}">
+                                                data-save
+                                                data-participant="{{ p.ep_id }}"
+                                                data-category="{{ category }}">
                                             <option value="">-</option>
                                             {% for d in options %}
                                                 <option value="{{ d.id }}" 
@@ -93,9 +125,18 @@
                                             name="results[{{ p.ep_id }}][{{ category }}][leistung]" 
                                             class="form-control form-control-custom fw-bold leistung-input {{ medalClass }}" 
                                             value="{{ selectedValue }}" 
+                                            placeholder="---" 
                                             data-save
-                                            data-p-id="{{ p.ep_id }}" {# WICHTIG: Vereinheitlicht #}
-                                            data-cat="{{ category }}">
+                                            data-participant="{{ p.ep_id }}"
+                                            data-category="{{ category }}">
+                                        
+                                        {% if currentReq %}
+                                            <div class="req-hint" id="req-{{ p.ep_id }}-{{ category }}">
+                                                <span class="req-bronze">{{ currentReq.bronze }}</span>
+                                                <span class="req-silber">{{ currentReq.silber }}</span>
+                                                <span class="req-gold">{{ currentReq.gold }}</span>
+                                            </div>
+                                        {% endif %}
                                     </td>
                                 {% endif %}
                             {% endfor %}
