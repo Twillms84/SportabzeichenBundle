@@ -6,57 +6,14 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    <style>
-        /* DEIN AKTUELLSTES CSS */
-        .table-results-compact {
-            table-layout: fixed !important;
-            width: 100% !important;
-            font-size: 1rem !important; 
-            border-collapse: collapse;
-        }
-
-        .col-name { width: 180px; }
-        .col-age  { width: 50px; }
-        .col-discipline { width: 125px !important; }
-
-        .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border: 1px solid #b8860b !important; font-weight: bold; }
-        .medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; font-weight: bold; }
-        .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; font-weight: bold; }
-        .medal-none   { background-color: #ffffff !important; }
-
-        .discipline-selector, 
-        .form-control-custom {
-            font-size: 1rem !important;
-            padding: 4px 2px !important;
-            height: auto !important;
-            width: 100% !important;
-            text-align: center;
-        }
-
-        .discipline-selector {
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            overflow: hidden;
-        }
-
-        .req-hint { 
-            font-size: 0.75rem;
-            color: #555; 
-            display: flex; 
-            justify-content: space-between; 
-            padding: 0 4px;
-            font-weight: 500;
-        }
-
-        .name-container { line-height: 1.3; }
-        .badge-result { font-size: 0.8rem; padding: 4px 6px; }
-    </style>
+    {# Lädt deine externe CSS-Datei aus dem Bundle-Verzeichnis #}
+    <link rel="stylesheet" href="{{ asset('css/exam_results.css', 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
+<div class="container-fluid mt-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🏅 {{ exam.exam_name }}</h2>
+        <h4>🏅 {{ exam.exam_name }} ({{ exam.exam_year }})</h4>
         <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
     </div>
 
@@ -64,8 +21,8 @@
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
 
-        <div class="table-responsive shadow-sm">
-            <table class="table table-hover table-bordered align-middle table-results-compact bg-white">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle table-results-compact bg-white">
                 <thead class="table-light text-center">
                     <tr>
                         <th class="col-name text-start">Teilnehmer</th>
@@ -85,7 +42,7 @@
                     {% set hasSwimmingProof = false %}
                     {% set birthYear = exam.exam_year - p.age_year %}
 
-                    {# Berechnung der Punkte für die Initialanzeige #}
+                    {# Punkte & Schwimmen vorab berechnen #}
                     {% for dId, resData in epResults %}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -98,9 +55,9 @@
                     <tr data-ep-id="{{ p.ep_id }}" data-birth-year="{{ birthYear }}">
                         <td class="col-name name-container">
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
-                            <div class="mt-1 d-flex gap-1">
+                            <div class="mt-1 d-flex gap-1 flex-wrap">
                                 <span class="badge {{ hasSwimmingProof ? 'bg-success' : 'bg-danger' }} badge-result">
-                                    {{ hasSwimmingProof ? '🏊' : '❌' }}
+                                    {{ hasSwimmingProof ? '🏊 OK' : '❌ Nachweis' }}
                                 </span>
                                 <span class="badge bg-info text-dark badge-result" id="total-points-{{ p.ep_id }}">
                                     {{ totalPoints }} Pkt.
@@ -122,9 +79,7 @@
 
                                 {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}
-                                        {% set selectedId = d.id %}
-                                    {% endif %}
+                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
                                 {% endfor %}
                                 
                                 {% if selectedId is null and options|length > 0 %}
@@ -134,7 +89,7 @@
                                 {% set resObj = epResults[selectedId] ?? null %}
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
-                                <td class="p-1 col-discipline text-center">
+                                <td class="p-1 col-discipline">
                                     <select class="form-select discipline-selector mb-1 {{ mClass }}" 
                                             data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
                                         <option value="">--</option>
@@ -152,7 +107,7 @@
                                            data-current-points="{{ resObj.points|default(0) }}">
 
                                     <div class="req-hint">
-                                        {# FIX: Hier lag der Syntax-Fehler (if innerhalb des for-tags) #}
+                                        {# FIXED: Syntax-Fehler behoben (if ist jetzt im for-Block) #}
                                         {% for d in options %}
                                             {% if d.id == selectedId %}
                                                 <span title="Bronze">{{ d.bronze }}</span>
