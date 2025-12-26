@@ -1,58 +1,47 @@
-/* Grundlayout: Normale Schriftgröße für die Tabelle */
+/* Tabellen-Architektur */
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
+    font-size: 1rem !important; /* Explizit normale Größe */
+    border-collapse: collapse;
 }
 
-/* Aggressive Spaltenbreiten */
-.col-name { width: 160px; }
-.col-age  { width: 45px; }
-.col-discipline { width: 110px !important; } /* Maximal schmal */
+/* Spaltenbreiten: Name etwas breiter für normale Schrift, Disziplin schmal */
+.col-name { width: 180px; }
+.col-age  { width: 50px; }
+.col-discipline { width: 125px !important; }
 
-/* Medaillen-Farben (Deine kräftigen Favoriten) */
-.medal-gold { 
-    background-color: #ffd700 !important; 
-    color: #000 !important; 
-    border: 1px solid #b8860b !important;
-    font-weight: bold;
-}
-.medal-silber { 
-    background-color: #e0e0e0 !important; 
-    color: #000 !important; 
-    border: 1px solid #a0a0a0 !important;
-    font-weight: bold;
-}
-.medal-bronze { 
-    background-color: #cd7f32 !important; 
-    color: #fff !important; 
-    border: 1px solid #8b4513 !important;
-    font-weight: bold;
-}
-.medal-none { background-color: #ffffff !important; }
+/* Medaillen-Farben (Kräftig) */
+.medal-gold   { background-color: #ffd700 !important; color: #000 !important; border: 1px solid #b8860b !important; font-weight: bold; }
+.medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; font-weight: bold; }
+.medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; font-weight: bold; }
+.medal-none   { background-color: #ffffff !important; }
 
-/* Dropdowns & Inputs: Schmaler und kompakter */
-.discipline-selector {
+/* Eingabefelder: Normale Schrift, aber wenig Rand */
+.discipline-selector, 
+.form-control-custom {
+    font-size: 1rem !important; /* Normale Größe */
+    padding: 4px 2px !important;
+    height: auto !important;
     width: 100% !important;
+    text-align: center;
+}
+
+.discipline-selector {
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
-    font-size: 0.8rem !important; /* Minimal kleiner, damit Text reinpasst */
-    padding: 2px 2px !important;
 }
 
-.form-control-sm {
-    font-size: 0.9rem !important;
-    padding: 2px 4px !important;
-}
-
-/* Hilfstexte unter den Inputs */
+/* Hilfstexte unter den Feldern */
 .req-hint { 
-    font-size: 0.6rem; 
-    color: #666; 
+    font-size: 0.75rem; /* Etwas größer als vorher, damit lesbar */
+    color: #555; 
     display: flex; 
     justify-content: space-between; 
-    margin-top: 1px;
+    padding: 0 4px;
+    font-weight: 500;
 }
 
-.name-container { line-height: 1.2; }
-.badge-fixed { font-size: 0.65rem; padding: 2px 4px; }
+.name-container { line-height: 1.3; }
+.badge-result { font-size: 0.8rem; padding: 4px 6px; }
