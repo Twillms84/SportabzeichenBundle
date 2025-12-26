@@ -64,9 +64,9 @@
                                 {% set totalPoints = totalPoints + (resData.points|default(0)) %}
                             {% endif %}
                             
-                            {# Schwimm-Nachweis finden und Gültigkeit berechnen #}
                             {% if resData.schwimmnachweis|default(false) and resData.points|default(0) > 0 %}
                                 {% set hasSwimmingProof = true %}
+                                {# Gültigkeit: unter 18 bis zum 18. Geb., über 18 für 5 Jahre #}
                                 {% if p.age_year < 18 %}
                                     {% set birthYear = exam.exam_year - p.age_year %}
                                     {% set proofValidUntil = birthYear + 18 %}
@@ -80,15 +80,15 @@
                             <td class="name-container">
                                 <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
                                 <div class="d-flex gap-1 mt-1">
-                                    {# SCHWIMM-BADGE MIT TOOLTIP #}
+                                    {# Schwimm-Badge mit Tooltip #}
                                     {% if hasSwimmingProof %}
                                         <span class="badge bg-success badge-result" 
                                             title="Schwimmnachweis vorhanden (Gültig bis {{ proofValidUntil }})">
-                                            {% if p.age_year < 18 %}🧒{% else %}👨{% endif %} 🏊 bis {{ proofValidUntil }}
+                                            🏊 bis {{ proofValidUntil }}
                                         </span>
                                     {% else %}
                                         <span class="badge bg-danger badge-result" 
-                                            title="Kein gültiger Schwimmnachweis hinterlegt">
+                                            title="Kein gültiger Schwimmnachweis vorhanden oder abgelaufen">
                                             ❌ Nachweis fehlt
                                         </span>
                                     {% endif %}
@@ -98,18 +98,47 @@
                                     </span>
                                 </div>
                             </td>
-
-                            {# ... (Alter-Spalte) ... #}
                             <td class="text-center">{{ p.age_year }}</td>
 
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                    {# ... (Disziplinen-Filterung wie gehabt) ... #}
-                                    
+                                    {# Disziplinen filtern #}
+                                    {% set options = [] %}
+                                    {% for d in items %}
+                                        {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
+                                            {% set options = options|merge([d]) %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# VARIABLEN INITIALISIEREN (Verhindert den 500er Fehler) #}
+                                    {% set selectedDiscId = null %}
+                                    {% set selectedValue = '' %}
+                                    {% set medalClass = 'medal-none' %}
+                                    {% set currentReq = null %}
+
+                                    {# Gewählte Disziplin und Leistung bestimmen #}
+                                    {% for d in options %}
+                                        {% if epResults[d.id] is defined %}
+                                            {% set selectedDiscId = d.id %}
+                                            {% set currentReq = d %}
+                                            {% set selectedValue = epResults[d.id].leistung %}
+                                            {% set stufe = epResults[d.id].stufe|default('none')|lower %}
+                                            {% if stufe in ['gold', 'silber', 'bronze'] %}
+                                                {% set medalClass = 'medal-' ~ stufe %}
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# Falls nichts gewählt ist, nimm die erste Option als Standard-Vorgabe für die Anforderungen #}
+                                    {% if selectedDiscId is null and options|length > 0 %}
+                                        {% set selectedDiscId = options[0].id %}
+                                        {% set currentReq = options[0] %}
+                                    {% endif %}
+
                                     <td class="p-1 col-discipline text-center">
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
                                                 class="form-select discipline-selector mb-1 {{ medalClass }}" data-save>
-                                            <option value="">(Bitte wählen)</option>
+                                            <option value="">-</option>
                                             {% for d in options %}
                                                 <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %}>{{ d.name }}</option>
                                             {% endfor %}
@@ -120,7 +149,7 @@
                                             value="{{ selectedValue }}" placeholder="---" data-save>
                                         
                                         {% if currentReq %}
-                                            <div class="req-hint">
+                                            <div class="req-hint" title="Anforderungen für {{ currentReq.name }}">
                                                 <span style="color: #cd7f32;">{{ currentReq.bronze }}</span>
                                                 <span style="color: #777;">{{ currentReq.silber }}</span>
                                                 <span style="color: #b8860b;">{{ currentReq.gold }}</span>
