@@ -5,72 +5,78 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRoute = form.getAttribute('data-global-route');
     const csrfToken = form.getAttribute('data-global-token');
 
-    // Hilfsfunktion: Medaillen-Farben aktualisieren
+    // 1. Hilfsfunktion: Medaillen-Farben am Element umschalten
     function updateMedalUI(cell, medal) {
         if (!cell) return;
-        const medalClass = 'medal-' + (medal ? medal.toLowerCase() : 'none');
         const elements = cell.querySelectorAll('select, input');
+        const medalClass = (medal && medal !== 'none') ? 'medal-' + medal.toLowerCase() : '';
         
         elements.forEach(el => {
-            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-            el.classList.add(medalClass);
+            // Alle alten Medaillen-Klassen entfernen
+            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+            // Nur hinzufügen, wenn eine Medaille erreicht wurde
+            if (medalClass) {
+                el.classList.add(medalClass);
+            }
         });
     }
 
-    // NEU: Hilfsfunktion: Gesamtpunkte in der Zeile neu berechnen
+    // 2. Hilfsfunktion: Schwimmnachweis in der Zeile live prüfen
+    function updateSwimmingProofLive(epId) {
+        const row = document.querySelector(`tr[data-ep-id="${epId}"]`);
+        if (!row) return;
+
+        const birthYear = parseInt(row.getAttribute('data-birth-year'));
+        const examYear = 2025; // Kannst du auch dynamisch machen
+        
+        let hasProof = false;
+
+        // Wir gehen durch alle Spalten der Kategorie
+        row.querySelectorAll('.col-discipline').forEach(col => {
+            const select = col.querySelector('select');
+            const input = col.querySelector('input');
+            if (!select || !input) return;
+
+            const selectedOption = select.options[select.selectedIndex];
+            const isSwimmingDisc = selectedOption.getAttribute('data-is-swimming') === '1';
+            const points = parseInt(input.getAttribute('data-current-points')) || 0;
+
+            // Wenn es eine Schwimmdisziplin ist UND Punkte (mind. Bronze) da sind
+            if (isSwimmingDisc && points > 0) {
+                hasProof = true;
+            }
+        });
+
+        // Badge Container finden und Badge austauschen
+        const badgeContainer = row.querySelector('.my-1');
+        let validityYear = (examYear - birthYear < 18) ? (birthYear + 18) : (examYear + 5);
+        
+        const oldBadge = badgeContainer.querySelector('.badge.bg-success, .badge.bg-danger');
+        if (oldBadge) {
+            if (hasProof) {
+                oldBadge.className = "badge bg-success";
+                oldBadge.innerHTML = `🏊 bis ${validityYear}`;
+                oldBadge.style.fontSize = "0.65rem";
+            } else {
+                oldBadge.className = "badge bg-danger";
+                oldBadge.innerHTML = `❌ Schwimm-Nachweis`;
+                oldBadge.style.fontSize = "0.65rem";
+            }
+        }
+    }
+
+    // 3. Hilfsfunktion: Gesamtpunkte
     function updateRowTotal(epId) {
         const badge = document.getElementById(`total-points-${epId}`);
         if (!badge) return;
-
         let total = 0;
-        // Suche alle Inputs dieses Teilnehmers und summiere die Daten-Attribute
-        const allInputs = document.querySelectorAll(`input[data-ep-id="${epId}"]`);
-        allInputs.forEach(input => {
-            const pts = parseInt(input.getAttribute('data-current-points')) || 0;
-            total += pts;
+        document.querySelectorAll(`input[data-ep-id="${epId}"]`).forEach(input => {
+            total += parseInt(input.getAttribute('data-current-points')) || 0;
         });
-
         badge.textContent = `${total} Pkt.`;
     }
 
-    function updateSwimmingProof(epId) {
-    const row = document.querySelector(`tr[data-ep-id="${epId}"]`);
-    const birthYear = parseInt(row.getAttribute('data-birth-year'));
-    const examYear = 2025; // Oder dynamisch aus dem Header ziehen
-    const proofBadgeContainer = row.querySelector('.my-1'); // Der Container für die Badges
-
-    let hasProof = false;
-
-    // Alle Disziplin-Spalten in dieser Zeile prüfen
-    row.querySelectorAll('.col-discipline').forEach(col => {
-        const select = col.querySelector('select');
-        const input = col.querySelector('input');
-        const selectedOption = select.options[select.selectedIndex];
-        
-        // Check: Ist es eine Schwimm-Disziplin UND sind Punkte > 0?
-        // (Das 'data-current-points' Attribut sollte dein JS beim Speichern im Input aktualisieren)
-        const points = parseInt(input.getAttribute('data-current-points')) || 0;
-        const isSwimming = selectedOption.getAttribute('data-is-swimming') === '1';
-
-        if (isSwimming && points > 0) {
-            hasProof = true;
-        }
-    });
-
-    // UI aktualisieren
-    let validityYear = (examYear - birthYear < 18) ? (birthYear + 18) : (examYear + 5);
-    
-    const badgeHtml = hasProof 
-        ? `<span class="badge bg-success" style="font-size: 0.65rem;">🏊 Nachweis bis ${validityYear}</span>`
-        : `<span class="badge bg-danger" style="font-size: 0.65rem;">❌ Schwimmnachweis fehlt</span>`;
-    
-    // Hier den alten Schwimm-Badge gezielt ersetzen
-    const oldBadge = proofBadgeContainer.querySelector('.badge.bg-success, .badge.bg-danger');
-    if (oldBadge) {
-        oldBadge.outerHTML = badgeHtml;
-        }
-    }
-
+    // EVENT LISTENER
     form.addEventListener('change', async function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;
@@ -78,52 +84,38 @@ document.addEventListener('DOMContentLoaded', function() {
         const cell = el.closest('td');
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
-
         const epId = el.getAttribute('data-ep-id');
-        const disciplineId = selectEl.value;
-        const leistung = inputEl.value;
 
-        // Falls Disziplin leer, UI zurücksetzen und Punkte auf 0
-        if (!disciplineId) {
+        // Falls Disziplin geleert wurde
+        if (!selectEl.value) {
             updateMedalUI(cell, 'none');
             inputEl.setAttribute('data-current-points', '0');
             updateRowTotal(epId);
+            updateSwimmingProofLive(epId);
             return;
         }
 
         try {
             const response = await fetch(saveRoute, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({
                     ep_id: epId,
-                    discipline_id: disciplineId,
-                    leistung: leistung.replace(',', '.'),
+                    discipline_id: selectEl.value,
+                    leistung: inputEl.value.replace(',', '.'),
                     _token: csrfToken
                 })
             });
 
-            if (!response.ok) throw new Error('Netzwerk-Antwort war nicht OK');
-
             const data = await response.json();
-
             if (data.status === 'ok') {
-                // 1. Farben aktualisieren
                 updateMedalUI(cell, data.medal);
-                
-                // 2. Punkte am Input-Feld für die JS-Berechnung zwischenspeichern
                 inputEl.setAttribute('data-current-points', data.points || 0);
                 
-                // 3. Zeilensumme aktualisieren
+                // LIVE UPDATE TRIGGER
                 updateRowTotal(epId);
-            } else {
-                console.error("Server-Fehler:", data.error);
+                updateSwimmingProofLive(epId); 
             }
-        } catch (e) {
-            console.error("[Error]", e);
-        }
+        } catch (e) { console.error(e); }
     });
 });

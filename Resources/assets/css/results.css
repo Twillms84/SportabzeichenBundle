@@ -1,58 +1,34 @@
-/* In deinem <style> Block im Twig-Template */
-
-/* Standard IServ/Bootstrap Optik beibehalten */
-.discipline-selector, .form-control {
-    background-color: inherit; /* Nutzt den Standard-Hintergrund von IServ */
-}
-
-/* Nur bei Erfolg überschreiben */
+/* Medaillen-Farben: Dezentere Töne, damit man die Schrift noch gut lesen kann */
 .medal-gold { 
-    background-color: #ffd700 !important; 
-    color: #000 !important; 
-    border-color: #b8860b !important;
+    background-color: #fff9c4 !important; 
+    color: #856404 !important; 
+    border-color: #ffeeba !important;
 }
 .medal-silber { 
-    background-color: #c0c0c0 !important; 
-    color: #000 !important; 
-    border-color: #808080 !important;
+    background-color: #f8f9fa !important; 
+    color: #383d41 !important; 
+    border-color: #e2e3e5 !important;
 }
 .medal-bronze { 
-    background-color: #cd7f32 !important; 
-    color: #fff !important; 
-    border-color: #8b4513 !important;
+    background-color: #f5ece5 !important; 
+    color: #721c24 !important; 
+    border-color: #f5c6cb !important;
 }
 
-/* Wenn nichts erreicht wurde, keine spezielle Farbe */
+/* WICHTIG: Wenn keine Medaille, erzwinge KEINE Farbe */
+/* Das sorgt dafür, dass IServ-Standard (weiß/grau) greift */
 .medal-none { 
     background-color: transparent !important; 
 }
 
-/* Erzealte die Tabelle dazu, Spaltenbreiten strikt einzuhalten */
-.table-results {
-    table-layout: fixed;
-    width: 100%;
-}
-
-/* Breiten definieren */
-.col-name { width: 220px; }
-.col-age  { width: 60px; }
-
-.col-discipline { 
-    width: 150px !important; /* Festgelegte Breite für die 4 Kategorien */
-}
-
-.col-name .badge {
-    display: inline-block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
-}
-
-/* Dropdown-Inhalt abschneiden */
-.discipline-selector {
+/* Tabellen-Layout */
+.table-fixed-layout {
+    table-layout: fixed !important;
     width: 100% !important;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
 }
+
+.col-name { width: 260px; }
+.col-age  { width: 60px; }
+.col-discipline { width: 165px !important; }
+
+.req-hint { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
