@@ -6,9 +6,8 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    {# Hier binden wir dein CSS ein, falls es in einer Datei liegt, oder fügen es direkt ein #}
     <style>
-        /* Dein bereitgestelltes CSS */
+        /* Einbindung deines neuen CSS-Layouts */
         .table-results-compact { table-layout: fixed !important; width: 100% !important; font-size: 1rem !important; }
         .col-name { width: 220px; } 
         .col-class { width: 70px; }  
@@ -17,7 +16,7 @@
         .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border: 1px solid #b8860b !important; }
         .medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; }
         .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; }
-        .medal-none { background-color: unset !important; color: unset !important; font-weight: normal !important; }
+        .medal-none   { background-color: unset !important; color: unset !important; font-weight: normal !important; }
 
         .discipline-selector option { background-color: #fff; color: #000; font-weight: normal; }
         .discipline-selector, .form-control-custom { font-size: 1rem !important; padding: 4px 4px !important; width: 100% !important; }
@@ -46,7 +45,6 @@
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
 
         <div class="table-responsive shadow-sm">
-            {# Nutzt jetzt .table-results-compact aus deinem CSS #}
             <table class="table table-hover table-bordered align-middle table-results-compact bg-white">
                 <thead class="table-light text-center">
                     <tr>
@@ -67,7 +65,7 @@
                     {% set hasSwimmingProof = false %}
                     {% set birthYear = exam.exam_year - p.age_year %}
 
-                    {# Vorberechnung für Badges & Punkte #}
+                    {# Vorberechnung für Punkte & Schwimm-Badge #}
                     {% for dId, resData in epResults %}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -104,10 +102,14 @@
                                     {% endif %}
                                 {% endfor %}
 
+                                {# Logik für gewählte Disziplin (FIXED) #}
                                 {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
+                                    {% if epResults[d.id] is defined %}
+                                        {% set selectedId = d.id %}
+                                    {% endif %}
                                 {% endfor %}
+
                                 {% if selectedId is null and options|length > 0 %}
                                     {% set selectedId = options[0].id %}
                                 {% endif %}
@@ -116,7 +118,6 @@
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
                                 <td class="p-1 col-discipline text-center">
-                                    {# Select mit .discipline-selector #}
                                     <select class="form-select discipline-selector mb-1 {{ mClass }}" 
                                             data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
                                         <option value="">(keine)</option>
@@ -128,18 +129,18 @@
                                         {% endfor %}
                                     </select>
 
-                                    {# Input mit .form-control-custom #}
                                     <input type="text" class="form-control form-control-custom text-center fw-bold {{ mClass }}"
                                            placeholder="---" value="{{ resObj.leistung ?? '' }}"
                                            data-save data-ep-id="{{ p.ep_id }}" data-type="leistung"
                                            data-current-points="{{ resObj.points|default(0) }}">
 
-                                    {# Anforderungs-Werte mit deinen neuen Klassen #}
                                     <div class="req-hint">
-                                        {% for d in options if d.id == selectedId %}
-                                            <span class="req-bronze" title="Bronze">{{ d.bronze }}</span>
-                                            <span class="req-silber" title="Silber">{{ d.silber }}</span>
-                                            <span class="req-gold" title="Gold">{{ d.gold }}</span>
+                                        {% for d in options %}
+                                            {% if d.id == selectedId %}
+                                                <span class="req-bronze" title="Bronze">{{ d.bronze }}</span>
+                                                <span class="req-silber" title="Silber">{{ d.silber }}</span>
+                                                <span class="req-gold" title="Gold">{{ d.gold }}</span>
+                                            {% endif %}
                                         {% endfor %}
                                     </div>
                                 </td>
@@ -156,5 +157,5 @@
 
 {% block javascripts %}
     {{ parent() }}
-    <script type="text/javascript" src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
