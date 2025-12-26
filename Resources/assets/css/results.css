@@ -6,22 +6,30 @@
 }
 
 /* Neue Spaltenkonfiguration */
-.col-name { width: 210px; } /* Etwas breiter für "Name (Alter)" */
-.col-class { width: 80px; }  /* Spalte für die Klasse */
+.col-name { width: 220px; } 
+.col-class { width: 70px; }  
 .col-discipline { width: 130px !important; }
 
-/* Medaillen-Farben */
+/* Medaillen-Farben (NUR wenn eine Medaille vorliegt) */
 .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border: 1px solid #b8860b !important; }
 .medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; }
 .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; }
 
-/* IServ Standard für leere Felder */
+/* IServ Standard für leere Felder (Entfernt alle Farberzwingungen) */
 .medal-none { 
-    background-color: transparent !important; 
+    background-color: unset !important; 
+    color: unset !important;
     font-weight: normal !important;
 }
 
-/* Eingabefelder */
+/* Verhindert, dass die ausgeklappte Liste die Medaillenfarbe übernimmt */
+.discipline-selector option {
+    background-color: #fff; /* Oder die Standard-Hintergrundfarbe von IServ */
+    color: #000;
+    font-weight: normal;
+}
+
+/* Eingabefelder Layout */
 .discipline-selector, 
 .form-control-custom {
     font-size: 1rem !important;
@@ -29,11 +37,10 @@
     width: 100% !important;
 }
 
-/* Mindestwerte (Anforderungen) - Groß und Fett */
+/* Mindestwerte (Anforderungen) */
 .req-hint { 
     font-size: 0.9rem !important;
     font-weight: 700 !important;
-    color: #333; 
     display: flex; 
     justify-content: space-between; 
     padding: 2px 6px 0 6px;
@@ -42,7 +49,7 @@
 }
 
 .req-bronze { color: #8b4513 !important; }
-.req-silber { color: #666666 !important; }
+.req-silber { color: #666 !important; }
 .req-gold   { color: #a67c00 !important; }
 
 .badge-result { 
