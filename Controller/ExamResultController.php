@@ -28,37 +28,70 @@ final class ExamResultController extends AbstractPageController
      * Zentrale Berechnungslogik für Punkte und Stufe
      */
     private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
-{
-    if ($leistung === null || $leistung <= 0) {
-        return ['points' => 0, 'stufe' => 'NONE'];
+    {
+        // 1. Grundeinstellungen
+        $points = 0;
+        $stufe = 'NONE';
+
+        if ($leistung === null || $leistung <= 0) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        // 2. Daten laden (inkl. Kategorie für die Schwimm-Prüfung)
+        $data = $conn->fetchAssociative("
+            SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart, d.kategorie
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+            JOIN sportabzeichen_disciplines d ON d.id = ?
+            WHERE ep.id = ?
+        ", [$disciplineId, $epId]);
+
+        if (!$data) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
+        $isSwimming = in_array(strtoupper(trim((string)$data['kategorie'])), ['SWIMMING', 'SCHWIMMEN']);
+        
+        // 3. Anforderungen laden
+        $req = $conn->fetchAssociative("
+            SELECT gold, silber, bronze 
+            FROM sportabzeichen_requirements 
+            WHERE discipline_id = ? AND jahr = ? AND geschlecht = ? AND ? BETWEEN age_min AND age_max
+            LIMIT 1
+        ", [$disciplineId, (int)$data['exam_year'], $gender, (int)$data['age_year']]);
+
+        if (!$req) {
+            return ['points' => 0, 'stufe' => 'NONE'];
+        }
+
+        // 4. Werte vorbereiten
+        $calcType = strtoupper((string)$data['berechnungsart']);
+        $goldVal = (float)$req['gold'];
+        $silberVal = (float)$req['silber'];
+        $bronzeVal = (float)$req['bronze'];
+
+        // 5. Berechnung der Stufe
+        if ($calcType === 'SMALLER') {
+            // ZEIT-LOGIK (weniger ist besser)
+            if ($leistung <= $goldVal && $goldVal > 0) { $stufe = 'GOLD'; $points = 3; }
+            elseif ($leistung <= $silberVal && $silberVal > 0) { $stufe = 'SILBER'; $points = 2; }
+            elseif ($leistung <= $bronzeVal && $bronzeVal > 0) { $stufe = 'BRONZE'; $points = 1; }
+        } else {
+            // WEITEN/ANZAHL-LOGIK (mehr ist besser)
+            if ($leistung >= $goldVal && $goldVal > 0) { $stufe = 'GOLD'; $points = 3; }
+            elseif ($leistung >= $silberVal && $silberVal > 0) { $stufe = 'SILBER'; $points = 2; }
+            elseif ($leistung >= $bronzeVal && $bronzeVal > 0) { $stufe = 'BRONZE'; $points = 1; }
+        }
+
+        // 6. SONDERREGEL SCHWIMMEN: Stufe bleibt (für Nachweis), aber 0 Punkte für Gesamtwertung
+        if ($isSwimming) {
+            $points = 0;
+        }
+
+        return ['points' => $points, 'stufe' => $stufe];
     }
-
-    // Kategorie d.kategorie zur Abfrage hinzufügen
-    $data = $conn->fetchAssociative("
-        SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart, d.kategorie
-        FROM sportabzeichen_exam_participants ep
-        JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-        JOIN sportabzeichen_disciplines d ON d.id = ?
-        WHERE ep.id = ?
-    ", [$disciplineId, $epId]);
-
-    if (!$data) return ['points' => 0, 'stufe' => 'NONE'];
-
-    // LOGIK: Wenn die Kategorie Schwimmen ist, gibt es 0 Punkte für die Gesamtwertung
-    $isSwimming = in_array(strtoupper(trim((string)$data['kategorie'])), ['SWIMMING', 'Schwimmen']);
-
-    // ... (Rest der Berechnung für $stufe bleibt gleich) ...
-    // [Hier kommt dein bestehender Code für $goldVal, $silberVal etc.]
-    
-    // Am Ende der Funktion die Punkte überschreiben:
-    if ($isSwimming) {
-        $points = 0; // Schwimmen gibt Stufe (Gold/Silber/Bronze), aber 0 Punkte
-    }
-
-    return ['points' => $points, 'stufe' => $stufe];
-}
-
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
