@@ -29,7 +29,6 @@ final class ExamResultController extends AbstractPageController
      */
     private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
     {
-        // 1. Grundeinstellungen
         $points = 0;
         $stufe = 'NONE';
 
@@ -37,7 +36,6 @@ final class ExamResultController extends AbstractPageController
             return ['points' => 0, 'stufe' => 'NONE'];
         }
 
-        // 2. Daten laden (inkl. Kategorie für die Schwimm-Prüfung)
         $data = $conn->fetchAssociative("
             SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart, d.kategorie
             FROM sportabzeichen_exam_participants ep
@@ -47,14 +45,11 @@ final class ExamResultController extends AbstractPageController
             WHERE ep.id = ?
         ", [$disciplineId, $epId]);
 
-        if (!$data) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
+        if (!$data) return ['points' => 0, 'stufe' => 'NONE'];
 
-        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
         $isSwimming = in_array(strtoupper(trim((string)$data['kategorie'])), ['SWIMMING', 'SCHWIMMEN']);
+        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
         
-        // 3. Anforderungen laden
         $req = $conn->fetchAssociative("
             SELECT gold, silber, bronze 
             FROM sportabzeichen_requirements 
@@ -62,33 +57,22 @@ final class ExamResultController extends AbstractPageController
             LIMIT 1
         ", [$disciplineId, (int)$data['exam_year'], $gender, (int)$data['age_year']]);
 
-        if (!$req) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
+        if (!$req) return ['points' => 0, 'stufe' => 'NONE'];
 
-        // 4. Werte vorbereiten
         $calcType = strtoupper((string)$data['berechnungsart']);
-        $goldVal = (float)$req['gold'];
-        $silberVal = (float)$req['silber'];
-        $bronzeVal = (float)$req['bronze'];
+        $g = (float)$req['gold']; $s = (float)$req['silber']; $b = (float)$req['bronze'];
 
-        // 5. Berechnung der Stufe
         if ($calcType === 'SMALLER') {
-            // ZEIT-LOGIK (weniger ist besser)
-            if ($leistung <= $goldVal && $goldVal > 0) { $stufe = 'GOLD'; $points = 3; }
-            elseif ($leistung <= $silberVal && $silberVal > 0) { $stufe = 'SILBER'; $points = 2; }
-            elseif ($leistung <= $bronzeVal && $bronzeVal > 0) { $stufe = 'BRONZE'; $points = 1; }
+            if ($leistung <= $g && $g > 0) { $stufe = 'GOLD'; $points = 3; }
+            elseif ($leistung <= $s && $s > 0) { $stufe = 'SILBER'; $points = 2; }
+            elseif ($leistung <= $b && $b > 0) { $stufe = 'BRONZE'; $points = 1; }
         } else {
-            // WEITEN/ANZAHL-LOGIK (mehr ist besser)
-            if ($leistung >= $goldVal && $goldVal > 0) { $stufe = 'GOLD'; $points = 3; }
-            elseif ($leistung >= $silberVal && $silberVal > 0) { $stufe = 'SILBER'; $points = 2; }
-            elseif ($leistung >= $bronzeVal && $bronzeVal > 0) { $stufe = 'BRONZE'; $points = 1; }
+            if ($leistung >= $g && $g > 0) { $stufe = 'GOLD'; $points = 3; }
+            elseif ($leistung >= $s && $s > 0) { $stufe = 'SILBER'; $points = 2; }
+            elseif ($leistung >= $b && $b > 0) { $stufe = 'BRONZE'; $points = 1; }
         }
 
-        // 6. SONDERREGEL SCHWIMMEN: Stufe bleibt (für Nachweis), aber 0 Punkte für Gesamtwertung
-        if ($isSwimming) {
-            $points = 0;
-        }
+        if ($isSwimming) { $points = 0; } // Schwimmen gibt niemals Punkte
 
         return ['points' => $points, 'stufe' => $stufe];
     }
