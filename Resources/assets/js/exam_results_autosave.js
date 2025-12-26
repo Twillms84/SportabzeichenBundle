@@ -4,8 +4,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const saveRoute = form.getAttribute('data-global-route');
     const csrfToken = form.getAttribute('data-global-token');
+    // Falls die examId im Formular als data-attribute hinterlegt ist:
+    const examId = form.getAttribute('data-exam-id');
 
-    // 1. Hilfsfunktion: Medaillen-Farben am Element umschalten
+    /**
+     * 1. Hilfsfunktion: Medaillen-Farben am Element umschalten
+     */
     function updateMedalUI(cell, medal) {
         if (!cell) return;
         const elements = cell.querySelectorAll('select, input');
@@ -13,70 +17,29 @@ document.addEventListener('DOMContentLoaded', function() {
         
         elements.forEach(el => {
             // Alle alten Medaillen-Klassen entfernen
-            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
             // Nur hinzufügen, wenn eine Medaille erreicht wurde
             if (medalClass) {
                 el.classList.add(medalClass);
+            } else {
+                el.classList.add('medal-none');
             }
         });
     }
 
-    // 2. Hilfsfunktion: Schwimmnachweis in der Zeile live prüfen
-    function updateSwimmingProofLive(epId) {
-        const row = document.querySelector(`tr[data-ep-id="${epId}"]`);
-        if (!row) return;
-
-        const birthYear = parseInt(row.getAttribute('data-birth-year'));
-        const examYear = 2025; // Kannst du auch dynamisch machen
-        
-        let hasProof = false;
-
-        // Wir gehen durch alle Spalten der Kategorie
-        row.querySelectorAll('.col-discipline').forEach(col => {
-            const select = col.querySelector('select');
-            const input = col.querySelector('input');
-            if (!select || !input) return;
-
-            const selectedOption = select.options[select.selectedIndex];
-            const isSwimmingDisc = selectedOption.getAttribute('data-is-swimming') === '1';
-            const points = parseInt(input.getAttribute('data-current-points')) || 0;
-
-            // Wenn es eine Schwimmdisziplin ist UND Punkte (mind. Bronze) da sind
-            if (isSwimmingDisc && points > 0) {
-                hasProof = true;
-            }
-        });
-
-        // Badge Container finden und Badge austauschen
-        const badgeContainer = row.querySelector('.my-1');
-        let validityYear = (examYear - birthYear < 18) ? (birthYear + 18) : (examYear + 5);
-        
-        const oldBadge = badgeContainer.querySelector('.badge.bg-success, .badge.bg-danger');
-        if (oldBadge) {
-            if (hasProof) {
-                oldBadge.className = "badge bg-success";
-                oldBadge.innerHTML = `🏊 bis ${validityYear}`;
-                oldBadge.style.fontSize = "0.65rem";
-            } else {
-                oldBadge.className = "badge bg-danger";
-                oldBadge.innerHTML = `❌ Schwimm-Nachweis`;
-                oldBadge.style.fontSize = "0.65rem";
-            }
+    /**
+     * 2. Hilfsfunktion: Gesamtpunkte in der Zeile aktualisieren
+     */
+    function updateRowTotal(epId, newTotal) {
+        const badge = document.getElementById(`total-points-${epId}`);
+        if (badge && newTotal !== undefined) {
+            badge.textContent = `${newTotal} Pkt.`;
         }
     }
 
-    // 3. Hilfsfunktion: Gesamtpunkte
-    function updateRowTotal(epId) {
-        const badge = document.getElementById(`total-points-${epId}`);
-        if (!badge) return;
-        let total = 0;
-        document.querySelectorAll(`input[data-ep-id="${epId}"]`).forEach(input => {
-            total += parseInt(input.getAttribute('data-current-points')) || 0;
-        });
-        badge.textContent = `${total} Pkt.`;
-    }
-
-    // EVENT LISTENER
+    /**
+     * EVENT LISTENER für Änderungen
+     */
     form.addEventListener('change', async function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;
@@ -84,38 +47,79 @@ document.addEventListener('DOMContentLoaded', function() {
         const cell = el.closest('td');
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
-        const epId = el.getAttribute('data-ep-id');
+        
+        // WICHTIG: Hier muss das Attribut stehen, das du im Twig nutzt!
+        // Da du im Twig data-participant="{{ p.ep_id }}" nutzt:
+        const epId = el.getAttribute('data-participant'); 
+
+        if (!epId) {
+            console.error("Keine Participant-ID (ep_id) am Element gefunden!");
+            return;
+        }
 
         // Falls Disziplin geleert wurde
         if (!selectEl.value) {
             updateMedalUI(cell, 'none');
-            inputEl.setAttribute('data-current-points', '0');
-            updateRowTotal(epId);
-            updateSwimmingProofLive(epId);
-            return;
+            // Hier müsste man ggf. dem Server sagen, dass der Wert gelöscht wurde
         }
+
+        // Wir nutzen URLSearchParams für einen klassischen POST-Request (vermeidet 400er)
+        const formData = new URLSearchParams();
+        formData.append('ep_id', epId);
+        formData.append('exam_id', examId || ''); 
+        formData.append('discipline_id', selectEl.value);
+        formData.append('leistung', inputEl.value.replace(',', '.'));
+        formData.append('_token', csrfToken);
 
         try {
             const response = await fetch(saveRoute, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({
-                    ep_id: epId,
-                    discipline_id: selectEl.value,
-                    leistung: inputEl.value.replace(',', '.'),
-                    _token: csrfToken
-                })
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest' 
+                },
+                body: formData
             });
 
-            const data = await response.json();
-            if (data.status === 'ok') {
-                updateMedalUI(cell, data.medal);
-                inputEl.setAttribute('data-current-points', data.points || 0);
-                
-                // LIVE UPDATE TRIGGER
-                updateRowTotal(epId);
-                updateSwimmingProofLive(epId); 
+            if (!response.ok) {
+                throw new Error(`Server-Fehler: ${response.status}`);
             }
-        } catch (e) { console.error(e); }
+
+            const data = await response.json();
+            
+            if (data.status === 'ok' || data.success) {
+                // UI Farben aktualisieren
+                updateMedalUI(cell, data.medal);
+                
+                // Punkte-Badge aktualisieren (falls der Server totalPoints mitschickt)
+                if (data.totalPoints !== undefined) {
+                    updateRowTotal(epId, data.totalPoints);
+                }
+                
+                // Kleiner visueller Erfolgshinweis (optional)
+                inputEl.style.outline = "2px solid rgba(40, 167, 69, 0.5)";
+                setTimeout(() => inputEl.style.outline = "none", 1000);
+            } else {
+                console.error("Speichern fehlgeschlagen:", data.message);
+                inputEl.style.outline = "2px solid rgba(220, 53, 69, 0.5)";
+            }
+        } catch (e) { 
+            console.error("Netzwerkfehler beim Autosave:", e);
+            alert("Fehler beim automatischen Speichern. Bitte Verbindung prüfen.");
+        }
+    });
+
+    // Fix für Dropdown-Farben: Wenn das Feld fokusiert wird, Farbe kurz neutralisieren
+    // damit das System-Dropdown (weiß) nicht mit der Medaillenfarbe kollidiert.
+    form.querySelectorAll('select.discipline-selector').forEach(select => {
+        select.addEventListener('focus', function() {
+            this.dataset.oldClass = this.className;
+            this.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+        });
+        select.addEventListener('blur', function() {
+            if (this.dataset.oldClass) {
+                // Die Farbe wird beim Blur (oder nach dem Change durch updateMedalUI) wiederhergestellt
+            }
+        });
     });
 });
