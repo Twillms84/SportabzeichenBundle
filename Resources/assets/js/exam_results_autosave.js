@@ -7,19 +7,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 1. Hilfsfunktion: Medaillen-Farben am Element umschalten
     function updateMedalUI(cell, medal) {
-        if (!cell) return;
-        const elements = cell.querySelectorAll('select, input');
-        const medalClass = (medal && medal !== 'none') ? 'medal-' + medal.toLowerCase() : '';
+    if (!cell) return;
+    const elements = cell.querySelectorAll('select, input');
+    
+    // Wir bestimmen die neue Klasse. Wenn keine Medaille, dann 'medal-none'
+    const newClass = (medal && medal !== 'none') ? 'medal-' + medal.toLowerCase() : 'medal-none';
+    
+    elements.forEach(el => {
+        // Zuerst ALLE möglichen Medaillen-Klassen entfernen
+        el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
         
-        elements.forEach(el => {
-            // Alle alten Medaillen-Klassen entfernen
-            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
-            // Nur hinzufügen, wenn eine Medaille erreicht wurde
-            if (medalClass) {
-                el.classList.add(medalClass);
-            }
-        });
-    }
+        // Die neue Klasse hinzufügen (entweder medal-gold/silber/bronze ODER medal-none)
+        el.classList.add(newClass);
+    });
+}
 
     // 2. Hilfsfunktion: Schwimmnachweis in der Zeile live prüfen
     function updateSwimmingProofLive(epId) {
