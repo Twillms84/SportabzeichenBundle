@@ -13,39 +13,34 @@
 <div class="container-fluid mt-3">
     <h2 class="mb-3">🏅 Ergebnisse: {{ exam.exam_name }}</h2>
 
-    {# Filter-Sektion #}
+    {# Filter #}
     <div class="card mb-3 shadow-sm">
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
-                <div class="col-auto">
-                    <label class="small fw-bold">Klasse:</label>
-                </div>
+                <div class="col-auto"><label class="small fw-bold">Klasse:</label></div>
                 <div class="col-auto">
                     <select name="class" class="form-select form-select-sm w-auto">
                         <option value="">(Alle)</option>
                         {% for c in classes %}
-                            <option value="{{ c.klasse }}" {% if selectedClass == c.klasse %}selected{% endif %}>
-                                {{ c.klasse }}
-                            </option>
+                            <option value="{{ c.klasse }}" {% if selectedClass == c.klasse %}selected{% endif %}>{{ c.klasse }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div class="col-auto">
                     <button type="submit" class="btn btn-sm btn-primary">Filtern</button>
-                    <a href="{{ path('sportabzeichen_results_index', {examId: exam.id}) }}" class="btn btn-sm btn-outline-secondary">
-                        Reset
-                    </a>
+                    <a href="{{ path('sportabzeichen_results_index', {examId: exam.id}) }}" class="btn btn-sm btn-outline-secondary">Reset</a>
                 </div>
             </form>
         </div>
     </div>
 
+    {# Das Formular muss diese IDs und Data-Attribute haben für das JS #}
     <form id="autosave-form" 
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}" 
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
         
         <div class="table-responsive">
-            <table class="table table-striped table-hover table-bordered align-middle table-results-compact">
+            <table class="table table-striped table-hover table-bordered align-middle table-results-compact" id="results-table">
                 <thead class="table-dark">
                     <tr>
                         <th class="col-name">Name (Alter)</th>
@@ -59,17 +54,16 @@
                 </thead>
                 <tbody>
                     {% for p in participants %}
-                        {# 1. Vorberechnungen für diesen Teilnehmer #}
                         {% set epResults = results[p.ep_id] ?? {} %}
                         {% set totalPoints = 0 %}
                         {% set hasSwimmingProof = false %}
                         {% set proofValidUntil = 'unbekannt' %}
                         
+                        {# Vorberechnung Punkte & Schwimmen für Initial-Load #}
                         {% for resId, resData in epResults %}
                             {% if resData.kategorie|default('')|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 {% set totalPoints = totalPoints + (resData.points|default(0)) %}
                             {% endif %}
-                            
                             {% if resData.schwimmnachweis|default(false) and resData.points|default(0) > 0 %}
                                 {% set hasSwimmingProof = true %}
                                 {% if p.age_year < 18 %}
@@ -82,7 +76,6 @@
                         {% endfor %}
 
                         <tr data-ep-id="{{ p.ep_id }}">
-                            {# NAME UND ALTER #}
                             <td class="name-container">
                                 <div class="fw-bold">
                                     {{ p.vorname }} {{ p.nachname }} 
@@ -98,19 +91,17 @@
                                             ❌ Nachweis
                                         </span>
                                     {% endif %}
-                                    <span class="badge bg-info text-dark badge-result fw-bold" id="total-points-{{ p.ep_id }}">
+                                    {# Die ID total-points-XXX ist kritisch für das JS #}
+                                    <span class="badge bg-info text-dark badge-result fw-bold total-points-label" id="total-points-{{ p.ep_id }}">
                                         {{ totalPoints }} Pkt.
                                     </span>
                                 </div>
                             </td>
 
-                            {# NEUE SPALTE: KLASSE #}
                             <td class="text-center fw-bold">{{ p.klasse }}</td>
 
-                            {# DISZIPLINEN-SPALTEN #}
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                    {# Filterung der Disziplinen nach Alter/Geschlecht #}
                                     {% set options = [] %}
                                     {% for d in items %}
                                         {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -118,7 +109,6 @@
                                         {% endif %}
                                     {% endfor %}
 
-                                    {# Status-Variablen initialisieren #}
                                     {% set selectedDiscId = null %}
                                     {% set selectedValue = '' %}
                                     {% set medalClass = 'medal-none' %}
@@ -136,18 +126,27 @@
                                         {% endif %}
                                     {% endfor %}
 
-                                    {# Fallback auf erste Disziplin für die Anforderungs-Vorschau #}
+                                    {# Fallback für Anzeige #}
                                     {% if selectedDiscId is null and options|length > 0 %}
                                         {% set selectedDiscId = options[0].id %}
                                         {% set currentReq = options[0] %}
                                     {% endif %}
 
                                     <td class="p-1 col-discipline text-center">
+                                        {# Das Select braucht die Anforderungen als Data-Attribute für das JS #}
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
-                                                class="form-select discipline-selector mb-1 {{ medalClass }}" data-save>
+                                                class="form-select discipline-selector mb-1 {{ medalClass }}" 
+                                                data-save
+                                                data-participant="{{ p.ep_id }}"
+                                                data-category="{{ category }}">
                                             <option value="">-</option>
                                             {% for d in options %}
-                                                <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %}>
+                                                <option value="{{ d.id }}" 
+                                                        data-bronze="{{ d.bronze }}" 
+                                                        data-silber="{{ d.silber }}" 
+                                                        data-gold="{{ d.gold }}"
+                                                        data-unit="{{ d.einheit }}"
+                                                        {% if selectedDiscId == d.id %}selected{% endif %}>
                                                     {{ d.name }}
                                                 </option>
                                             {% endfor %}
@@ -155,13 +154,15 @@
                                         
                                         <input type="text" 
                                                name="results[{{ p.ep_id }}][{{ category }}][leistung]" 
-                                               class="form-control form-control-custom fw-bold {{ medalClass }}" 
+                                               class="form-control form-control-custom fw-bold leistung-input {{ medalClass }}" 
                                                value="{{ selectedValue }}" 
                                                placeholder="---" 
-                                               data-save>
+                                               data-save
+                                               data-participant="{{ p.ep_id }}"
+                                               data-category="{{ category }}">
                                         
                                         {% if currentReq %}
-                                            <div class="req-hint" title="Mindestwerte für {{ currentReq.name }}">
+                                            <div class="req-hint" id="req-{{ p.ep_id }}-{{ category }}">
                                                 <span class="req-bronze">{{ currentReq.bronze }}</span>
                                                 <span class="req-silber">{{ currentReq.silber }}</span>
                                                 <span class="req-gold">{{ currentReq.gold }}</span>
