@@ -8,7 +8,7 @@
 
 /* Spaltenbreiten */
 .col-name { width: 200px !important; }
-.col-class { width: 40px !important; } /* Neue Spalte für Klasse */
+.col-class { width: 50px !important; } /* Neue Spalte für Klasse */
 .col-discipline { width: 145px !important; }
 
 /* Medaillen-Farben: SEHR spezifisch, damit Bootstrap verliert */

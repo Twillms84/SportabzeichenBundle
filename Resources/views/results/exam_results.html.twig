@@ -104,10 +104,12 @@
                                         data-current-points="{{ resObj.points|default(0) }}">
 
                                     <div class="req-hint">
-                                        {% for d in options if d.id == selectedId %}
-                                            <span title="Bronze" class="r-b">{{ d.bronze }}</span>
-                                            <span title="Silber" class="r-s">{{ d.silber }}</span>
-                                            <span title="Gold" class="r-g">{{ d.gold }}</span>
+                                    {% for d in options %}
+                                            {% if d.id == selectedId %}
+                                                <span title="Bronze" class="r-b">{{ d.bronze }}</span>
+                                                <span title="Silber" class="r-s">{{ d.silber }}</span>
+                                                <span title="Gold" class="r-g">{{ d.gold }}</span>
+                                            {% endif %}
                                         {% endfor %}
                                     </div>
                                 </td>
