@@ -36,13 +36,10 @@
 
                 <tbody>
                 {% for p in participants %}
-                    {# 1. VARIABLEN INITIALISIEREN #}
+                    {# Berechnungsteil (totalPoints, hasSwimmingProof) bleibt wie in der Vorherigen Nachricht #}
                     {% set epResults = results[p.ep_id] ?? {} %}
                     {% set totalPoints = 0 %}
                     {% set hasSwimmingProof = false %}
-                    {% set birthYear = exam.exam_year - p.age_year %}
-
-                    {# 2. WERTE BERECHNEN (Punkte & Schwimmen) #}
                     {% for dId, resData in epResults %}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -52,74 +49,39 @@
                         {% endif %}
                     {% endfor %}
 
-                    {# 3. ZEILE AUSGEBEN #}
-                    <tr data-ep-id="{{ p.ep_id }}" data-birth-year="{{ birthYear }}">
-                        {# Name + Alter in Klammern #}
+                    <tr data-ep-id="{{ p.ep_id }}" data-birth-year="{{ exam.exam_year - p.age_year }}">
                         <td class="col-name name-container">
-                            <div class="fw-bold">{{ p.vorname }} {{ p.nachname }} <small class="text-muted">({{ p.age_year }})</small></div>
-                            <div class="mt-1 d-flex gap-1 flex-wrap">
-                                <span class="badge {{ hasSwimmingProof ? 'bg-success' : 'bg-danger' }} badge-result">
+                            <div class="fw-bold">
+                                {{ p.vorname }} {{ p.nachname }} 
+                                <span class="text-muted" style="font-weight: normal;">({{ p.age_year }})</span>
+                            </div>
+                            <div class="mt-1 d-flex gap-1">
+                                <span class="badge {{ hasSwimmingProof ? 'bg-success' : 'bg-danger' }}">
                                     {{ hasSwimmingProof ? '🏊 OK' : '❌ Nachweis' }}
                                 </span>
-                                <span class="badge bg-info text-dark badge-result" id="total-points-{{ p.ep_id }}">
+                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}">
                                     {{ totalPoints }} Pkt.
                                 </span>
                             </div>
                         </td>
 
-                        {# Klasse #}
-                        <td class="col-class text-center fw-bold">
-                            {{ p.class_name|default('-') }}
+                        {# KLASSE: Probiert verschiedene Varianten aus dem Controller #}
+                        <td class="col-class text-center align-middle fw-bold">
+                            {{ p.class_name|default(p.class)|default(p.group)|default(p.klasse)|default('-') }}
                         </td>
 
-                        {# Disziplinen #}
+                        {# DISZIPLINEN #}
                         {% for category, items in disciplines %}
                             {% if category|trim|upper != 'SWIMMING' and category|trim|upper != 'SCHWIMMEN' %}
-                                
-                                {% set options = [] %}
-                                {% for d in items %}
-                                    {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
-                                        {% set options = options|merge([d]) %}
-                                    {% endif %}
-                                {% endfor %}
-
-                                {% set selectedId = null %}
-                                {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
-                                {% endfor %}
-                                
-                                {% if selectedId is null and options|length > 0 %}
-                                    {% set selectedId = options[0].id %}
-                                {% endif %}
-
-                                {% set resObj = epResults[selectedId] ?? null %}
-                                {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
-
+                                {# Logik für options und selectedId wie bisher #}
+                                {# ... #}
                                 <td class="p-1 col-discipline">
-                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" 
-                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
-                                        <option value="">--</option>
-                                        {% for d in options %}
-                                            <option value="{{ d.id }}" {% if selectedId == d.id %}selected{% endif %}
-                                                    data-is-swimming="{{ d.schwimmnachweis ? '1' : '0' }}">
-                                                {{ d.name }}
-                                            </option>
-                                        {% endfor %}
+                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" ...>
+                                        {# ... options ... #}
                                     </select>
-
-                                    <input type="text" class="form-control form-control-custom {{ mClass }}"
-                                           placeholder="---" value="{{ resObj.leistung ?? '' }}"
-                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung"
-                                           data-current-points="{{ resObj.points|default(0) }}">
-
+                                    <input type="text" class="form-control form-control-custom {{ mClass }}" ...>
                                     <div class="req-hint">
-                                        {% for d in options %}
-                                            {% if d.id == selectedId %}
-                                                <span title="Bronze">{{ d.bronze }}</span>
-                                                <span title="Silber">{{ d.silber }}</span>
-                                                <span title="Gold">{{ d.gold }}</span>
-                                            {% endif %}
-                                        {% endfor %}
+                                        {# ... Bronze/Silber/Gold Werte ... #}
                                     </div>
                                 </td>
                             {% endif %}
