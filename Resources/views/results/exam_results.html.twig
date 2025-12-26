@@ -67,7 +67,7 @@
 
                         {# KLASSE: Probiert verschiedene Varianten aus dem Controller #}
                         <td class="col-class text-center align-middle fw-bold">
-                            {{ p.class_name|default(p.class)|default(p.group)|default(p.klasse)|default('-') }}
+                            {{ p.klasse|default('-') }}
                         </td>
 
                         {# DISZIPLINEN #}
