@@ -34,9 +34,6 @@
         </div>
     </div>
 
-    {# Das Formular muss diese IDs und Data-Attribute haben für das JS #}
-    {# ... (Header/Filter wie gehabt) ... #}
-
     <form id="autosave-form" 
         data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}" 
         data-global-token="{{ csrf_token('sportabzeichen_result_save') }}"
@@ -61,8 +58,9 @@
                             <td class="name-container">
                                 <div class="fw-bold">{{ p.vorname }} {{ p.nachname }} ({{ p.age_year }})</div>
                                 <div class="d-flex gap-1 mt-1">
+                                    {# WICHTIG: Hier p.total_points oder ähnliches nutzen, falls vorhanden #}
                                     <span class="badge bg-info text-dark fw-bold" id="total-points-{{ p.ep_id }}">
-                                        {{ totalPoints|default(0) }} Pkt.
+                                        {{ p.total_points|default(0) }} Pkt.
                                     </span>
                                 </div>
                             </td>
@@ -70,34 +68,36 @@
 
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                    {# 1. VARIABLEN INITIALISIEREN (Verhindert den "does not exist" Fehler) #}
+                                    {# 1. VARIABLEN INITIALISIEREN #}
                                     {% set options = [] %}
                                     {% set selectedDiscId = null %}
                                     {% set selectedValue = '' %}
-                                    {% set medalClass = 'medal-none' %} {# Standardwert #}
+                                    {% set medalClass = 'medal-none' %}
                                     {% set currentReq = null %}
 
-                                    {# 2. Passende Disziplinen für Alter/Geschlecht filtern #}
+                                    {# 2. Disziplinen filtern #}
                                     {% for d in items %}
                                         {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
                                             {% set options = options|merge([d]) %}
                                         {% endif %}
                                     {% endfor %}
 
-                                    {# 3. Bestehendes Ergebnis suchen und Werte/Medaille setzen #}
-                                    {% for d in options %}
-                                        {% if epResults[d.id] is defined %}
-                                            {% set selectedDiscId = d.id %}
-                                            {% set currentReq = d %}
-                                            {% set selectedValue = epResults[d.id].leistung %}
-                                            {% set stufe = epResults[d.id].stufe|default('none')|lower %}
-                                            {% if stufe in ['gold', 'silber', 'bronze'] %}
-                                                {% set medalClass = 'medal-' ~ stufe %}
+                                    {# 3. Ergebnis suchen (Sicherheitscheck mit 'is defined' und 'iterable') #}
+                                    {% if epResults is defined and epResults is iterable %}
+                                        {% for d in options %}
+                                            {% if epResults[d.id] is defined and epResults[d.id] is not null %}
+                                                {% set selectedDiscId = d.id %}
+                                                {% set currentReq = d %}
+                                                {% set selectedValue = epResults[d.id].leistung %}
+                                                {% set stufe = epResults[d.id].stufe|default('none')|lower %}
+                                                {% if stufe in ['gold', 'silber', 'bronze'] %}
+                                                    {% set medalClass = 'medal-' ~ stufe %}
+                                                {% endif %}
                                             {% endif %}
-                                        {% endif %}
-                                    {% endfor %}
+                                        {% endfor %}
+                                    {% endif %}
 
-                                    {# 4. Fallback: Erste Disziplin als Vorauswahl, falls noch nichts gespeichert #}
+                                    {# 4. Fallback auf erste Disziplin #}
                                     {% if selectedDiscId is null and options|length > 0 %}
                                         {% set selectedDiscId = options[0].id %}
                                         {% set currentReq = options[0] %}
@@ -107,14 +107,10 @@
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
                                                 class="form-select discipline-selector mb-1 {{ medalClass }}" 
                                                 data-save
-                                                data-participant="{{ p.ep_id }}"
-                                                data-category="{{ category }}">
+                                                data-participant="{{ p.ep_id }}">
                                             <option value="">-</option>
                                             {% for d in options %}
                                                 <option value="{{ d.id }}" 
-                                                        data-bronze="{{ d.bronze }}" 
-                                                        data-silber="{{ d.silber }}" 
-                                                        data-gold="{{ d.gold }}"
                                                         {% if selectedDiscId == d.id %}selected{% endif %}>
                                                     {{ d.name }}
                                                 </option>
@@ -127,16 +123,7 @@
                                             value="{{ selectedValue }}" 
                                             placeholder="---" 
                                             data-save
-                                            data-participant="{{ p.ep_id }}"
-                                            data-category="{{ category }}">
-                                        
-                                        {% if currentReq %}
-                                            <div class="req-hint" id="req-{{ p.ep_id }}-{{ category }}">
-                                                <span class="req-bronze">{{ currentReq.bronze }}</span>
-                                                <span class="req-silber">{{ currentReq.silber }}</span>
-                                                <span class="req-gold">{{ currentReq.gold }}</span>
-                                            </div>
-                                        {% endif %}
+                                            data-participant="{{ p.ep_id }}">
                                     </td>
                                 {% endif %}
                             {% endfor %}

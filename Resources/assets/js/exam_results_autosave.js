@@ -4,28 +4,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const saveRoute = form.getAttribute('data-global-route');
     const csrfToken = form.getAttribute('data-global-token');
-    // Falls die examId im Formular als data-attribute hinterlegt ist:
     const examId = form.getAttribute('data-exam-id');
 
-    /**
-     * 1. Hilfsfunktion: Medaillen-Farben am Element umschalten
-     */
-    function updateMedalUI(cell, medal) {
-        if (!cell) return;
-        const elements = cell.querySelectorAll('select, input');
-        const medalClass = (medal && medal !== 'none') ? 'medal-' + medal.toLowerCase() : '';
-        
-        elements.forEach(el => {
-            // Alle alten Medaillen-Klassen entfernen
-            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-            // Nur hinzufügen, wenn eine Medaille erreicht wurde
-            if (medalClass) {
-                el.classList.add(medalClass);
+    async function handleSave(event) {
+        const el = event.target;
+        if (!el.hasAttribute('data-save')) return;
+
+        const cell = el.closest('td');
+        const selectEl = cell.querySelector('select');
+        const inputEl = cell.querySelector('input[type="text"]');
+        const epId = el.getAttribute('data-participant');
+
+        if (!epId) return;
+
+        // Visuelles Feedback: "Speichert..."
+        inputEl.style.opacity = "0.5";
+
+        const formData = new FormData();
+        formData.append('ep_id', epId);
+        formData.append('exam_id', examId);
+        formData.append('discipline_id', selectEl.value);
+        formData.append('leistung', inputEl.value.replace(',', '.'));
+        formData.append('_token', csrfToken);
+
+        try {
+            const response = await fetch(saveRoute, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && (result.status === 'ok' || result.success)) {
+                // UI Update
+                updateMedalUI(cell, result.medal);
+                
+                const totalBadge = document.getElementById(`total-points-${epId}`);
+                if (totalBadge && result.totalPoints !== undefined) {
+                    totalBadge.textContent = `${result.totalPoints} Pkt.`;
+                }
+
+                // Erfolg: Kurz grün leuchten
+                inputEl.style.outline = "2px solid green";
+                setTimeout(() => inputEl.style.outline = "none", 1000);
             } else {
-                el.classList.add('medal-none');
+                throw new Error(result.message || 'Speichern fehlgeschlagen');
             }
+        } catch (error) {
+            console.error("Autosave Error Details:", error);
+            inputEl.style.outline = "2px solid red";
+        } finally {
+            inputEl.style.opacity = "1";
+        }
+    }
+
+    function updateMedalUI(cell, medal) {
+        const medalClass = (medal && medal !== 'none') ? 'medal-' + medal.toLowerCase() : 'medal-none';
+        cell.querySelectorAll('select, input').forEach(el => {
+            el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+            el.classList.add(medalClass);
         });
     }
+
+    // Listener registrieren
+    form.addEventListener('change', handleSave);
+});
 
     /**
      * 2. Hilfsfunktion: Gesamtpunkte in der Zeile aktualisieren
@@ -122,4 +166,3 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-});
