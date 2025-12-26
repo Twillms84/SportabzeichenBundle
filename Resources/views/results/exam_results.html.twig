@@ -194,7 +194,7 @@
                                         {% for d in options %}
                                             <option value="{{ d.id }}" 
                                                     {% if selectedDiscId == d.id %}selected{% endif %}
-                                                    data-is-swimming="{{ d.schwimmnachweis ? '1' : '0' }}">
+                                                    data-is-swimming="{{ d.schwimmnachweis|default(0) ? '1' : '0' }}">
                                                 {{ d.name }}
                                             </option>
                                         {% endfor %}
