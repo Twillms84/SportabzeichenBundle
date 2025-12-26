@@ -7,9 +7,9 @@
 }
 
 /* Spaltenbreiten */
-.col-name { width: 220px !important; }
-.col-class { width: 80px !important; } /* Neue Spalte für Klasse */
-.col-discipline { width: 135px !important; }
+.col-name { width: 200px !important; }
+.col-class { width: 40px !important; } /* Neue Spalte für Klasse */
+.col-discipline { width: 145px !important; }
 
 /* Medaillen-Farben: SEHR spezifisch, damit Bootstrap verliert */
 select.medal-gold, input.medal-gold { 
@@ -51,8 +51,7 @@ select.medal-none, input.medal-none {
 }
 
 .req-hint { 
-    font-size: 0.85rem !important; /* Etwas größer */
-    color: #444 !important; 
+    font-size: 0.95rem !important; /* Etwas größer */
     display: flex; 
     justify-content: space-between; 
     padding: 2px 4px;
