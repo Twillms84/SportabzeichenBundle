@@ -69,12 +69,30 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateRowTotal(epId) {
         const badge = document.getElementById(`total-points-${epId}`);
         if (!badge) return;
+
         let total = 0;
-        document.querySelectorAll(`input[data-ep-id="${epId}"]`).forEach(input => {
-            total += parseInt(input.getAttribute('data-current-points')) || 0;
+        // Wir suchen NUR in der Zeile (tr) dieses Teilnehmers
+        const row = document.querySelector(`tr[data-ep-id="${epId}"]`);
+        if (!row) return;
+
+        // Wir summieren nur Inputs, die NICHT zur Kategorie Schwimmen gehören
+        row.querySelectorAll('input[data-type="leistung"]').forEach(input => {
+            const cell = input.closest('td');
+            const select = cell.querySelector('select');
+            const categoryName = select ? select.options[select.selectedIndex].text : '';
+
+            // Falls du Schwimmen im Namen hast, ignorieren wir die Punkte hier
+            if (!categoryName.toLowerCase().includes('schwimm')) {
+                total += parseInt(input.getAttribute('data-current-points')) || 0;
+            }
         });
+
         badge.textContent = `${total} Pkt.`;
-    }
+        
+        // Optisches Feedback für Gold (>= 11), Silber (>= 8), Bronze (>= 4)
+        badge.className = 'badge total-points-badge ' + 
+            (total >= 11 ? 'bg-warning text-dark' : (total >= 8 ? 'bg-secondary' : (total >= 4 ? 'bg-danger' : 'bg-info text-dark')));
+    }           
 
     // EVENT LISTENER
     form.addEventListener('change', async function(event) {

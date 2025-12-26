@@ -1,70 +1,57 @@
 {% extends '@IServCore/page.html.twig' %}
 
 {% block title %}
-    Ergebnisse eingeben – {{ exam.exam_name }} ({{ exam.exam_year }})
+    Ergebnisse – {{ exam.exam_name }} ({{ exam.exam_year }})
 {% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
+    {# Hier binden wir dein CSS ein, falls es in einer Datei liegt, oder fügen es direkt ein #}
     <style>
-        .table-fixed-layout { table-layout: fixed !important; width: 100% !important; }
-        .col-name { width: 260px; }
-        .col-age  { width: 60px; }
-        .col-discipline { width: 165px !important; }
-        .discipline-selector { 
-            width: 100% !important; 
-            text-overflow: ellipsis; 
-            white-space: nowrap; 
-            overflow: hidden; 
-            display: block; 
+        /* Dein bereitgestelltes CSS */
+        .table-results-compact { table-layout: fixed !important; width: 100% !important; font-size: 1rem !important; }
+        .col-name { width: 220px; } 
+        .col-class { width: 70px; }  
+        .col-discipline { width: 130px !important; }
+
+        .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border: 1px solid #b8860b !important; }
+        .medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; }
+        .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; }
+        .medal-none { background-color: unset !important; color: unset !important; font-weight: normal !important; }
+
+        .discipline-selector option { background-color: #fff; color: #000; font-weight: normal; }
+        .discipline-selector, .form-control-custom { font-size: 1rem !important; padding: 4px 4px !important; width: 100% !important; }
+
+        .req-hint { 
+            font-size: 0.9rem !important; font-weight: 700 !important; display: flex; 
+            justify-content: space-between; padding: 2px 6px 0 6px; margin-top: 2px; border-top: 1px solid #eee;
         }
-        .req-hint { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
-        .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border-color: #b8860b !important; }
-        .medal-silber { background-color: #c0c0c0 !important; color: #000 !important; border-color: #808080 !important; }
-        .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border-color: #8b4513 !important; }
-        .swim-badge { transition: all 0.3s ease; font-size: 0.65rem; }
+        .req-bronze { color: #8b4513 !important; }
+        .req-silber { color: #666 !important; }
+        .req-gold   { color: #a67c00 !important; }
+
+        .badge-result { cursor: help; font-size: 0.85rem; padding: 5px 7px; }
     </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🏅 Ergebnisse – {{ exam.exam_name }}</h2>
-        <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary">Zurück</a>
+        <h2>🏅 {{ exam.exam_name }}</h2>
+        <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
     </div>
 
-    {# Filter-Sektion #}
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-            <form method="get" class="row g-3 align-items-center">
-                <div class="col-auto"><label class="fw-bold">Klasse:</label></div>
-                <div class="col-auto">
-                    <select name="class" class="form-select w-auto">
-                        <option value="">(Alle)</option>
-                        {% for c in classes %}
-                            <option value="{{ c.klasse }}" {% if selectedClass == c.klasse %}selected{% endif %}>{{ c.klasse }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Filtern</button>
-                    <a href="{{ path('sportabzeichen_results_index', {examId: exam.id}) }}" class="btn btn-outline-secondary">Reset</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {# Formular für Autosave - JS nutzt data-global-route und data-global-token #}
     <form id="autosave-form" 
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
 
         <div class="table-responsive shadow-sm">
-            <table class="table table-striped table-hover table-bordered align-middle table-fixed-layout bg-white">
+            {# Nutzt jetzt .table-results-compact aus deinem CSS #}
+            <table class="table table-hover table-bordered align-middle table-results-compact bg-white">
                 <thead class="table-light text-center">
                     <tr>
-                        <th class="col-name text-start">Name & Nachweise</th>
-                        <th class="col-age">Alter</th>
+                        <th class="col-name text-start">Teilnehmer</th>
+                        <th class="col-class text-center">Alter</th>
                         {% for category, items in disciplines %}
                             {% if category|trim|upper != 'SWIMMING' and category|trim|upper != 'SCHWIMMEN' %}
                                 <th class="col-discipline">{{ category }}</th>
@@ -80,7 +67,7 @@
                     {% set hasSwimmingProof = false %}
                     {% set birthYear = exam.exam_year - p.age_year %}
 
-                    {# Vorberechnung für Punkte & Schwimm-Badge beim Laden #}
+                    {# Vorberechnung für Badges & Punkte #}
                     {% for dId, resData in epResults %}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -90,24 +77,20 @@
                         {% endif %}
                     {% endfor %}
 
-                    {# JS benötigt data-ep-id und data-birth-year am tr #}
                     <tr data-ep-id="{{ p.ep_id }}" data-birth-year="{{ birthYear }}">
                         <td>
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
                             <div class="my-1 d-flex flex-wrap gap-1">
-                                {# Badge-Container für JS-Funktion updateSwimmingProofLive #}
                                 {% if hasSwimmingProof %}
                                     {% set validity = (p.age_year < 18) ? (birthYear + 18) : (exam.exam_year + 5) %}
-                                    <span class="badge bg-success swim-badge">🏊 bis {{ validity }}</span>
+                                    <span class="badge bg-success badge-result">🏊 bis {{ validity }}</span>
                                 {% else %}
-                                    <span class="badge bg-danger swim-badge">❌ Schwimm-Nachweis</span>
+                                    <span class="badge bg-danger badge-result">❌ Nachweis</span>
                                 {% endif %}
-                                
-                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}" style="font-size: 0.65rem;">
+                                <span class="badge bg-info text-dark badge-result" id="total-points-{{ p.ep_id }}">
                                     {{ totalPoints }} Pkt.
                                 </span>
                             </div>
-                            <small class="text-muted">{{ p.klasse }}</small>
                         </td>
 
                         <td class="text-center">{{ p.age_year }}</td>
@@ -121,47 +104,42 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Korrigierte Logik für selectedDiscId #}
-                                {% set selectedDiscId = null %}
+                                {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}
-                                        {% set selectedDiscId = d.id %}
-                                    {% endif %}
+                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
                                 {% endfor %}
-                                
-                                {% if selectedDiscId is null and options|length > 0 %}
-                                    {% set selectedDiscId = options[0].id %}
+                                {% if selectedId is null and options|length > 0 %}
+                                    {% set selectedId = options[0].id %}
                                 {% endif %}
 
-                                {% set resObj = epResults[selectedDiscId] ?? null %}
-                                {% set medalClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : '' %}
+                                {% set resObj = epResults[selectedId] ?? null %}
+                                {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
-                                <td class="p-2 col-discipline text-center">
-                                    {# JS benötigt data-save, data-ep-id, data-type #}
-                                    <select class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}" 
+                                <td class="p-1 col-discipline text-center">
+                                    {# Select mit .discipline-selector #}
+                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" 
                                             data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
                                         <option value="">(keine)</option>
                                         {% for d in options %}
-                                            <option value="{{ d.id }}" 
-                                                    {% if selectedDiscId == d.id %}selected{% endif %}
+                                            <option value="{{ d.id }}" {% if selectedId == d.id %}selected{% endif %}
                                                     data-is-swimming="{{ d.schwimmnachweis ? '1' : '0' }}">
                                                 {{ d.name }}
                                             </option>
                                         {% endfor %}
                                     </select>
 
-                                    <input type="text" class="form-control form-control-sm text-center fw-bold {{ medalClass }}"
+                                    {# Input mit .form-control-custom #}
+                                    <input type="text" class="form-control form-control-custom text-center fw-bold {{ mClass }}"
                                            placeholder="---" value="{{ resObj.leistung ?? '' }}"
                                            data-save data-ep-id="{{ p.ep_id }}" data-type="leistung"
                                            data-current-points="{{ resObj.points|default(0) }}">
 
-                                    <div class="req-hint d-flex justify-content-center gap-1 mt-1">
-                                        {% for d in options %}
-                                            {% if d.id == selectedDiscId %}
-                                                <span class="badge border" style="background-color:#cd7f32; color:white" title="Bronze">{{ d.bronze }}</span>
-                                                <span class="badge border bg-light text-dark" title="Silber">{{ d.silber }}</span>
-                                                <span class="badge border bg-warning text-dark" title="Gold">{{ d.gold }}</span>
-                                            {% endif %}
+                                    {# Anforderungs-Werte mit deinen neuen Klassen #}
+                                    <div class="req-hint">
+                                        {% for d in options if d.id == selectedId %}
+                                            <span class="req-bronze" title="Bronze">{{ d.bronze }}</span>
+                                            <span class="req-silber" title="Silber">{{ d.silber }}</span>
+                                            <span class="req-gold" title="Gold">{{ d.gold }}</span>
                                         {% endfor %}
                                     </div>
                                 </td>
