@@ -5,7 +5,6 @@
     font-size: 1rem !important;
 }
 
-/* Neue Spaltenkonfiguration */
 .col-name { width: 220px; } 
 .col-class { width: 70px; }  
 .col-discipline { width: 130px !important; }
@@ -15,21 +14,9 @@
 .medal-silber { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #a0a0a0 !important; }
 .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border: 1px solid #8b4513 !important; }
 
-/* IServ Standard für leere Felder (Entfernt alle Farberzwingungen) */
-.medal-none { 
-    background-color: unset !important; 
-    color: unset !important;
-    font-weight: normal !important;
-}
+/* KEINE Definition für medal-none -> Damit greift der IServ-Standard automatisch! */
 
-/* Verhindert, dass die ausgeklappte Liste die Medaillenfarbe übernimmt */
-.discipline-selector option {
-    background-color: #fff; /* Oder die Standard-Hintergrundfarbe von IServ */
-    color: #000;
-    font-weight: normal;
-}
-
-/* Eingabefelder Layout */
+/* Form-Elemente */
 .discipline-selector, 
 .form-control-custom {
     font-size: 1rem !important;
@@ -37,7 +24,7 @@
     width: 100% !important;
 }
 
-/* Mindestwerte (Anforderungen) */
+/* Anforderungen (Mindestwerte) */
 .req-hint { 
     font-size: 0.9rem !important;
     font-weight: 700 !important;
