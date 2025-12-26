@@ -36,12 +36,11 @@
 
     {# Das Formular muss diese IDs und Data-Attribute haben für das JS #}
     <form id="autosave-form" 
-        data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}" 
-        data-global-token="{{ csrf_token('sportabzeichen_result_save') }}"
-        data-exam-id="{{ exam.id }}"> {# Wichtig für den Controller! #}
+          data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}" 
+          data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
         
         <div class="table-responsive">
-            <table class="table table-striped table-hover table-bordered align-middle table-results-compact">
+            <table class="table table-striped table-hover table-bordered align-middle table-results-compact" id="results-table">
                 <thead class="table-dark">
                     <tr>
                         <th class="col-name">Name (Alter)</th>
@@ -55,21 +54,55 @@
                 </thead>
                 <tbody>
                     {% for p in participants %}
+                        {# Vorberechnungen für diesen Teilnehmer #}
                         {% set epResults = results[p.ep_id] ?? {} %}
                         {% set totalPoints = 0 %}
-                        {# ... (Vorberechnung Punkte/Schwimmen) ... #}
+                        {% set hasSwimmingProof = false %}
+                        {% set proofValidUntil = 'unbekannt' %}
+                        
+                        {% for resId, resData in epResults %}
+                            {% if resData.kategorie|default('')|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                                {% set totalPoints = totalPoints + (resData.points|default(0)) %}
+                            {% endif %}
+                            {% if resData.schwimmnachweis|default(false) and resData.points|default(0) > 0 %}
+                                {% set hasSwimmingProof = true %}
+                                {% if p.age_year < 18 %}
+                                    {% set birthYear = exam.exam_year - p.age_year %}
+                                    {% set proofValidUntil = birthYear + 18 %}
+                                {% else %}
+                                    {% set proofValidUntil = exam.exam_year + 5 %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
 
                         <tr data-ep-id="{{ p.ep_id }}">
-                            <td>
-                                <div class="fw-bold">{{ p.vorname }} {{ p.nachname }} <span class="text-muted fw-normal">({{ p.age_year }})</span></div>
-                                <div class="mt-1">
-                                    <span class="badge bg-info text-dark fw-bold" id="total-points-{{ p.ep_id }}">{{ totalPoints }} Pkt.</span>
+                            <td class="name-container">
+                                <div class="fw-bold">
+                                    {{ p.vorname }} {{ p.nachname }} 
+                                    <span class="text-muted fw-normal">({{ p.age_year }})</span>
+                                </div>
+                                <div class="d-flex gap-1 mt-1">
+                                    {% if hasSwimmingProof %}
+                                        <span class="badge bg-success badge-result" title="Gültiger Nachweis vorhanden bis {{ proofValidUntil }}">
+                                            🏊 {{ proofValidUntil }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger badge-result" title="Kein Nachweis vorhanden/abgelaufen">
+                                            ❌ Nachweis
+                                        </span>
+                                    {% endif %}
+                                    {# WICHTIG: Die ID muss so bleiben für das Autosave-JS #}
+                                    <span class="badge bg-info text-dark badge-result fw-bold" id="total-points-{{ p.ep_id }}">
+                                        {{ totalPoints }} Pkt.
+                                    </span>
                                 </div>
                             </td>
+
                             <td class="text-center fw-bold">{{ p.klasse }}</td>
 
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                                    {# Filterung #}
                                     {% set options = [] %}
                                     {% for d in items %}
                                         {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -77,9 +110,10 @@
                                         {% endif %}
                                     {% endfor %}
 
+                                    {# Status ermitteln #}
                                     {% set selectedDiscId = null %}
                                     {% set selectedValue = '' %}
-                                    {% set medalClass = '' %}
+                                    {% set medalClass = '' %} {# Standardmäßig leer für IServ-Look #}
                                     {% set currentReq = null %}
 
                                     {% for d in options %}
@@ -100,7 +134,7 @@
                                     {% endif %}
 
                                     <td class="p-1 col-discipline text-center">
-                                        {# Das 'name' Attribut ist oft entscheidend für den 400er Fehler #}
+                                        {# SELECT mit allen nötigen Attributen für das JS #}
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
                                                 class="form-select discipline-selector mb-1 {{ medalClass }}" 
                                                 data-save 
@@ -118,10 +152,12 @@
                                             {% endfor %}
                                         </select>
                                         
+                                        {# INPUT mit Attributen für Autosave #}
                                         <input type="text" 
                                             name="results[{{ p.ep_id }}][{{ category }}][leistung]" 
                                             class="form-control form-control-custom fw-bold {{ medalClass }}" 
                                             value="{{ selectedValue }}" 
+                                            placeholder="---" 
                                             data-save
                                             data-participant="{{ p.ep_id }}" 
                                             data-category="{{ category }}">
