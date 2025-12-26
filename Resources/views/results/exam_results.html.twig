@@ -7,7 +7,7 @@
 {% block stylesheets %}
     {{ parent() }}
     <style>
-        /* DEIN CSS - DIREKT ÜBERNOMMEN */
+        /* DEIN AKTUELLSTES CSS */
         .table-results-compact {
             table-layout: fixed !important;
             width: 100% !important;
@@ -71,7 +71,6 @@
                         <th class="col-name text-start">Teilnehmer</th>
                         <th class="col-age">Alter</th>
                         {% for category, items in disciplines %}
-                            {# Filtere Schwimmen aus der Haupttabelle #}
                             {% if category|trim|upper != 'SWIMMING' and category|trim|upper != 'SCHWIMMEN' %}
                                 <th class="col-discipline">{{ category }}</th>
                             {% endif %}
@@ -86,7 +85,7 @@
                     {% set hasSwimmingProof = false %}
                     {% set birthYear = exam.exam_year - p.age_year %}
 
-                    {# Vorberechnung für Punkte & Nachweis-Status #}
+                    {# Berechnung der Punkte für die Initialanzeige #}
                     {% for dId, resData in epResults %}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -114,7 +113,6 @@
                         {% for category, items in disciplines %}
                             {% if category|trim|upper != 'SWIMMING' and category|trim|upper != 'SCHWIMMEN' %}
                                 
-                                {# Nur Disziplinen finden, die zum Alter/Geschlecht passen #}
                                 {% set options = [] %}
                                 {% for d in items %}
                                     {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -122,18 +120,17 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Welche Disziplin ist aktuell gespeichert? #}
                                 {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
+                                    {% if epResults[d.id] is defined %}
+                                        {% set selectedId = d.id %}
+                                    {% endif %}
                                 {% endfor %}
                                 
-                                {# Default auf erste Option falls nichts gespeichert #}
                                 {% if selectedId is null and options|length > 0 %}
                                     {% set selectedId = options[0].id %}
                                 {% endif %}
 
-                                {# Medaillen-Klasse bestimmen #}
                                 {% set resObj = epResults[selectedId] ?? null %}
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
@@ -155,10 +152,13 @@
                                            data-current-points="{{ resObj.points|default(0) }}">
 
                                     <div class="req-hint">
-                                        {% for d in options if d.id == selectedId %}
-                                            <span title="Bronze">{{ d.bronze }}</span>
-                                            <span title="Silber">{{ d.silber }}</span>
-                                            <span title="Gold">{{ d.gold }}</span>
+                                        {# FIX: Hier lag der Syntax-Fehler (if innerhalb des for-tags) #}
+                                        {% for d in options %}
+                                            {% if d.id == selectedId %}
+                                                <span title="Bronze">{{ d.bronze }}</span>
+                                                <span title="Silber">{{ d.silber }}</span>
+                                                <span title="Gold">{{ d.gold }}</span>
+                                            {% endif %}
                                         {% endfor %}
                                     </div>
                                 </td>
