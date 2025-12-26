@@ -162,9 +162,25 @@ final class ExamResultController extends AbstractPageController
         $results = [];
         if (!empty($epIds)) {
             $resultsRaw = $conn->fetchAllAssociative("
-                SELECT ep_id, discipline_id, leistung, points, stufe 
-                FROM sportabzeichen_exam_results
-                WHERE ep_id IN (?)
+                SELECT 
+                    res.ep_id, 
+                    res.discipline_id, 
+                    res.leistung, 
+                    res.points, 
+                    res.stufe,
+                    req.schwimmnachweis,
+                    d.kategorie
+                FROM sportabzeichen_exam_results res
+                JOIN sportabzeichen_exam_participants ep ON ep.id = res.ep_id
+                JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
+                JOIN sportabzeichen_requirements req ON req.discipline_id = res.discipline_id 
+                    AND req.jahr = ex.exam_year
+                    AND req.geschlecht = (
+                        CASE WHEN EXISTS (SELECT 1 FROM sportabzeichen_participants p WHERE p.id = ep.participant_id AND p.geschlecht ILIKE 'm%') 
+                        THEN 'MALE' ELSE 'FEMALE' END
+                    )
+                WHERE res.ep_id IN (?)
             ", [$epIds], [Connection::PARAM_INT_ARRAY]);
 
             foreach ($resultsRaw as $r) {
