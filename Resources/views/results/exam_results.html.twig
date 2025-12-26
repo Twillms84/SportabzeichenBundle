@@ -7,15 +7,10 @@
 {% block stylesheets %}
     {{ parent() }}
     <style>
-        /* Tabellen-Architektur fixieren */
         .table-fixed-layout { table-layout: fixed !important; width: 100% !important; }
-
-        /* Spaltenbreiten */
         .col-name { width: 260px; }
         .col-age  { width: 60px; }
         .col-discipline { width: 165px !important; }
-
-        /* Dropdowns & Inputs */
         .discipline-selector { 
             width: 100% !important; 
             text-overflow: ellipsis; 
@@ -23,16 +18,10 @@
             overflow: hidden; 
             display: block; 
         }
-        
         .req-hint { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
-        .total-points-badge { font-size: 0.75rem; font-weight: bold; }
-
-        /* Medaillen-Farben */
         .medal-gold   { background-color: #ffd700 !important; color: #000 !important; border-color: #b8860b !important; }
         .medal-silber { background-color: #c0c0c0 !important; color: #000 !important; border-color: #808080 !important; }
         .medal-bronze { background-color: #cd7f32 !important; color: #fff !important; border-color: #8b4513 !important; }
-
-        .name-container { white-space: normal; word-wrap: break-word; }
         .swim-badge { transition: all 0.3s ease; font-size: 0.65rem; }
     </style>
 {% endblock %}
@@ -40,8 +29,8 @@
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>🏅 Ergebnisse eingeben – {{ exam.exam_name }}</h2>
-        <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary">Zurück zur Übersicht</a>
+        <h2>🏅 Ergebnisse – {{ exam.exam_name }}</h2>
+        <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary">Zurück</a>
     </div>
 
     {# Filter-Sektion #}
@@ -65,7 +54,7 @@
         </div>
     </div>
 
-    {# Hauptformular für Autosave #}
+    {# Formular für Autosave - JS nutzt data-global-route und data-global-token #}
     <form id="autosave-form" 
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
@@ -89,38 +78,32 @@
                     {% set epResults = results[p.ep_id] ?? {} %}
                     {% set totalPoints = 0 %}
                     {% set hasSwimmingProof = false %}
-                    {% set proofValidUntil = null %}
+                    {% set birthYear = exam.exam_year - p.age_year %}
 
-                    {# VORBERECHNUNG: Punkte & Schwimmstatus #}
+                    {# Vorberechnung für Punkte & Schwimm-Badge beim Laden #}
                     {% for dId, resData in epResults %}
-                        {# Punkte summieren (außer Schwimm-Disziplinen) #}
                         {% if resData.kategorie|default('')|trim|upper != 'SWIMMING' and resData.kategorie|default('')|trim|upper != 'SCHWIMMEN' %}
                             {% set totalPoints = totalPoints + (resData.points|default(0)) %}
                         {% endif %}
-
-                        {# Schwimm-Nachweis Check #}
                         {% if resData.schwimmnachweis|default(false) and resData.points|default(0) > 0 %}
                             {% set hasSwimmingProof = true %}
-                            {% if p.age_year < 18 %}
-                                {% set proofValidUntil = (exam.exam_year - p.age_year) + 18 %}
-                            {% else %}
-                                {% set proofValidUntil = exam.exam_year + 5 %}
-                            {% endif %}
                         {% endif %}
                     {% endfor %}
 
-                    <tr data-ep-id="{{ p.ep_id }}">
-                        <td class="name-container">
+                    {# JS benötigt data-ep-id und data-birth-year am tr #}
+                    <tr data-ep-id="{{ p.ep_id }}" data-birth-year="{{ birthYear }}">
+                        <td>
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
                             <div class="my-1 d-flex flex-wrap gap-1">
-                                <span class="badge {{ hasSwimmingProof ? 'bg-success' : 'bg-danger' }} swim-badge" id="swim-badge-{{ p.ep_id }}">
-                                    {% if hasSwimmingProof %}
-                                        🏊 bis {{ proofValidUntil }}
-                                    {% else %}
-                                        ❌ Schwimm-Nachweis
-                                    {% endif %}
-                                </span>
-                                <span class="badge bg-info text-dark total-points-badge" id="total-points-{{ p.ep_id }}">
+                                {# Badge-Container für JS-Funktion updateSwimmingProofLive #}
+                                {% if hasSwimmingProof %}
+                                    {% set validity = (p.age_year < 18) ? (birthYear + 18) : (exam.exam_year + 5) %}
+                                    <span class="badge bg-success swim-badge">🏊 bis {{ validity }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger swim-badge">❌ Schwimm-Nachweis</span>
+                                {% endif %}
+                                
+                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}" style="font-size: 0.65rem;">
                                     {{ totalPoints }} Pkt.
                                 </span>
                             </div>
@@ -138,21 +121,29 @@
                                     {% endif %}
                                 {% endfor %}
 
+                                {# Korrigierte Logik für selectedDiscId #}
                                 {% set selectedDiscId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedDiscId = d.id %}{% endif %}
-                                endfor %}
+                                    {% if epResults[d.id] is defined %}
+                                        {% set selectedDiscId = d.id %}
+                                    {% endif %}
+                                {% endfor %}
+                                
                                 {% if selectedDiscId is null and options|length > 0 %}
                                     {% set selectedDiscId = options[0].id %}
                                 {% endif %}
 
                                 {% set resObj = epResults[selectedDiscId] ?? null %}
-                                {% set medalClass = resObj and resObj.stufe|lower in ['gold','silber','bronze'] ? 'medal-' ~ resObj.stufe|lower : '' %}
+                                {% set medalClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : '' %}
 
                                 <td class="p-2 col-discipline text-center">
-                                    <select class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}" data-type="discipline">
+                                    {# JS benötigt data-save, data-ep-id, data-type #}
+                                    <select class="form-select form-select-sm discipline-selector mb-1 {{ medalClass }}" 
+                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
+                                        <option value="">(keine)</option>
                                         {% for d in options %}
-                                            <option value="{{ d.id }}" {% if selectedDiscId == d.id %}selected{% endif %} 
+                                            <option value="{{ d.id }}" 
+                                                    {% if selectedDiscId == d.id %}selected{% endif %}
                                                     data-is-swimming="{{ d.schwimmnachweis ? '1' : '0' }}">
                                                 {{ d.name }}
                                             </option>
@@ -161,14 +152,16 @@
 
                                     <input type="text" class="form-control form-control-sm text-center fw-bold {{ medalClass }}"
                                            placeholder="---" value="{{ resObj.leistung ?? '' }}"
-                                           data-type="leistung" data-ep-id="{{ p.ep_id }}"
+                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung"
                                            data-current-points="{{ resObj.points|default(0) }}">
 
                                     <div class="req-hint d-flex justify-content-center gap-1 mt-1">
-                                        {% for d in options if d.id == selectedDiscId %}
-                                            <span class="badge border" style="background-color:#cd7f32; color:white" title="Bronze">{{ d.bronze }}</span>
-                                            <span class="badge border bg-light text-dark" title="Silber">{{ d.silber }}</span>
-                                            <span class="badge border bg-warning text-dark" title="Gold">{{ d.gold }}</span>
+                                        {% for d in options %}
+                                            {% if d.id == selectedDiscId %}
+                                                <span class="badge border" style="background-color:#cd7f32; color:white" title="Bronze">{{ d.bronze }}</span>
+                                                <span class="badge border bg-light text-dark" title="Silber">{{ d.silber }}</span>
+                                                <span class="badge border bg-warning text-dark" title="Gold">{{ d.gold }}</span>
+                                            {% endif %}
                                         {% endfor %}
                                     </div>
                                 </td>
