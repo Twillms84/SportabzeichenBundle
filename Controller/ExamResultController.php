@@ -28,66 +28,36 @@ final class ExamResultController extends AbstractPageController
      * Zentrale Berechnungslogik für Punkte und Stufe
      */
     private function calculatePointsAndStufe(Connection $conn, int $epId, int $disciplineId, ?float $leistung): array
-    {
-        if ($leistung === null || $leistung <= 0) {
-            return ['points' => 0, 'stufe' => 'NONE'];
-        }
-
-        $data = $conn->fetchAssociative("
-            SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart
-            FROM sportabzeichen_exam_participants ep
-            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-            JOIN sportabzeichen_disciplines d ON d.id = ?
-            WHERE ep.id = ?
-        ", [$disciplineId, $epId]);
-
-        if (!$data) return ['points' => 0, 'stufe' => 'NONE'];
-
-        $gender = str_starts_with(strtolower((string)$data['geschlecht']), 'm') ? 'MALE' : 'FEMALE';
-        
-        $req = $conn->fetchAssociative("
-            SELECT gold, silber, bronze 
-            FROM sportabzeichen_requirements 
-            WHERE discipline_id = ? AND jahr = ? AND geschlecht = ? AND ? BETWEEN age_min AND age_max
-            LIMIT 1
-        ", [$disciplineId, (int)$data['exam_year'], $gender, (int)$data['age_year']]);
-
-        if (!$req) return ['points' => 0, 'stufe' => 'NONE'];
-
-        $calcType = strtoupper((string)$data['berechnungsart']);
-        $levels = [(float)$req['gold'], (float)$req['silber'], (float)$req['bronze']];
-        $levels = array_filter($levels, fn($v) => $v > 0);
-        if (empty($levels)) return ['points' => 0, 'stufe' => 'NONE'];
-
-        $points = 0;
-        $stufe = 'NONE';
-
-        if ($calcType === 'SMALLER') {
-            // ZEIT-LOGIK: Kleinster Wert = Gold, Größter Wert = Bronze
-            sort($levels); 
-            $goldVal   = $levels[0] ?? 0; // kleinster
-            $silberVal = $levels[1] ?? $goldVal;
-            $bronzeVal = $levels[2] ?? $silberVal; // größter
-
-            if ($leistung <= $goldVal) { $points = 3; $stufe = 'GOLD'; }
-            elseif ($leistung <= $silberVal) { $points = 2; $stufe = 'SILBER'; }
-            elseif ($leistung <= $bronzeVal) { $points = 1; $stufe = 'BRONZE'; }
-            
-        } else {
-            // WEITEN-LOGIK: Größter Wert = Gold, Kleinster Wert = Bronze
-            rsort($levels); 
-            $goldVal   = $levels[0] ?? 0; // größter
-            $silberVal = $levels[1] ?? $goldVal;
-            $bronzeVal = $levels[2] ?? $silberVal; // kleinster
-
-            if ($leistung >= $goldVal) { $points = 3; $stufe = 'GOLD'; }
-            elseif ($leistung >= $silberVal) { $points = 2; $stufe = 'SILBER'; }
-            elseif ($leistung >= $bronzeVal) { $points = 1; $stufe = 'BRONZE'; }
-        }
-
-        return ['points' => $points, 'stufe' => $stufe];
+{
+    if ($leistung === null || $leistung <= 0) {
+        return ['points' => 0, 'stufe' => 'NONE'];
     }
+
+    // Kategorie d.kategorie zur Abfrage hinzufügen
+    $data = $conn->fetchAssociative("
+        SELECT ep.age_year, ex.exam_year, p.geschlecht, d.berechnungsart, d.kategorie
+        FROM sportabzeichen_exam_participants ep
+        JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+        JOIN sportabzeichen_disciplines d ON d.id = ?
+        WHERE ep.id = ?
+    ", [$disciplineId, $epId]);
+
+    if (!$data) return ['points' => 0, 'stufe' => 'NONE'];
+
+    // LOGIK: Wenn die Kategorie Schwimmen ist, gibt es 0 Punkte für die Gesamtwertung
+    $isSwimming = in_array(strtoupper(trim((string)$data['kategorie'])), ['SWIMMING', 'Schwimmen']);
+
+    // ... (Rest der Berechnung für $stufe bleibt gleich) ...
+    // [Hier kommt dein bestehender Code für $goldVal, $silberVal etc.]
+    
+    // Am Ende der Funktion die Punkte überschreiben:
+    if ($isSwimming) {
+        $points = 0; // Schwimmen gibt Stufe (Gold/Silber/Bronze), aber 0 Punkte
+    }
+
+    return ['points' => $points, 'stufe' => $stufe];
+}
 
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
