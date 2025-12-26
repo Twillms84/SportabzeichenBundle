@@ -54,12 +54,12 @@
                 </thead>
                 <tbody>
                     {% for p in participants %}
+                        {# Vorberechnungen für diesen Teilnehmer #}
                         {% set epResults = results[p.ep_id] ?? {} %}
                         {% set totalPoints = 0 %}
                         {% set hasSwimmingProof = false %}
                         {% set proofValidUntil = 'unbekannt' %}
                         
-                        {# Vorberechnung Punkte & Schwimmen für Initial-Load #}
                         {% for resId, resData in epResults %}
                             {% if resData.kategorie|default('')|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 {% set totalPoints = totalPoints + (resData.points|default(0)) %}
@@ -83,16 +83,16 @@
                                 </div>
                                 <div class="d-flex gap-1 mt-1">
                                     {% if hasSwimmingProof %}
-                                        <span class="badge bg-success badge-result" title="Gültig bis {{ proofValidUntil }}">
+                                        <span class="badge bg-success badge-result" title="Gültiger Nachweis vorhanden bis {{ proofValidUntil }}">
                                             🏊 {{ proofValidUntil }}
                                         </span>
                                     {% else %}
-                                        <span class="badge bg-danger badge-result" title="Nachweis fehlt">
+                                        <span class="badge bg-danger badge-result" title="Kein Nachweis vorhanden/abgelaufen">
                                             ❌ Nachweis
                                         </span>
                                     {% endif %}
-                                    {# Die ID total-points-XXX ist kritisch für das JS #}
-                                    <span class="badge bg-info text-dark badge-result fw-bold total-points-label" id="total-points-{{ p.ep_id }}">
+                                    {# WICHTIG: Die ID muss so bleiben für das Autosave-JS #}
+                                    <span class="badge bg-info text-dark badge-result fw-bold" id="total-points-{{ p.ep_id }}">
                                         {{ totalPoints }} Pkt.
                                     </span>
                                 </div>
@@ -102,6 +102,7 @@
 
                             {% for category, items in disciplines %}
                                 {% if category|trim|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                                    {# Filterung #}
                                     {% set options = [] %}
                                     {% for d in items %}
                                         {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
@@ -109,9 +110,10 @@
                                         {% endif %}
                                     {% endfor %}
 
+                                    {# Status ermitteln #}
                                     {% set selectedDiscId = null %}
                                     {% set selectedValue = '' %}
-                                    {% set medalClass = 'medal-none' %}
+                                    {% set medalClass = '' %} {# Standardmäßig leer für IServ-Look #}
                                     {% set currentReq = null %}
 
                                     {% for d in options %}
@@ -119,25 +121,24 @@
                                             {% set selectedDiscId = d.id %}
                                             {% set currentReq = d %}
                                             {% set selectedValue = epResults[d.id].leistung %}
-                                            {% set stufe = epResults[d.id].stufe|default('none')|lower %}
+                                            {% set stufe = epResults[d.id].stufe|default('')|lower %}
                                             {% if stufe in ['gold', 'silber', 'bronze'] %}
                                                 {% set medalClass = 'medal-' ~ stufe %}
                                             {% endif %}
                                         {% endif %}
                                     {% endfor %}
 
-                                    {# Fallback für Anzeige #}
                                     {% if selectedDiscId is null and options|length > 0 %}
                                         {% set selectedDiscId = options[0].id %}
                                         {% set currentReq = options[0] %}
                                     {% endif %}
 
                                     <td class="p-1 col-discipline text-center">
-                                        {# Das Select braucht die Anforderungen als Data-Attribute für das JS #}
+                                        {# SELECT mit allen nötigen Attributen für das JS #}
                                         <select name="results[{{ p.ep_id }}][{{ category }}][discipline]" 
                                                 class="form-select discipline-selector mb-1 {{ medalClass }}" 
-                                                data-save
-                                                data-participant="{{ p.ep_id }}"
+                                                data-save 
+                                                data-participant="{{ p.ep_id }}" 
                                                 data-category="{{ category }}">
                                             <option value="">-</option>
                                             {% for d in options %}
@@ -145,21 +146,21 @@
                                                         data-bronze="{{ d.bronze }}" 
                                                         data-silber="{{ d.silber }}" 
                                                         data-gold="{{ d.gold }}"
-                                                        data-unit="{{ d.einheit }}"
                                                         {% if selectedDiscId == d.id %}selected{% endif %}>
                                                     {{ d.name }}
                                                 </option>
                                             {% endfor %}
                                         </select>
                                         
+                                        {# INPUT mit Attributen für Autosave #}
                                         <input type="text" 
-                                               name="results[{{ p.ep_id }}][{{ category }}][leistung]" 
-                                               class="form-control form-control-custom fw-bold leistung-input {{ medalClass }}" 
-                                               value="{{ selectedValue }}" 
-                                               placeholder="---" 
-                                               data-save
-                                               data-participant="{{ p.ep_id }}"
-                                               data-category="{{ category }}">
+                                            name="results[{{ p.ep_id }}][{{ category }}][leistung]" 
+                                            class="form-control form-control-custom fw-bold {{ medalClass }}" 
+                                            value="{{ selectedValue }}" 
+                                            placeholder="---" 
+                                            data-save
+                                            data-participant="{{ p.ep_id }}" 
+                                            data-category="{{ category }}">
                                         
                                         {% if currentReq %}
                                             <div class="req-hint" id="req-{{ p.ep_id }}-{{ category }}">
