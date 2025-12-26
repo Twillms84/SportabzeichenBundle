@@ -1,13 +1,13 @@
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: 0.85rem;
+    /* font-size gelöscht -> nutzt jetzt IServ Standard */
 }
 
-/* Schmale Spalten für 4 Kategorien (passt auf Standard-Screens) */
-.col-name { width: 190px; }
-.col-age  { width: 45px; }
-.col-discipline { width: 140px !important; }
+/* Spaltenbreiten: Name & Alter fest, Disziplinen schmaler */
+.col-name { width: 170px; }
+.col-age  { width: 50px; }
+.col-discipline { width: 115px !important; } /* Noch schmaler */
 
 /* Kräftige Medaillen-Farben */
 .medal-gold { 
@@ -28,14 +28,20 @@
     border: 1px solid #8b4513 !important;
     font-weight: bold;
 }
-
 .medal-none { background-color: #ffffff !important; }
 
-/* Dropdowns & Inputs extrem schmal */
-.discipline-selector, .form-control-sm {
-    font-size: 0.75rem !important;
-    padding: 2px 4px !important;
-    height: auto !important;
+/* Dropdown-Styling: Verhindert Umbruch bei schmaler Spalte */
+.discipline-selector {
+    width: 100% !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    font-size: 0.85rem !important; /* Etwas kleiner als der Rest, damit mehr Text reinpasst */
+}
+
+.form-control-sm {
+    font-size: 0.9rem !important;
+    font-weight: bold;
 }
 
 .req-hint { 
@@ -44,7 +50,8 @@
     display: flex; 
     justify-content: space-between; 
     margin-top: 2px;
+    padding: 0 2px;
 }
 
-.name-container { line-height: 1.1; }
-.badge-fixed { font-size: 0.6rem; padding: 2px 4px; }
+.name-container { line-height: 1.2; }
+.badge-fixed { font-size: 0.65rem; padding: 2px 4px; }
