@@ -160,11 +160,28 @@ final class ExamResultController extends AbstractPageController
         $epIds = array_column($participants, 'ep_id');
         $results = [];
         if (!empty($epIds)) {
+            // Wir joinen die Requirements passend zum Teilnehmer (Alter/Geschlecht) und dem Prüfungsjahr
             $resultsRaw = $conn->fetchAllAssociative("
-                SELECT ep_id, discipline_id, leistung, points, stufe 
-                FROM sportabzeichen_exam_results
-                WHERE ep_id IN (?)
-            ", [$epIds], [Connection::PARAM_INT_ARRAY]);
+                SELECT 
+                    res.ep_id, 
+                    res.discipline_id, 
+                    res.leistung, 
+                    res.points, 
+                    res.stufe,
+                    req.schwimmnachweis, -- Das Flag aus den Requirements
+                    d.kategorie
+                FROM sportabzeichen_exam_results res
+                JOIN sportabzeichen_exam_participants ep ON res.ep_id = ep.id
+                JOIN sportabzeichen_participants p ON ep.participant_id = p.id
+                JOIN sportabzeichen_disciplines d ON res.discipline_id = d.id
+                JOIN sportabzeichen_requirements req ON (
+                    req.discipline_id = res.discipline_id AND 
+                    req.jahr = ? AND 
+                    p.geschlecht = req.geschlecht AND 
+                    ep.age_year BETWEEN req.age_min AND req.age_max
+                )
+                WHERE res.ep_id IN (?)
+            ", [$exam['exam_year'], $epIds], [null, Connection::PARAM_INT_ARRAY]);
 
             foreach ($resultsRaw as $r) {
                 $results[$r['ep_id']][$r['discipline_id']] = $r;
