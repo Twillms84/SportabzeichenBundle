@@ -95,6 +95,8 @@ final class ExamResultController extends AbstractPageController
         return ['points' => $points, 'stufe' => $stufe, 'isSwimming' => $isSwimming];
     }
 
+    
+
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(Connection $conn): Response
     {
@@ -114,30 +116,23 @@ final class ExamResultController extends AbstractPageController
         $selectedClass = $request->query->get('class');
         $classes = $this->loadClasses($conn);
 
-        $sql = "
+        // Teilnehmer laden
+        $participants = $conn->fetchAllAssociative("
             SELECT ep.id AS ep_id, ep.age_year, p.import_id, p.geschlecht,
                    u.firstname AS vorname, u.lastname AS nachname, u.auxinfo AS klasse
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
-            WHERE ep.exam_id = ?
-        ";
-        
-        $params = [$examId];
-        if ($selectedClass) {
-            $sql .= " AND u.auxinfo = ?";
-            $params[] = $selectedClass;
-        }
-        $sql .= " ORDER BY u.auxinfo, u.lastname, u.firstname";
-
-        $participants = $conn->fetchAllAssociative($sql, $params);
+            WHERE ep.exam_id = ? " . ($selectedClass ? " AND u.auxinfo = ?" : "") . "
+            ORDER BY u.auxinfo, u.lastname, u.firstname
+        ", $selectedClass ? [$examId, $selectedClass] : [$examId]);
 
         foreach ($participants as &$p) {
             $g = strtolower(trim((string) $p['geschlecht']));
             $p['gender'] = (str_starts_with($g, 'm')) ? 'MALE' : 'FEMALE';
         }
 
-        // FIX: Hier fehlte ein Komma vor r.schwimmnachweis!
+        // FIX 1: Hier muss r.schwimmnachweis mit ins SELECT!
         $rows = $conn->fetchAllAssociative("
             SELECT d.id, d.name, d.kategorie, d.einheit, 
                 r.geschlecht, r.age_min, r.age_max, r.auswahlnummer,
@@ -156,16 +151,20 @@ final class ExamResultController extends AbstractPageController
         $epIds = array_column($participants, 'ep_id');
         $results = [];
         if (!empty($epIds)) {
+            // FIX 2: Wir brauchen kategorie und schwimmnachweis für die Twig-Logik (Punkte zählen & Badge)
+            // Dafür müssen wir die Tabellen joinen, genau wie bei den Disciplines
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT res.ep_id, res.discipline_id, res.leistung, res.points, res.stufe,
-                       req.schwimmnachweis, d.kategorie
+                       d.kategorie, req.schwimmnachweis
                 FROM sportabzeichen_exam_results res
-                JOIN sportabzeichen_exam_participants ep ON res.ep_id = ep.id
-                JOIN sportabzeichen_participants p ON ep.participant_id = p.id
-                JOIN sportabzeichen_disciplines d ON res.discipline_id = d.id
+                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
+                JOIN sportabzeichen_exam_participants ep ON ep.id = res.ep_id
+                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
                 JOIN sportabzeichen_requirements req ON (
-                    req.discipline_id = res.discipline_id AND req.jahr = ? AND 
-                    p.geschlecht = req.geschlecht AND ep.age_year BETWEEN req.age_min AND req.age_max
+                    req.discipline_id = res.discipline_id AND 
+                    req.jahr = ? AND 
+                    req.geschlecht = CASE WHEN p.geschlecht ILIKE 'm%' THEN 'MALE' ELSE 'FEMALE' END AND
+                    ep.age_year BETWEEN req.age_min AND req.age_max
                 )
                 WHERE res.ep_id IN (?)
             ", [$exam['exam_year'], $epIds], [null, Connection::PARAM_INT_ARRAY]);
@@ -176,11 +175,11 @@ final class ExamResultController extends AbstractPageController
         }
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
-            'exam' => $exam,
-            'participants' => $participants,
-            'disciplines' => $disciplines,
-            'results' => $results,
-            'classes' => $classes,
+            'exam'          => $exam,
+            'participants'  => $participants,
+            'disciplines'   => $disciplines,
+            'results'       => $results,
+            'classes'       => $classes,
             'selectedClass' => $selectedClass,
         ]);
     }
