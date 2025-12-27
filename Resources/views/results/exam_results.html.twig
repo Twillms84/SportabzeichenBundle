@@ -1,30 +1,11 @@
 {% extends '@IServCore/page.html.twig' %}
 
-{% block title %}
-    Ergebnisse eingeben – {{ exam.exam_name }}
-{% endblock %}
-
-{% block stylesheets %}
-    {{ parent() }}
-    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
-{% endblock %}
-
 {% block content %}
 <div class="container-fluid mt-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>🏅 {{ exam.exam_name }} ({{ exam.exam_year }})</h4>
         <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
     </div>
-<div class="mb-3 d-flex justify-content-between align-items-center">
-    <div>
-        {# Hier steht evtl. schon dein Klassen-Filter #}
-    </div>
-    
-    <button type="button" id="btn-tab-lock" class="btn btn-outline-primary">
-        <i class="iserv-icon iserv-icon-lock"></i> 
-        <span id="btn-tab-lock-text">Dropdowns für Tabulator sperren</span>
-    </button>
-</div>
 
     <form id="autosave-form" 
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
@@ -37,7 +18,7 @@
                         <th class="col-name">Teilnehmer</th>
                         <th class="col-class text-center">Kl.</th>
                         {% for category in disciplines|keys %}
-                            {% if category|upper != 'SWIMMING' and category|upper != 'SCHWIMMEN' %}
+                            {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 <th class="text-center">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
@@ -46,78 +27,42 @@
                 <tbody>
                 {% for p in participants %}
                     {% set epResults = results[p.ep_id] ?? {} %}
-                    {% set totalPoints = 0 %}
-                    {% set hasSwimmingProof = false %}
-                    
-                    {# Vorberechnung für Badges #}
-                    {% for resData in epResults %}
-                        {% set cat = resData.kategorie|default('')|trim|upper %}
-                        {% if cat != 'SWIMMING' and cat != 'SCHWIMMEN' %}
-                            {% set totalPoints = totalPoints + (resData.points|default(0)) %}
-                        {% endif %}
-                        {% if (cat == 'SWIMMING' or cat == 'SCHWIMMEN') and resData.stufe|default('NONE') != 'NONE' %}
-                            {% set hasSwimmingProof = true %}
-                        {% endif %}
-                    {% endfor %}
-
-                    <tr data-ep-id="{{ p.ep_id }}">
+                    <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}" class="medal-row-{{ p.final_medal|lower }}">
                         <td class="col-name">
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
                             <div class="d-flex gap-1 mt-1">
-                                <span class="badge {{ hasSwimmingProof ? 'bg-success' : 'bg-danger' }}" style="font-size: 0.75rem;">
-                                    {{ hasSwimmingProof ? '🏊 OK' : '❌ Schwimmen' }}
+                                <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }}" id="swimming-status-{{ p.ep_id }}" style="font-size: 0.7rem;">
+                                    {{ p.has_swimming ? '🏊 OK' : '❌ Schwimmen' }}
                                 </span>
-                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}" style="font-size: 0.75rem;">
-                                    {{ totalPoints }} Pkt.
+                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}" style="font-size: 0.7rem;">
+                                    {{ p.total_points }} Pkt.
                                 </span>
                             </div>
                         </td>
-
                         <td class="col-class text-center align-middle fw-bold">{{ p.klasse|default('-') }}</td>
 
                         {% for category, items in disciplines %}
-                            {% if category|upper != 'SWIMMING' and category|upper != 'SCHWIMMEN' %}
+                            {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 {% set options = [] %}
-                                {% for d in items %}
-                                    {% if d.geschlecht == p.gender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
-                                        {% set options = options|merge([d]) %}
-                                    {% endif %}
+                                {% for d in items if d.geschlecht == (p.geschlecht|first|upper == 'M' ? 'MALE' : 'FEMALE') and p.age_year >= d.age_min and p.age_year <= d.age_max %}
+                                    {% set options = options|merge([d]) %}
                                 {% endfor %}
 
                                 {% set selectedId = null %}
-                                {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
-                                {% endfor %}
+                                {% for d in options if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endfor %}
                                 {% if selectedId is null and options|length > 0 %}{% set selectedId = options[0].id %}{% endif %}
-
                                 {% set resObj = epResults[selectedId] ?? null %}
-                                {# WICHTIG: Hier wird mClass für die Farben berechnet #}
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
                                 <td class="p-1 col-discipline">
-                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" 
-                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
+                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" data-save data-ep-id="{{ p.ep_id }}">
                                         <option value="">--</option>
                                         {% for d in options %}
-                                            <option value="{{ d.id }}" {% if selectedId == d.id %}selected{% endif %}>
-                                                {{ d.name }}
-                                            </option>
+                                            <option value="{{ d.id }}" {% if selectedId == d.id %}selected{% endif %}>{{ d.name }}</option>
                                         {% endfor %}
                                     </select>
-
-                                    <input type="text" class="form-control form-control-custom {{ mClass }}"
-                                        value="{{ resObj.leistung ?? '' }}"
-                                        data-save data-ep-id="{{ p.ep_id }}" data-type="leistung">
-
-                                    <div class="req-hint">
-                                        {% for d in options %}
-                                            {% if d.id == selectedId %}
-                                                <span class="r-b">{{ d.bronze }}</span>
-                                                <span class="r-s">{{ d.silber }}</span>
-                                                <span class="r-g">{{ d.gold }}</span>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </div>
+                                    <input type="text" class="form-control form-control-custom {{ mClass }}" 
+                                           value="{{ resObj.leistung ?? '' }}" data-save data-ep-id="{{ p.ep_id }}">
                                 </td>
                             {% endif %}
                         {% endfor %}
@@ -128,9 +73,4 @@
         </div>
     </form>
 </div>
-{% endblock %}
-
-{% block javascripts %}
-    {{ parent() }}
-    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
