@@ -95,68 +95,113 @@ final class ExamResultController extends AbstractPageController
         $leistung = ($leistungInput === '') ? null : (float)str_replace(',', '.', $leistungInput);
 
         try {
-            // 1. Daten laden
-            $pData = $conn->fetchAssociative("SELECT ep.participant_id, ep.age_year, ex.exam_year, p.geschlecht FROM sportabzeichen_exam_participants ep JOIN sportabzeichen_participants p ON p.id = ep.participant_id JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id WHERE ep.id = ?", [$epId]);
-            $gender = (str_starts_with(strtoupper($pData['geschlecht'] ?? ''), 'M')) ? 'MALE' : 'FEMALE';
-            $req = $conn->fetchAssociative("SELECT r.*, d.einheit, d.kategorie, d.name as discipline_name FROM sportabzeichen_requirements r JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? AND ? BETWEEN r.age_min AND r.age_max", [$disciplineId, (int)$pData['exam_year'], $gender, (int)$pData['age_year']]);
+            // 1. Daten laden (Inklusive berechnungsart aus der disciplines-Tabelle)
+            $pData = $conn->fetchAssociative("
+                SELECT ep.participant_id, ep.age_year, ex.exam_year, p.geschlecht 
+                FROM sportabzeichen_exam_participants ep
+                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+                JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+                WHERE ep.id = ?
+            ", [$epId]);
 
-            if (!$req) return new JsonResponse(['error' => 'Keine Anforderungen gefunden'], 404);
+            $gender = (str_starts_with(strtoupper($pData['geschlecht'] ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+            
+            $req = $conn->fetchAssociative("
+                SELECT r.*, d.einheit, d.kategorie, d.name as discipline_name, d.berechnungsart
+                FROM sportabzeichen_requirements r
+                JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
+                WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
+                  AND ? BETWEEN r.age_min AND r.age_max
+            ", [$disciplineId, (int)$pData['exam_year'], $gender, (int)$pData['age_year']]);
+
+            if (!$req) return new JsonResponse(['error' => 'Anforderung nicht gefunden'], 404);
 
             $points = 0;
             $stufe = 'none';
-            $kategorie = $req['kategorie'];
+            $direction = strtoupper($req['berechnungsart'] ?? 'BIGGER'); 
 
-            // 2. Logik-Check: Zeit (kleiner besser) oder Weite (größer besser)?
-            $einheit = strtoupper($req['einheit'] ?? '');
-            $lowerIsBetter = (
-                str_contains($einheit, 'MIN') || 
-                str_contains($einheit, 'SEK') || 
-                str_contains($einheit, 'TIME') ||
-                $kategorie === 'Schnelligkeit' || 
-                $kategorie === 'Ausdauer'
-            );
-
+            // 2. Punkteberechnung basierend auf SMALLER/BIGGER
             if ($leistung !== null && $leistung > 0) {
                 $valGold = (float)str_replace(',', '.', (string)$req['gold']);
                 $valSilber = (float)str_replace(',', '.', (string)$req['silber']);
                 $valBronze = (float)str_replace(',', '.', (string)$req['bronze']);
 
-                if ($lowerIsBetter) {
-                    // Zeit: 10.00 ist besser (Gold) als 12.00 (Silber)
+                if ($direction === 'SMALLER') {
                     if ($leistung <= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung <= $valSilber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung <= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 } else {
-                    // Weite: 5.50 ist besser (Gold) als 4.00 (Silber)
                     if ($leistung >= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung >= $valSilber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung >= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 }
             }
 
-            // 3. Datenbank-Update (Alte Disziplin der Kategorie löschen)
-            $conn->executeStatement("DELETE FROM sportabzeichen_exam_results WHERE ep_id = ? AND discipline_id != ? AND discipline_id IN (SELECT id FROM sportabzeichen_disciplines WHERE kategorie = ?)", [$epId, $disciplineId, $kategorie]);
-            $conn->executeStatement("INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ep_id, discipline_id) DO UPDATE SET leistung = EXCLUDED.leistung, points = EXCLUDED.points, stufe = EXCLUDED.stufe", [$epId, $disciplineId, $leistung, $points, $stufe]);
+            // 3. Datenbank-Update: Andere Disziplinen derselben Kategorie löschen (Regel: Nur 1 pro Kat)
+            $conn->executeStatement("
+                DELETE FROM sportabzeichen_exam_results 
+                WHERE ep_id = ? 
+                AND discipline_id != ? 
+                AND discipline_id IN (SELECT id FROM sportabzeichen_disciplines WHERE kategorie = ?)
+            ", [$epId, $disciplineId, $req['kategorie']]);
 
-            // 4. Schwimmstatus prüfen
-            $isSwimming = (($req['schwimmnachweis'] ?? false) || str_contains(strtoupper($kategorie), 'SCHWIMM'));
+            // 4. Aktuelles Ergebnis speichern
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe) 
+                VALUES (?, ?, ?, ?, ?) 
+                ON CONFLICT (ep_id, discipline_id) DO UPDATE SET leistung = EXCLUDED.leistung, points = EXCLUDED.points, stufe = EXCLUDED.stufe
+            ", [$epId, $disciplineId, $leistung, $points, $stufe]);
+
+            // 5. Schwimmnachweis
+            $isSwimming = (($req['schwimmnachweis'] ?? false) || str_contains(strtoupper($req['kategorie']), 'SCHWIMM'));
             if ($isSwimming && $points > 0) {
                 $validUntil = ($pData['age_year'] <= 17) ? ($pData['exam_year'] + (18 - $pData['age_year'])) : ($pData['exam_year'] + 4);
-                $conn->executeStatement("INSERT INTO sportabzeichen_swimming_proofs (participant_id, confirmed_at, valid_until, requirement_met_via) VALUES (?, CURRENT_DATE, ?, ?) ON CONFLICT (participant_id) DO UPDATE SET valid_until = EXCLUDED.valid_until", [(int)$pData['participant_id'], $validUntil . "-12-31", 'DISCIPLINE:' . $disciplineId]);
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_swimming_proofs (participant_id, confirmed_at, valid_until, requirement_met_via) 
+                    VALUES (?, CURRENT_DATE, ?, ?) 
+                    ON CONFLICT (participant_id) DO UPDATE SET valid_until = EXCLUDED.valid_until, requirement_met_via = EXCLUDED.requirement_met_via
+                ", [(int)$pData['participant_id'], $validUntil . "-12-31", 'DISCIPLINE:' . $disciplineId]);
             }
 
+            // 6. Zusammenfassung & Response
             $summary = $this->updateParticipantSummary($epId, (int)$pData['participant_id'], $conn);
 
             return new JsonResponse([
                 'status' => 'ok',
                 'points' => $points,
                 'stufe' => $stufe,
-                'kategorie' => $kategorie, // Wichtig für JS zum CSS-Update
+                'kategorie' => $req['kategorie'], // Für JS UI-Update
                 'total_points' => $summary['total_points'],
                 'final_medal' => $summary['final_medal'],
                 'has_swimming' => $summary['has_swimming']
             ]);
         } catch (\Throwable $e) { return new JsonResponse(['error' => $e->getMessage()], 500); }
+    }
+
+    private function updateParticipantSummary(int $epId, int $participantId, Connection $conn): array 
+    {
+        $totalPoints = (int)$conn->fetchOne("
+            SELECT SUM(max_p) FROM (
+                SELECT MAX(res.points) as max_p 
+                FROM sportabzeichen_exam_results res
+                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
+                WHERE res.ep_id = ? AND d.kategorie IN ('Ausdauer','Kraft','Schnelligkeit','Koordination')
+                GROUP BY d.kategorie
+            ) as sub
+        ", [$epId]);
+
+        $hasSwimming = (bool)$conn->fetchOne("SELECT 1 FROM sportabzeichen_swimming_proofs WHERE participant_id = ? AND valid_until >= CURRENT_DATE", [$participantId]);
+
+        $medal = 'none';
+        if ($hasSwimming) {
+            if ($totalPoints >= 11) $medal = 'gold';
+            elseif ($totalPoints >= 8) $medal = 'silber';
+            elseif ($totalPoints >= 4) $medal = 'bronze';
+        }
+
+        $conn->executeStatement("UPDATE sportabzeichen_exam_participants SET total_points = ?, final_medal = ? WHERE id = ?", [$totalPoints, $medal, $epId]);
+
+        return ['total_points' => $totalPoints, 'final_medal' => $medal, 'has_swimming' => $hasSwimming];
     }
 
     #[Route('/exam/result/delete', name: 'exam_result_delete', methods: ['POST'])]
@@ -183,33 +228,4 @@ final class ExamResultController extends AbstractPageController
         return new JsonResponse(['status' => 'ok']);
     }
 
-    private function updateParticipantSummary(int $epId, int $participantId, Connection $conn): array 
-    {
-        $totalPoints = (int)$conn->fetchOne("
-            SELECT SUM(max_p) FROM (
-                SELECT MAX(res.points) as max_p 
-                FROM sportabzeichen_exam_results res
-                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
-                WHERE res.ep_id = ? AND d.kategorie IN ('Ausdauer','Kraft','Schnelligkeit','Koordination')
-                GROUP BY d.kategorie
-            ) as sub
-        ", [$epId]);
-
-        $hasSwimming = (bool)$conn->fetchOne("SELECT 1 FROM sportabzeichen_swimming_proofs WHERE participant_id = ? AND valid_until >= CURRENT_DATE", [$participantId]);
-
-        $medal = 'none';
-        if ($hasSwimming) {
-            if ($totalPoints >= 11) $medal = 'gold';
-            elseif ($totalPoints >= 8) $medal = 'silber';
-            elseif ($totalPoints >= 4) $medal = 'bronze';
-        }
-
-        $conn->executeStatement("UPDATE sportabzeichen_exam_participants SET total_points = ?, final_medal = ? WHERE id = ?", [$totalPoints, $medal, $epId]);
-
-        return [
-            'total_points' => $totalPoints,
-            'final_medal' => $medal,
-            'has_swimming' => $hasSwimming
-        ];
-    }
 }
