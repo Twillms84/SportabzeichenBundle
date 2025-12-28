@@ -92,12 +92,10 @@ final class ExamResultController extends AbstractPageController
         $epId = (int)($content['ep_id'] ?? 0);
         $disciplineId = (int)($content['discipline_id'] ?? 0);
         
-        // Leistung normalisieren (Komma zu Punkt, Leerzeichen weg)
         $leistungInput = trim((string)($content['leistung'] ?? ''));
         $leistung = ($leistungInput === '') ? null : (float)str_replace(',', '.', $leistungInput);
 
         try {
-            // 1. Stammdaten des Teilnehmers laden
             $pData = $conn->fetchAssociative("
                 SELECT ep.participant_id, ep.age_year, ex.exam_year, p.geschlecht 
                 FROM sportabzeichen_exam_participants ep
@@ -109,9 +107,8 @@ final class ExamResultController extends AbstractPageController
             if (!$pData) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
             $gender = (str_starts_with(strtoupper($pData['geschlecht'] ?? ''), 'M')) ? 'MALE' : 'FEMALE';
 
-            // 2. Passende Anforderung aus der DB suchen
             $req = $conn->fetchAssociative("
-                SELECT r.*, d.einheit, d.kategorie 
+                SELECT r.*, d.einheit, d.kategorie, d.name as discipline_name
                 FROM sportabzeichen_requirements r
                 JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
                 WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
@@ -121,15 +118,15 @@ final class ExamResultController extends AbstractPageController
             $points = 0;
             $stufe = 'none';
 
-            // 3. Punkte-Logik (Mathematischer Vergleich der "Zeit-Zahlen")
             if ($req && $leistung !== null && $leistung > 0) {
                 $einheit = strtoupper($req['einheit'] ?? '');
+                $kategorie = strtoupper($req['kategorie'] ?? '');
                 
-                // Erkennt UNIT_MINUTES, UNIT_SECONDS, SEK, MIN etc.
+                // Korrektur Schnelligkeit/Schwimmen: Alles was Zeit ist (Minuten, Sekunden)
                 $lowerIsBetter = (
                     str_contains($einheit, 'MIN') || 
                     str_contains($einheit, 'SEK') || 
-                    str_contains($einheit, 'TIME') ||
+                    str_contains($einheit, 'SECOND') ||
                     str_contains($einheit, 'ZEIT')
                 );
 
@@ -138,46 +135,55 @@ final class ExamResultController extends AbstractPageController
                 $valBronze = (float)str_replace(',', '.', (string)$req['bronze']);
 
                 if ($lowerIsBetter) {
-                    // Zeit: Weniger ist besser (2.00 ist besser als 3.15)
                     if ($leistung <= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung <= $valSilber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung <= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 } else {
-                    // Weite/Höhe: Mehr ist besser (5.50 ist besser als 4.00)
                     if ($leistung >= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung >= $valSilber) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung >= $valBronze) { $points = 1; $stufe = 'bronze'; }
+                    elseif ($leistung >= (float)$valBronze) { $points = 1; $stufe = 'bronze'; }
                 }
             }
 
-            // 4. Einzelergebnis speichern
+            // 1. Einzelergebnis speichern
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe)
                 VALUES (?, ?, ?, ?, ?) ON CONFLICT (ep_id, discipline_id) 
                 DO UPDATE SET leistung = EXCLUDED.leistung, points = EXCLUDED.points, stufe = EXCLUDED.stufe
             ", [$epId, $disciplineId, $leistung, $points, $stufe]);
 
-            // 5. Automatischer Schwimmnachweis
-            // (Wenn in Kategorie Schwimmen ODER Ausdauer-Schwimmen Punkte erzielt wurden)
-            if ($req && (str_contains(strtoupper($req['kategorie']), 'SCHWIMM') || str_contains(strtoupper($req['kategorie']), 'SWIM')) && $points > 0) {
-                $validUntil = ($pData['age_year'] <= 17) 
-                    ? ($pData['exam_year'] + (18 - $pData['age_year'])) . "-12-31" 
-                    : ($pData['exam_year'] + 4) . "-12-31";
+            // 2. SCHWIMMANFORDERUNG SPEICHERN
+            // Wenn die Disziplin als Schwimmnachweis markiert ist ODER im Namen "Schwimmen" vorkommt
+            $isSwimmingDiscipline = (
+                ($req['schwimmnachweis'] ?? false) === true || 
+                str_contains(strtoupper($req['discipline_name'] ?? ''), 'SCHWIMM') ||
+                str_contains(strtoupper($req['kategorie'] ?? ''), 'SCHWIMM')
+            );
 
+            if ($isSwimmingDiscipline && $points > 0) {
+                // Gültigkeit berechnen (Kinder/Jugendliche bis 18, Erwachsene 5 Jahre)
+                $validUntilYear = ($pData['age_year'] <= 17) ? ($pData['exam_year'] + (18 - $pData['age_year'])) : ($pData['exam_year'] + 4);
+                
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_swimming_proofs (participant_id, confirmed_at, valid_until, requirement_met_via)
-                    VALUES (?, CURRENT_DATE, ?, 'DISCIPLINE')
-                    ON CONFLICT (participant_id) DO UPDATE SET valid_until = EXCLUDED.valid_until
-                ", [$pData['participant_id'], $validUntil]);
+                    VALUES (?, CURRENT_DATE, ?, ?)
+                    ON CONFLICT (participant_id) DO UPDATE SET 
+                        valid_until = EXCLUDED.valid_until,
+                        confirmed_at = CURRENT_DATE,
+                        requirement_met_via = EXCLUDED.requirement_met_via
+                ", [$pData['participant_id'], $validUntilYear . "-12-31", 'DISCIPLINE: ' . $disciplineId]);
             }
 
-            // 6. Gesamtsumme und Medaille berechnen
+            // 3. Gesamtstatus berechnen
             $totalPoints = (int)$conn->fetchOne("SELECT COALESCE(SUM(points), 0) FROM sportabzeichen_exam_results WHERE ep_id = ?", [$epId]);
+            
+            // Prüfen ob ein gültiger Schwimmnachweis vorliegt
             $hasSwimming = (bool)$conn->fetchOne("
                 SELECT 1 FROM sportabzeichen_swimming_proofs 
                 WHERE participant_id = ? AND valid_until >= CURRENT_DATE
             ", [$pData['participant_id']]);
 
+            // Medaille nur vergeben, wenn Schwimmen OK
             $finalMedal = 'none';
             if ($hasSwimming) {
                 if ($totalPoints >= 11) $finalMedal = 'gold';
