@@ -115,6 +115,11 @@ final class ExamResultController extends AbstractPageController
                 WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
                   AND ? BETWEEN r.age_min AND r.age_max
             ", [$disciplineId, $pData['exam_year'], $gender, $pData['age_year']]);
+            // TEMPORÄR ZUM TESTEN EINFÜGEN:
+            return new JsonResponse([
+                'debug_input' => ['discipline' => $disciplineId, 'year' => $pData['exam_year'], 'gender' => $gender, 'age' => $pData['age_year']],
+                'debug_req_found' => $req
+            ]);
 
             $points = 0;
             $stufe = 'none';
