@@ -121,7 +121,7 @@ final class ExamResultController extends AbstractPageController
                 'debug_req_found' => $req
             ]);
 
-           $points = 0;
+            $points = 0;
             $stufe = 'none';
 
             if ($req && $leistung !== null && $leistung > 0) {
