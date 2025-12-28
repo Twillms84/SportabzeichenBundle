@@ -113,7 +113,7 @@ final class ExamResultController extends AbstractPageController
                 FROM sportabzeichen_requirements r
                 JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
                 WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
-                  AND ? BETWEEN r.age_min AND r.age_max
+                  AND ? BETWEEN r.age_min AND r.age_max 
             ", [$disciplineId, $pData['exam_year'], $gender, $pData['age_year']]);
             // TEMPORÄR ZUM TESTEN EINFÜGEN:
             return new JsonResponse([
@@ -121,21 +121,36 @@ final class ExamResultController extends AbstractPageController
                 'debug_req_found' => $req
             ]);
 
-            $points = 0;
+           $points = 0;
             $stufe = 'none';
 
-            // 3. Punkteberechnung (PHP-seitig)
             if ($req && $leistung !== null && $leistung > 0) {
-                $lowerIsBetter = in_array(strtolower($req['einheit']), ['sek', 'sek.', 'min', 'min.', 'zeit']);
+                $einheit = strtoupper($req['einheit'] ?? '');
                 
+                // Prüfen: Ist ein kleinerer Wert besser? 
+                // Wir suchen nach 'MIN' oder 'SEK' oder 'ZEIT' im String (z.B. UNIT_MINUTES)
+                $lowerIsBetter = (
+                    str_contains($einheit, 'MIN') || 
+                    str_contains($einheit, 'SEK') || 
+                    str_contains($einheit, 'ZEIT') ||
+                    str_contains($einheit, 'SECOND')
+                );
+
+                // Casting zu Float, um sicherzugehen (DB-Werte sind oft Strings)
+                $valGold = (float)$req['gold'];
+                $valSilber = (float)$req['silber'];
+                $valBronze = (float)$req['bronze'];
+
                 if ($lowerIsBetter) {
-                    if ($leistung <= $req['gold']) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung <= $req['silber']) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung <= $req['bronze']) { $points = 1; $stufe = 'bronze'; }
+                    // Zeit-Disziplinen: Kleiner ist besser (z.B. 2.0 min < 3.35 min)
+                    if ($leistung <= $valGold) { $points = 3; $stufe = 'gold'; }
+                    elseif ($leistung <= $valSilber) { $points = 2; $stufe = 'silber'; }
+                    elseif ($leistung <= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 } else {
-                    if ($leistung >= $req['gold']) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung >= $req['silber']) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung >= $req['bronze']) { $points = 1; $stufe = 'bronze'; }
+                    // Weite/Höhe-Disziplinen: Größer ist besser (z.B. 5.50 m > 4.50 m)
+                    if ($leistung >= $valGold) { $points = 3; $stufe = 'gold'; }
+                    elseif ($leistung >= $valSilber) { $points = 2; $stufe = 'silber'; }
+                    elseif ($leistung >= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 }
             }
 
