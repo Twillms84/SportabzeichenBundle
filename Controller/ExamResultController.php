@@ -91,10 +91,13 @@ final class ExamResultController extends AbstractPageController
         $content = json_decode($request->getContent(), true);
         $epId = (int)($content['ep_id'] ?? 0);
         $disciplineId = (int)($content['discipline_id'] ?? 0);
-        $leistung = ($content['leistung'] === '' || $content['leistung'] === null) ? null : (float)str_replace(',', '.', (string)$content['leistung']);
+        
+        // Leistung normalisieren (Komma zu Punkt, Leerzeichen weg)
+        $leistungInput = trim((string)($content['leistung'] ?? ''));
+        $leistung = ($leistungInput === '') ? null : (float)str_replace(',', '.', $leistungInput);
 
         try {
-            // 1. Stammdaten für Berechnung holen
+            // 1. Stammdaten des Teilnehmers laden
             $pData = $conn->fetchAssociative("
                 SELECT ep.participant_id, ep.age_year, ex.exam_year, p.geschlecht 
                 FROM sportabzeichen_exam_participants ep
@@ -104,65 +107,59 @@ final class ExamResultController extends AbstractPageController
             ", [$epId]);
 
             if (!$pData) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+            $gender = (str_starts_with(strtoupper($pData['geschlecht'] ?? ''), 'M')) ? 'MALE' : 'FEMALE';
 
-            $gender = (str_starts_with(strtoupper($pData['geschlecht']), 'M')) ? 'MALE' : 'FEMALE';
-
-            // 2. Anforderung aus DB laden
+            // 2. Passende Anforderung aus der DB suchen
             $req = $conn->fetchAssociative("
                 SELECT r.*, d.einheit, d.kategorie 
                 FROM sportabzeichen_requirements r
                 JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
                 WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
-                  AND ? BETWEEN r.age_min AND r.age_max 
-            ", [$disciplineId, $pData['exam_year'], $gender, $pData['age_year']]);
-            // TEMPORÄR ZUM TESTEN EINFÜGEN:
-            return new JsonResponse([
-                'debug_input' => ['discipline' => $disciplineId, 'year' => $pData['exam_year'], 'gender' => $gender, 'age' => $pData['age_year']],
-                'debug_req_found' => $req
-            ]);
+                  AND ? BETWEEN r.age_min AND r.age_max
+            ", [$disciplineId, (int)$pData['exam_year'], $gender, (int)$pData['age_year']]);
 
             $points = 0;
             $stufe = 'none';
 
+            // 3. Punkte-Logik (Mathematischer Vergleich der "Zeit-Zahlen")
             if ($req && $leistung !== null && $leistung > 0) {
                 $einheit = strtoupper($req['einheit'] ?? '');
                 
-                // Prüfen: Ist ein kleinerer Wert besser? 
-                // Wir suchen nach 'MIN' oder 'SEK' oder 'ZEIT' im String (z.B. UNIT_MINUTES)
+                // Erkennt UNIT_MINUTES, UNIT_SECONDS, SEK, MIN etc.
                 $lowerIsBetter = (
                     str_contains($einheit, 'MIN') || 
                     str_contains($einheit, 'SEK') || 
-                    str_contains($einheit, 'ZEIT') ||
-                    str_contains($einheit, 'SECOND')
+                    str_contains($einheit, 'TIME') ||
+                    str_contains($einheit, 'ZEIT')
                 );
 
-                // Casting zu Float, um sicherzugehen (DB-Werte sind oft Strings)
-                $valGold = (float)$req['gold'];
-                $valSilber = (float)$req['silber'];
-                $valBronze = (float)$req['bronze'];
+                $valGold = (float)str_replace(',', '.', (string)$req['gold']);
+                $valSilber = (float)str_replace(',', '.', (string)$req['silber']);
+                $valBronze = (float)str_replace(',', '.', (string)$req['bronze']);
 
                 if ($lowerIsBetter) {
-                    // Zeit-Disziplinen: Kleiner ist besser (z.B. 2.0 min < 3.35 min)
+                    // Zeit: Weniger ist besser (2.00 ist besser als 3.15)
                     if ($leistung <= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung <= $valSilber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung <= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 } else {
-                    // Weite/Höhe-Disziplinen: Größer ist besser (z.B. 5.50 m > 4.50 m)
+                    // Weite/Höhe: Mehr ist besser (5.50 ist besser als 4.00)
                     if ($leistung >= $valGold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung >= $valSilber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung >= $valBronze) { $points = 1; $stufe = 'bronze'; }
                 }
             }
 
-            // 4. In Einzelergebnisse speichern
+            // 4. Einzelergebnis speichern
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe)
                 VALUES (?, ?, ?, ?, ?) ON CONFLICT (ep_id, discipline_id) 
                 DO UPDATE SET leistung = EXCLUDED.leistung, points = EXCLUDED.points, stufe = EXCLUDED.stufe
             ", [$epId, $disciplineId, $leistung, $points, $stufe]);
 
-            // 5. Schwimmnachweis-Automatik
-            if ($req && in_array(strtoupper($req['kategorie']), ['SWIMMING', 'SCHWIMMEN']) && $points > 0) {
+            // 5. Automatischer Schwimmnachweis
+            // (Wenn in Kategorie Schwimmen ODER Ausdauer-Schwimmen Punkte erzielt wurden)
+            if ($req && (str_contains(strtoupper($req['kategorie']), 'SCHWIMM') || str_contains(strtoupper($req['kategorie']), 'SWIM')) && $points > 0) {
                 $validUntil = ($pData['age_year'] <= 17) 
                     ? ($pData['exam_year'] + (18 - $pData['age_year'])) . "-12-31" 
                     : ($pData['exam_year'] + 4) . "-12-31";
@@ -174,9 +171,12 @@ final class ExamResultController extends AbstractPageController
                 ", [$pData['participant_id'], $validUntil]);
             }
 
-            // 6. Gesamtstatus aktualisieren
-            $totalPoints = (int)$conn->fetchOne("SELECT SUM(points) FROM sportabzeichen_exam_results WHERE ep_id = ?", [$epId]);
-            $hasSwimming = (bool)$conn->fetchOne("SELECT 1 FROM sportabzeichen_swimming_proofs WHERE participant_id = ? AND valid_until >= CURRENT_DATE", [$pData['participant_id']]);
+            // 6. Gesamtsumme und Medaille berechnen
+            $totalPoints = (int)$conn->fetchOne("SELECT COALESCE(SUM(points), 0) FROM sportabzeichen_exam_results WHERE ep_id = ?", [$epId]);
+            $hasSwimming = (bool)$conn->fetchOne("
+                SELECT 1 FROM sportabzeichen_swimming_proofs 
+                WHERE participant_id = ? AND valid_until >= CURRENT_DATE
+            ", [$pData['participant_id']]);
 
             $finalMedal = 'none';
             if ($hasSwimming) {
@@ -185,7 +185,11 @@ final class ExamResultController extends AbstractPageController
                 elseif ($totalPoints >= 4) $finalMedal = 'bronze';
             }
 
-            $conn->executeStatement("UPDATE sportabzeichen_exam_participants SET total_points = ?, final_medal = ? WHERE id = ?", [$totalPoints, $finalMedal, $epId]);
+            $conn->executeStatement("
+                UPDATE sportabzeichen_exam_participants 
+                SET total_points = ?, final_medal = ? 
+                WHERE id = ?
+            ", [$totalPoints, $finalMedal, $epId]);
 
             return new JsonResponse([
                 'status' => 'ok',
