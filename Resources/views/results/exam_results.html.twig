@@ -54,12 +54,12 @@
                         <td class="col-name">
                             <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
                             <div class="d-flex gap-1 mt-1">
-                                <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }}" 
-                                      id="swimming-status-{{ p.ep_id }}" style="font-size: 0.7rem;">
+                                <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} badge-mini" 
+                                    id="swimming-status-{{ p.ep_id }}">
                                     {{ p.has_swimming ? '🏊 OK' : '❌ Schwimmen' }}
                                 </span>
-                                <span class="badge bg-info text-dark" id="total-points-{{ p.ep_id }}" style="font-size: 0.7rem;">
-                                    {{ p.total_points|default(0) }} Pkt.
+                                <span class="badge bg-info text-dark badge-mini" id="total-points-{{ p.ep_id }}">
+                                    <span class="pts-val">{{ p.total_points|default(0) }}</span> Pkt.
                                 </span>
                             </div>
                         </td>

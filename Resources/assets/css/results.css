@@ -61,3 +61,8 @@ select.medal-none, input.medal-none {
 .name-container { line-height: 1.2; }
 .name-main { font-weight: bold; display: block; }
 .name-age { font-weight: normal; font-size: 0.95rem; color: #555; }
+
+.badge-mini {
+    font-size: 0.7rem !important;
+    vertical-align: middle;
+}
