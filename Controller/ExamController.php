@@ -22,7 +22,7 @@ final class ExamController extends AbstractPageController
     #[Route('/', name: 'dashboard')]
     public function index(Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
         $exams = $conn->fetchAllAssociative(
             'SELECT e.id, e.exam_name, e.exam_year, e.exam_date
@@ -42,7 +42,7 @@ final class ExamController extends AbstractPageController
     #[Route('/new', name: 'new')]
     public function new(Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
         // Klassen laden für das Dropdown
         $classes = $conn->fetchFirstColumn("
@@ -99,7 +99,7 @@ final class ExamController extends AbstractPageController
     #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException();
@@ -131,7 +131,7 @@ final class ExamController extends AbstractPageController
     #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]
     public function delete(int $id, Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
         // CSRF Token Check (Sicherheit)
         $token = $request->request->get('_token');
