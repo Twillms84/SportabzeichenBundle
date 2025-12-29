@@ -46,8 +46,16 @@ final class ExamResultController extends AbstractPageController
         $sql = "
             SELECT ep.id AS ep_id, ep.participant_id, ep.age_year, ep.total_points, ep.final_medal,
                    p.geschlecht, u.firstname AS vorname, u.lastname AS nachname, u.auxinfo AS klasse,
+                   
+                   -- Prüft, ob gültig (Existenz)
                    EXISTS(SELECT 1 FROM sportabzeichen_swimming_proofs sp 
-                          WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE) as has_swimming
+                          WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE) as has_swimming,
+
+                   -- NEU: Holt das konkrete Ablaufdatum für den Tooltip
+                   (SELECT sp.valid_until FROM sportabzeichen_swimming_proofs sp 
+                          WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
+                          ORDER BY sp.valid_until DESC LIMIT 1) as swimming_expiry
+
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
