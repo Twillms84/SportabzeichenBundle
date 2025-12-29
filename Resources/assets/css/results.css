@@ -33,19 +33,32 @@ select.medal-bronze, input.medal-bronze {
     font-weight: bold !important; 
 }
 
+/* --- Standard-Status (keine Medaille): LIGHT MODE (Standard) --- */
 select.medal-none, input.medal-none { 
-    /* Hintergrundfarbe aus dem System-Theme holen */
-    background-color: var(--bs-form-control-bg) !important; 
-    
-    /* Textfarbe aus dem System-Theme holen */
-    color: var(--bs-form-control-color) !important; 
-    
-    /* Rahmenfarbe aus dem System-Theme holen */
-    border: 1px solid var(--bs-border-color) !important;
+    background-color: #ffffff !important; 
+    color: #212529 !important;
+    border: 1px solid #dee2e6 !important;
 }
 
-/* WICHTIG: Nur beim Input das Hintergrundbild (Pfeil) entfernen.
-   Das Select braucht den Pfeil, der kommt automatisch via Bootstrap */
+/* --- DARK MODE Support --- */
+/* Greift, wenn das Gerät auf Dark Mode steht oder IServ das Attribut setzt */
+@media (prefers-color-scheme: dark) {
+    select.medal-none, input.medal-none { 
+        background-color: #212529 !important; /* Dunkelgrau */
+        color: #dee2e6 !important;           /* Helles Grau */
+        border: 1px solid #495057 !important;
+    }
+}
+
+/* IServ spezifischer Dark-Mode Override (falls via HTML-Attribut gesteuert) */
+[data-bs-theme="dark"] select.medal-none, 
+[data-bs-theme="dark"] input.medal-none {
+    background-color: #212529 !important;
+    color: #dee2e6 !important;
+    border: 1px solid #495057 !important;
+}
+
+/* Nur beim Input das Hintergrundbild (Pfeil) entfernen */
 input.medal-none {
     background-image: none !important; 
 }
