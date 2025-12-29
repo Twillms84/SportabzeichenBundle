@@ -103,10 +103,16 @@
                                 </div>
 
                                 <div>
+                                    {# KORRIGIERT: Ternary Operator statt ?? für das Datum #}
+                                    {% set swimTitle = p.has_swimming 
+                                        ? 'Gültig bis: ' ~ (p.swimming_expiry ? p.swimming_expiry|date('d.m.Y') : '?') 
+                                        : 'Fehlt' 
+                                    %}
+                                    
                                     <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} w-100 text-start badge-mini" 
                                           data-bs-toggle="tooltip" 
                                           data-bs-placement="right"
-                                          title="{{ p.has_swimming ? 'Gültig bis: ' ~ (p.swimming_expiry|date('d.m.Y') ?? '?') : 'Fehlt' }}">
+                                          title="{{ swimTitle }}">
                                         {{ p.has_swimming ? icon('check') ~ ' Schwimmen' : icon('x') ~ ' Schwimmen' }}
                                     </span>
                                 </div>
@@ -128,10 +134,15 @@
                                     {% endif %}
                                 {% endfor %}
 
+                                {# Logik: Vorauswahl (KORRIGIERT auf keys check) #}
                                 {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
+                                    {# Sicherer Check: Prüfen ob ID in den Keys ist #}
+                                    {% if d.id in epResults|keys %}
+                                        {% set selectedId = d.id %}
+                                    {% endif %}
                                 {% endfor %}
+                                
                                 {% if selectedId is null and options|length > 0 %}{% set selectedId = options[0].id %}{% endif %}
                                 
                                 {% set resObj = epResults[selectedId] ?? null %}
