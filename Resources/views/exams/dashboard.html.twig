@@ -9,25 +9,18 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{{ 'Verwaltung & Ergebnisse'|trans }}</h2>
+        {# HINWEIS: Diese Route muss in deinem ExamController existieren #}
         <a class="btn btn-primary" href="{{ path('sportabzeichen_exams_new') }}">
             {{ icon('plus') }} {{ 'Neue Prüfung anlegen'|trans }}
         </a>
     </div>
 
-    {# ------------------------------------------------------------
-       FALL 1: Noch keine Prüfungen vorhanden
-       ------------------------------------------------------------ #}
     {% if exams is empty %}
-
         <div class="alert alert-info">
             {{ 'Es sind noch keine Prüfungen angelegt. Bitte erstelle zuerst eine neue Prüfung.'|trans }}
         </div>
-
     {% else %}
 
-        {# ------------------------------------------------------------
-           FALL 2: Tabelle aller Prüfungen
-           ------------------------------------------------------------ #}
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
                 <thead>
@@ -42,31 +35,29 @@
                     {% for exam in exams %}
                         <tr>
                             <td class="fw-bold">{{ exam.exam_year }}</td>
-                            <td>
-                                {{ exam.exam_name|default('Ohne Namen') }}
-                            </td>
-                            <td>
-                                {{ exam.exam_date ? exam.exam_date|date('d.m.Y') : '-' }}
-                            </td>
+                            <td>{{ exam.exam_name|default('Ohne Namen') }}</td>
+                            <td>{{ exam.exam_date ? exam.exam_date|date('d.m.Y') : '-' }}</td>
                             <td class="text-end">
                                 <div class="btn-group">
-                                    {# 1. BUTTON: ERGEBNISSE (Die große Matrix) #}
-                                    <a href="{{ path('sportabzeichen_results_exam', { 'examId': exam.id }) }}" 
+                                    
+                                    {# --- KORRIGIERT: Link zur Matrix --- #}
+                                    {# Basiert auf ExamResultController::index -> name="index" #}
+                                    <a href="{{ path('sportabzeichen_results_index', { 'examId': exam.id }) }}" 
                                        class="btn btn-sm btn-success"
                                        title="{{ 'Ergebnisse erfassen'|trans }}">
                                         {{ icon('table') }} Ergebnisse
                                     </a>
 
-                                    {# 2. BUTTON: BEARBEITEN #}
-                                    {# Passe den Routennamen 'sportabzeichen_exams_edit' an deinen Controller an #}
+                                    {# --- HINWEIS: Link zum Bearbeiten --- #}
+                                    {# Diese Route muss im ExamController sein #}
                                     <a href="{{ path('sportabzeichen_exams_edit', { 'id': exam.id }) }}" 
                                        class="btn btn-sm btn-secondary"
                                        title="{{ 'Stammdaten bearbeiten'|trans }}">
                                         {{ icon('pencil') }}
                                     </a>
 
-                                    {# 3. BUTTON: LÖSCHEN #}
-                                    {# Benötigt meist ein Formular wegen CSRF, hier als simpler Link mit JS-Confirm #}
+                                    {# --- HINWEIS: Link zum Löschen --- #}
+                                    {# Diese Route muss im ExamController sein #}
                                     <form method="post" 
                                           action="{{ path('sportabzeichen_exams_delete', {'id': exam.id}) }}" 
                                           style="display: inline-block;"
@@ -83,7 +74,6 @@
                 </tbody>
             </table>
         </div>
-
     {% endif %}
 
 </div>
