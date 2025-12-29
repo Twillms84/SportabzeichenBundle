@@ -5,24 +5,41 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRoute = form.getAttribute('data-global-route');
     const csrfToken = form.getAttribute('data-global-token');
 
+    // --- 1. INITIALISIERUNG: Anforderungen für alle bereits gewählten Disziplinen anzeigen ---
+    document.querySelectorAll('.js-discipline-select').forEach(select => {
+        updateRequirementHints(select);
+    });
+
+    // --- 2. EVENT LISTENER: Ändern & Speichern ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
         
-        // Nur reagieren, wenn data-save vorhanden ist
+        // Nur reagieren, wenn das Element Teil des Speicher-Prozesses ist
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
-        const kat = el.getAttribute('data-kategorie'); // Wichtig: Damit wissen wir, welche Gruppe wir bereinigen müssen
+        const kat = el.getAttribute('data-kategorie');
         const cell = el.closest('td');
         const row = el.closest('tr');
         
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
 
-        // Validierung
+        // A) Wenn Disziplin gewechselt wurde: Sofort die Anforderungen (B/S/G) aktualisieren
+        if (el.tagName === 'SELECT') {
+            updateRequirementHints(el);
+            // Input leeren bei Disziplinwechsel, damit keine alten Werte stehen bleiben?
+            // Optional. Hier lassen wir es, falls User aus Versehen wechselt.
+        }
+
+        // Validierung: Ohne Disziplin kann keine Leistung gespeichert werden
         if (!selectEl || !selectEl.value || !epId) return;
 
+        // B) AJAX SAVE REQUEST
         try {
+            // UI Feedback: Zeigen, dass gespeichert wird (optional: input leicht ausgrauen)
+            inputEl.style.opacity = '0.7';
+
             const response = await fetch(saveRoute, {
                 method: 'POST',
                 headers: { 
@@ -41,63 +58,113 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
             
+            // UI Feedback zurücksetzen
+            inputEl.style.opacity = '1';
+
             if (data.status === 'ok') {
                 
-                // 1. AUFRÄUMEN: Alle Inputs der gleichen Kategorie (außer dem aktuellen) leeren
-                // Das ist nötig, weil der Server die anderen Disziplinen gelöscht hat.
-                if (kat) {
-                    const groupInputs = row.querySelectorAll(`[data-kategorie="${kat}"]`);
-                    groupInputs.forEach(otherEl => {
-                        const otherCell = otherEl.closest('td');
-                        // Wenn es eine andere Zelle ist als die aktuelle:
-                        if (otherCell !== cell) {
-                            // Input leeren
-                            if (otherEl.tagName === 'INPUT') otherEl.value = '';
-                            // Select resetten (optional, meist will man aber sehen was gewählt war, daher lassen wir select oft so, aber Farbe weg)
-                            // CSS Klassen entfernen
-                            otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
-                            otherEl.classList.add('medal-none');
-                        }
-                    });
-                }
-
-                // 2. AKTUALISIEREN: Farben der aktuellen Zelle setzen
-                // Hier war der Fehler: PHP sendet 'stufe', nicht 'medal' für das Einzelergebnis
-                const resultColor = data.stufe || 'none'; 
+                // 1. DIESE ZELLE UPDATE (Farbe der Leistung)
+                const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; // 'gold', 'silber', 'bronze', 'none'
                 
                 [selectEl, inputEl].forEach(element => {
                     element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
                     element.classList.add('medal-' + resultColor);
                 });
 
-                // 3. Gesamtpunkte Update
+                // 2. ANDERE ZELLEN DER GLEICHEN KATEGORIE BEREINIGEN
+                // (Wenn man von 50m Lauf auf 1000m wechselt, muss der 50m Lauf visuell resettet werden)
+                if (kat) {
+                    const groupInputs = row.querySelectorAll(`[data-kategorie="${kat}"]`);
+                    groupInputs.forEach(otherEl => {
+                        const otherCell = otherEl.closest('td');
+                        if (otherCell !== cell) {
+                            if (otherEl.tagName === 'INPUT') otherEl.value = '';
+                            if (otherEl.tagName === 'SELECT') {
+                                // Optional: Reset Select auf '--' wenn gewünscht
+                                // otherEl.value = ''; 
+                                // updateRequirementHints(otherEl);
+                            }
+                            otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                            otherEl.classList.add('medal-none');
+                        }
+                    });
+                }
+
+                // 3. GESAMTPUNKTE UPDATE
                 const totalBadge = document.getElementById('total-points-' + epId);
                 if (totalBadge) {
-                    // Update Text (z.B. innere span oder direkt textContent)
-                    // Da im Twig oft verschachtelt, hier sicher gehen:
-                    if(totalBadge.querySelector('.pts-val')) {
-                         totalBadge.querySelector('.pts-val').textContent = data.total_points;
+                    const valSpan = totalBadge.querySelector('.pts-val');
+                    if (valSpan) valSpan.textContent = data.total_points;
+                }
+
+                // 4. MEDAILLEN BADGE UPDATE (Gesamtergebnis)
+                // Wir suchen das Badge innerhalb der Zeile
+                const medalBadge = row.querySelector('.js-medal-badge');
+                if (medalBadge) {
+                    const medalName = data.final_medal || ''; // 'Gold', 'Silber', 'Bronze' oder null
+                    
+                    if (medalName) {
+                        medalBadge.style.display = 'inline-block';
+                        medalBadge.textContent = medalName;
+                        // Alte Klassen entfernen
+                        medalBadge.className = 'badge badge-mini js-medal-badge';
+                        // Neue Klasse hinzufügen
+                        if (medalName === 'Gold') medalBadge.classList.add('bg-warning', 'text-dark');
+                        else if (medalName === 'Silber') medalBadge.classList.add('bg-secondary', 'text-white');
+                        else if (medalName === 'Bronze') medalBadge.classList.add('bg-danger', 'text-white'); // oder style color
                     } else {
-                         totalBadge.textContent = data.total_points + ' Pkt.';
+                        medalBadge.style.display = 'none';
+                        medalBadge.textContent = '';
                     }
-                }
-
-                // 4. Schwimm-Status Badge Update
-                const swimmingBadge = document.getElementById('swimming-status-' + epId);
-                if (swimmingBadge) {
-                    swimmingBadge.className = data.has_swimming ? 'badge bg-success' : 'badge bg-danger';
-                    swimmingBadge.textContent = data.has_swimming ? '🏊 OK' : '❌ Schwimmen';
-                }
-
-                // 5. Zeilen-Hintergrund für End-Medaille
-                // Hier nutzen wir data.final_medal
-                if (row) {
-                    row.className = row.className.replace(/medal-row-\w+/g, '');
-                    row.classList.add('medal-row-' + (data.final_medal || 'none'));
                 }
             }
         } catch (e) {
             console.error('Fehler beim Autosave:', e);
+            inputEl.style.backgroundColor = '#ffe6e6'; // Roter Hint bei Fehler
         }
     });
+
+    // --- HELPER FUNKTIONEN ---
+
+    /**
+     * Liest die data-Attribute der gewählten Option aus
+     * und schreibt sie in die kleinen B/S/G Labels unter dem Input.
+     */
+    function updateRequirementHints(select) {
+        const parentTd = select.closest('td');
+        if (!parentTd) return;
+
+        const selectedOption = select.options[select.selectedIndex];
+        
+        // Elemente finden
+        const labelB = parentTd.querySelector('.js-val-b');
+        const labelS = parentTd.querySelector('.js-val-s');
+        const labelG = parentTd.querySelector('.js-val-g');
+        const unitLabel = parentTd.querySelector('.js-unit-label');
+        const input = parentTd.querySelector('input[data-type="leistung"]');
+
+        if (!selectedOption || !selectedOption.value) {
+            // Reset wenn nichts gewählt
+            if(labelB) labelB.textContent = '-';
+            if(labelS) labelS.textContent = '-';
+            if(labelG) labelG.textContent = '-';
+            if(unitLabel) unitLabel.textContent = '';
+            if(input) input.disabled = true;
+            return;
+        }
+
+        if(input) input.disabled = false;
+
+        // Werte aus data-Attributen der Option holen
+        const b = selectedOption.getAttribute('data-bronze') || '-';
+        const s = selectedOption.getAttribute('data-silber') || '-';
+        const g = selectedOption.getAttribute('data-gold') || '-';
+        const unit = selectedOption.getAttribute('data-unit') || '';
+
+        // Text setzen
+        if(labelB) labelB.textContent = b;
+        if(labelS) labelS.textContent = s;
+        if(labelG) labelG.textContent = g;
+        if(unitLabel) unitLabel.textContent = unit;
+    }
 });
