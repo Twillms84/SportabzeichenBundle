@@ -94,7 +94,7 @@
                                     <span class="badge bg-light text-dark border badge-mini" id="total-points-{{ p.ep_id }}">
                                         <span class="pts-val fw-bold">{{ p.total_points|default(0) }}</span> Pkt.
                                     </span>
-                                    {# Medaillen-Badge (initial unsichtbar wenn leer) #}
+                                    {# Medaillen-Badge #}
                                     <span class="badge badge-mini js-medal-badge" 
                                           data-medal="{{ p.final_medal|default('') }}"
                                           style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
@@ -103,11 +103,15 @@
                                 </div>
 
                                 <div>
-                                    {# KORRIGIERT: Ternary Operator statt ?? für das Datum #}
-                                    {% set swimTitle = p.has_swimming 
-                                        ? 'Gültig bis: ' ~ (p.swimming_expiry ? p.swimming_expiry|date('d.m.Y') : '?') 
-                                        : 'Fehlt' 
-                                    %}
+                                    {# KORREKTUR: Prüfung 'is defined', da die Spalte in der DB-Abfrage fehlt #}
+                                    {% set swimTitle = 'Fehlt' %}
+                                    {% if p.has_swimming %}
+                                        {% if p.swimming_expiry is defined and p.swimming_expiry %}
+                                            {% set swimTitle = 'Gültig bis: ' ~ p.swimming_expiry|date('d.m.Y') %}
+                                        {% else %}
+                                            {% set swimTitle = 'Nachweis vorhanden' %}
+                                        {% endif %}
+                                    {% endif %}
                                     
                                     <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} w-100 text-start badge-mini" 
                                           data-bs-toggle="tooltip" 
