@@ -11,22 +11,24 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
- * Verwaltung der Prüfungen + Teilnehmer
+ * Zentrale Verwaltung der Prüfungen (CRUD: Create, Read, Update, Delete)
  */
 #[Route('/sportabzeichen/exams', name: 'sportabzeichen_exams_')]
 final class ExamController extends AbstractPageController
 {
     /**
-     * Liste aller Prüfungen
+     * DASHBOARD: Liste aller Prüfungen
      */
     #[Route('/', name: 'dashboard')]
     public function index(Connection $conn): Response
     {
-    $exams = $conn->fetchAllAssociative(
-        'SELECT e.id, e.exam_year, e.exam_date
-        FROM public.sportabzeichen_exams e
-        ORDER BY e.exam_year DESC'
-    );
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE');
+
+        $exams = $conn->fetchAllAssociative(
+            'SELECT e.id, e.exam_name, e.exam_year, e.exam_date
+             FROM public.sportabzeichen_exams e
+             ORDER BY e.exam_year DESC'
+        );
 
         return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
             'exams' => $exams,
@@ -34,146 +36,157 @@ final class ExamController extends AbstractPageController
     }
 
     /**
-     * Prüfung erstellen (simple version)
+     * CREATE: Neue Prüfung erstellen
+     * (Integriert die Logik aus deinem ExamCreateController)
      */
     #[Route('/new', name: 'new')]
     public function new(Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE_PARTICIPANTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE');
+
+        // Klassen laden für das Dropdown
+        $classes = $conn->fetchFirstColumn("
+            SELECT DISTINCT auxinfo FROM users 
+            WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
+            ORDER BY auxinfo
+        ");
+
+        if ($request->isMethod('POST')) {
+            $conn->beginTransaction();
+            try {
+                $name = trim($request->request->get('exam_name'));
+                $year = (int)$request->request->get('exam_year');
+                
+                // Jahr normalisieren (25 -> 2025)
+                if ($year < 100) $year += 2000;
+                
+                $date = $request->request->get('exam_date') ?: null;
+                $classFilter = $request->request->get('class'); // Optional: Klasse direkt importieren
+
+                // 1. Prüfung anlegen
+                $conn->insert('sportabzeichen_exams', [
+                    'exam_name' => $name,
+                    'exam_year' => $year,
+                    'exam_date' => $date,
+                ]);
+                $examId = (int)$conn->lastInsertId();
+
+                // 2. Falls eine Klasse gewählt wurde, Teilnehmer importieren
+                if ($classFilter) {
+                    $this->importParticipantsFromClass($conn, $examId, $year, $classFilter);
+                    $this->addFlash('success', 'Prüfung angelegt und Klasse ' . $classFilter . ' importiert.');
+                } else {
+                    $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
+                }
+
+                $conn->commit();
+                return $this->redirectToRoute('sportabzeichen_exams_dashboard');
+
+            } catch (\Throwable $e) {
+                $conn->rollBack();
+                $this->addFlash('error', 'Fehler beim Anlegen: ' . $e->getMessage());
+            }
+        }
+
+        return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
+            'classes' => $classes
+        ]);
+    }
+
+    /**
+     * EDIT: Prüfung bearbeiten
+     */
+    #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
+    public function edit(int $id, Request $request, Connection $conn): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE');
+
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
+        if (!$exam) throw $this->createNotFoundException();
 
         if ($request->isMethod('POST')) {
             $name = trim($request->request->get('exam_name'));
             $year = (int)$request->request->get('exam_year');
+            if ($year < 100) $year += 2000;
             $date = $request->request->get('exam_date') ?: null;
 
-            $conn->insert('sportabzeichen_exam', [
+            $conn->update('sportabzeichen_exams', [
                 'exam_name' => $name,
                 'exam_year' => $year,
-                'exam_date' => $date,
-            ]);
+                'exam_date' => $date
+            ], ['id' => $id]);
 
-            return $this->redirectToRoute('sportabzeichen_exam_dashboard');
+            $this->addFlash('success', 'Änderungen gespeichert.');
+            return $this->redirectToRoute('sportabzeichen_exams_dashboard');
         }
 
-        return $this->render('@PulsRSportabzeichen/exams/new.html.twig');
-    }
-
-    /**
-     * Teilnehmerliste für eine Prüfung
-     */
-    #[Route('/{id}/participants', name: 'participants')]
-    public function participants(int $id, Connection $conn): Response
-    {
-        // Prüfung holen
-        $exam = $conn->fetchAssociative("
-            SELECT * FROM sportabzeichen_exams WHERE id = ?
-        ", [$id]);
-
-        if (!$exam) {
-            throw $this->createNotFoundException("Prüfung nicht gefunden");
-        }
-
-        // Teilnehmer holen
-        $participants = $conn->fetchAllAssociative("
-            SELECT ep.id AS ep_id,
-                   ep.age_year,
-                   p.vorname,
-                   p.nachname,
-                   p.geschlecht
-            FROM sportabzeichen_exam_participants ep
-            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-            WHERE ep.exam_id = ?
-            ORDER BY p.nachname, p.vorname
-        ", [$id]);
-
-        return $this->render('@PulsRSportabzeichen/exams/participants.html.twig', [
-            'exam'        => $exam,
-            'participants'=> $participants,
+        return $this->render('@PulsRSportabzeichen/exams/edit.html.twig', [
+            'exam' => $exam
         ]);
     }
 
     /**
-     * Teilnehmer zur Prüfung hinzufügen
+     * DELETE: Prüfung löschen
      */
-    #[Route('/{id}/participants/add', name: 'add_participant', methods: ['GET', 'POST'])]
-    public function addParticipant(int $id, Request $request, Connection $conn): Response
+    #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]
+    public function delete(int $id, Request $request, Connection $conn): Response
     {
-        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
-        if (!$exam) {
-            throw $this->createNotFoundException();
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE');
+
+        // CSRF Token Check (Sicherheit)
+        $token = $request->request->get('_token');
+        if (!$this->isCsrfTokenValid('delete' . $id, $token)) {
+            $this->addFlash('error', 'Ungültiger Sicherheits-Token.');
+            return $this->redirectToRoute('sportabzeichen_exams_dashboard');
         }
 
-        if ($request->isMethod('POST')) {
-            $participantId = (int)$request->request->get('participant_id');
+        $conn->beginTransaction();
+        try {
+            // 1. Ergebnisse löschen
+            $conn->executeStatement("
+                DELETE FROM sportabzeichen_exam_results 
+                WHERE ep_id IN (SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?)
+            ", [$id]);
 
-            // Alter berechnen
-            $ageYear = $exam['exam_year'] -
-                       (int) $conn->fetchOne("SELECT EXTRACT(YEAR FROM geburtsdatum) FROM sportabzeichen_participants WHERE id = ?", [$participantId]);
+            // 2. Teilnehmer-Verknüpfungen löschen
+            $conn->executeStatement("DELETE FROM sportabzeichen_exam_participants WHERE exam_id = ?", [$id]);
 
-            $conn->insert('sportabzeichen_exam_participants', [
-                'exam_id'        => $id,
-                'participant_id' => $participantId,
-                'age_year'       => $ageYear,
-            ]);
+            // 3. Prüfung selbst löschen
+            $conn->executeStatement("DELETE FROM sportabzeichen_exams WHERE id = ?", [$id]);
 
-            return $this->redirectToRoute('sportabzeichen_exam_participants', ['id' => $id]);
+            $conn->commit();
+            $this->addFlash('success', 'Prüfung und alle zugehörigen Ergebnisse wurden gelöscht.');
+
+        } catch (\Exception $e) {
+            $conn->rollBack();
+            $this->addFlash('error', 'Fehler beim Löschen: ' . $e->getMessage());
         }
 
-        // Teilnehmerliste holen
-        $students = $conn->fetchAllAssociative("
-            SELECT id, vorname, nachname
-            FROM sportabzeichen_participants 
-            ORDER BY nachname, vorname
-        ");
-
-        return $this->render('@PulsRSportabzeichen/exams/add_participant.html.twig', [
-            'exam' => $exam,
-            'students' => $students,
-        ]);
-    }
-    #[Route('/{id}/participants/auto-add', name: 'auto_add_participants', methods: ['POST'])]
-public function autoAddParticipants(int $id, Connection $conn): Response
-{
-    $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_MANAGE');
-
-    // Prüfung laden
-    $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
-    if (!$exam) {
-        throw $this->createNotFoundException("Prüfung nicht gefunden");
+        return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    // Alle Teilnehmer (global)
-    $allParticipants = $conn->fetchAllAssociative("
-        SELECT id, geburtsdatum
-        FROM sportabzeichen_participants
-        WHERE geschlecht IS NOT NULL 
-          AND geburtsdatum IS NOT NULL
-    ");
+    // --- HILFSMETHODE ---
 
-    // Bereits vorhandene Teilnehmer der Prüfung
-    $existing = $conn->fetchFirstColumn("
-        SELECT participant_id
-        FROM sportabzeichen_exam_participants
-        WHERE exam_id = ?
-    ", [$id]);
+    private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
+    {
+        $users = $conn->fetchAllAssociative("
+            SELECT importid FROM users 
+            WHERE auxinfo = ? AND importid IS NOT NULL
+        ", [$class]);
 
-    foreach ($allParticipants as $p) {
+        foreach ($users as $u) {
+            $participant = $conn->fetchAssociative("
+                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+            ", [$u['importid']]);
 
-        if (in_array($p['id'], $existing)) {
-            continue; // schon drin
+            if (!$participant || !$participant['geburtsdatum']) continue;
+
+            $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
+
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+            ", [$examId, $participant['id'], $age]);
         }
-
-        // Altersberechnung
-        $ageYear = $exam['exam_year'] - (int)substr($p['geburtsdatum'], 0, 4);
-
-        // Einfügen
-        $conn->insert('sportabzeichen_exam_participants', [
-            'exam_id'        => $id,
-            'participant_id' => $p['id'],
-            'age_year'       => $ageYear
-        ]);
-    }
-
-    return $this->redirectToRoute('sportabzeichen_exam_participants', ['id' => $id]);
     }
 }
