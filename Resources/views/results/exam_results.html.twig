@@ -95,9 +95,9 @@
                                 {% set resObj = epResults[selectedId] ?? null %}
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
-                                <td class="p-1 col-discipline">
+                                <td class="p-1 col-discipline" data-kat-group="{{ category }}">
                                     <select class="form-select discipline-selector mb-1 {{ mClass }}" 
-                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline">
+                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}>
                                         <option value="">--</option>
                                         {% for d in options %}
                                             <option value="{{ d.id }}" {{ selectedId == d.id ? 'selected' : '' }}>
@@ -108,7 +108,7 @@
 
                                     <input type="text" class="form-control form-control-custom {{ mClass }}"
                                            value="{{ resObj.leistung ?? '' }}"
-                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung">
+                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung" data-kategorie="{{ category }}">
                                 </td>
                             {% endif %}
                         {% endfor %}
