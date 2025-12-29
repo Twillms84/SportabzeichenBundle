@@ -1,8 +1,6 @@
 {% extends '@IServCore/page.html.twig' %}
 
-{% block title %}
-    Ergebnisse eingeben – {{ exam.exam_name }}
-{% endblock %}
+{% block title %}Ergebnisse – {{ exam.exam_name }}{% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
@@ -11,13 +9,44 @@
 
 {% block content %}
 <div class="container-fluid mt-3">
+    
+    {# --- HEADER & FILTER --- #}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>🏅 {{ exam.exam_name }} ({{ exam.exam_year }})</h4>
-        <div class="d-flex gap-2">
-            {# Klassen-Filter falls vorhanden #}
+        
+        <div class="d-flex gap-2 align-items-center">
+            
+            {# Ansicht (Spalten ein/aus) #}
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    {{ icon('eye') }} Ansicht
+                </button>
+                <ul class="dropdown-menu">
+                    {% for category in disciplines|keys %}
+                        {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                            <li>
+                                <div class="dropdown-item">
+                                    <div class="form-check">
+                                        <input class="form-check-input js-col-toggle" type="checkbox" 
+                                               value="{{ category }}" 
+                                               id="check-{{ category }}" 
+                                               data-category="{{ category }}"
+                                               checked>
+                                        <label class="form-check-label" for="check-{{ category }}">
+                                            {{ category }}
+                                        </label>
+                                    </div>
+                                </div>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {# Klassen Filter #}
             {% if classes|length > 0 %}
                 <form method="get" class="d-flex gap-2">
-                    <select name="class" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <select name="class" class="form-select form-select-sm js-autosubmit">
                         <option value="">Alle Klassen</option>
                         {% for c in classes %}
                             <option value="{{ c.klasse }}" {{ selectedClass == c.klasse ? 'selected' : '' }}>{{ c.klasse }}</option>
@@ -25,24 +54,25 @@
                     </select>
                 </form>
             {% endif %}
-            <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
+            
+            <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
         </div>
     </div>
 
+    {# --- FORMULAR & TABELLE --- #}
     <form id="autosave-form" 
           data-global-route="{{ path('sportabzeichen_results_exam_result_save') }}"
           data-global-token="{{ csrf_token('sportabzeichen_result_save') }}">
 
         <div class="table-responsive">
-            <table class="table table-sm table-bordered table-results-compact">
-                <thead>
+            <table class="table table-sm table-bordered table-results-compact align-middle">
+                <thead class="table-light">
                     <tr>
                         <th class="col-name">Teilnehmer</th>
                         <th class="col-class text-center">Kl.</th>
-                        {# Kategorien-Header (ohne Schwimmen) #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                <th class="text-center">{{ category }}</th>
+                                <th class="text-center col-discipline col-cat-{{ category }}">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
                     </tr>
@@ -50,65 +80,97 @@
                 <tbody>
                 {% for p in participants %}
                     {% set epResults = results[p.ep_id] ?? {} %}
-                    <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}" class="medal-row-{{ p.final_medal|lower|default('none') }}">
-                        <td class="col-name">
-                            <div class="fw-bold">{{ p.vorname }} {{ p.nachname }}</div>
-                            <div class="d-flex gap-1 mt-1">
-                                <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} badge-mini" 
-                                    id="swimming-status-{{ p.ep_id }}">
-                                    {{ p.has_swimming ? '🏊 OK' : '❌ Schwimmen' }}
-                                </span>
-                                <span class="badge bg-info text-dark badge-mini" id="total-points-{{ p.ep_id }}">
-                                    <span class="pts-val">{{ p.total_points|default(0) }}</span> Pkt.
-                                </span>
+                    <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
+                        
+                        {# NAME SPALTE #}
+                        <td class="col-name py-2">
+                            <div class="name-container mb-2">
+                                <span class="name-main">{{ p.vorname }} {{ p.nachname }}</span>
+                                <span class="name-age">({{ p.age_year }})</span>
+                            </div>
+                            
+                            <div class="d-flex flex-column gap-1">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <span class="badge bg-light text-dark border badge-mini" id="total-points-{{ p.ep_id }}">
+                                        <span class="pts-val fw-bold">{{ p.total_points|default(0) }}</span> Pkt.
+                                    </span>
+                                    {# Medaillen-Badge (initial unsichtbar wenn leer) #}
+                                    <span class="badge badge-mini js-medal-badge" 
+                                          data-medal="{{ p.final_medal|default('') }}"
+                                          style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
+                                        {{ p.final_medal }}
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} w-100 text-start badge-mini" 
+                                          data-bs-toggle="tooltip" 
+                                          data-bs-placement="right"
+                                          title="{{ p.has_swimming ? 'Gültig bis: ' ~ (p.swimming_expiry|date('d.m.Y') ?? '?') : 'Fehlt' }}">
+                                        {{ p.has_swimming ? icon('check') ~ ' Schwimmen' : icon('x') ~ ' Schwimmen' }}
+                                    </span>
+                                </div>
                             </div>
                         </td>
 
-                        <td class="col-class text-center align-middle fw-bold">{{ p.klasse|default('-') }}</td>
+                        {# KLASSE SPALTE #}
+                        <td class="col-class text-center fw-bold">{{ p.klasse|default('-') }}</td>
 
+                        {# DISZIPLIN SPALTEN #}
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                {# 1. Passende Disziplinen für diesen Teilnehmer filtern #}
                                 {% set options = [] %}
                                 {% set pGender = (p.geschlecht|slice(0, 1)|upper == 'M') ? 'MALE' : 'FEMALE' %}
-                                
                                 {% for d in items %}
                                     {% if d.geschlecht == pGender and p.age_year >= d.age_min and p.age_year <= d.age_max %}
                                         {% set options = options|merge([d]) %}
                                     {% endif %}
                                 {% endfor %}
 
-                                {# 2. Aktuelle Auswahl bestimmen #}
                                 {% set selectedId = null %}
                                 {% for d in options %}
-                                    {% if epResults[d.id] is defined %}
-                                        {% set selectedId = d.id %}
-                                    {% endif %}
+                                    {% if epResults[d.id] is defined %}{% set selectedId = d.id %}{% endif %}
                                 {% endfor %}
+                                {% if selectedId is null and options|length > 0 %}{% set selectedId = options[0].id %}{% endif %}
                                 
-                                {# Fallback auf erste Option, falls nichts gewählt #}
-                                {% if selectedId is null and options|length > 0 %}
-                                    {% set selectedId = options[0].id %}
-                                {% endif %}
-
                                 {% set resObj = epResults[selectedId] ?? null %}
                                 {% set mClass = (resObj and resObj.stufe|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.stufe|lower : 'medal-none' %}
 
-                                <td class="p-1 col-discipline" data-kat-group="{{ category }}">
-                                    <select class="form-select discipline-selector mb-1 {{ mClass }}" 
-                                            data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}>
-                                        <option value="">--</option>
-                                        {% for d in options %}
-                                            <option value="{{ d.id }}" {{ selectedId == d.id ? 'selected' : '' }}>
-                                                {{ d.name }}
-                                            </option>
-                                        {% endfor %}
-                                    </select>
+                                <td class="p-1 col-discipline col-cat-{{ category }}">
+                                    <div class="d-flex flex-column">
+                                        
+                                        <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
+                                                data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}">
+                                            {% if options is empty %}
+                                                <option value="">--</option>
+                                            {% else %}
+                                                {% for d in options %}
+                                                    <option value="{{ d.id }}" 
+                                                            {{ selectedId == d.id ? 'selected' : '' }}
+                                                            data-unit="{{ d.unit }}"
+                                                            data-bronze="{{ d.bronze }}"
+                                                            data-silber="{{ d.silber }}"
+                                                            data-gold="{{ d.gold }}">
+                                                        {{ d.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </select>
 
-                                    <input type="text" class="form-control form-control-custom {{ mClass }}"
-                                           value="{{ resObj.leistung ?? '' }}"
-                                           data-save data-ep-id="{{ p.ep_id }}" data-type="leistung" data-kategorie="{{ category }}">
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control form-control-custom {{ mClass }}"
+                                                   value="{{ resObj.leistung ?? '' }}"
+                                                   data-save data-ep-id="{{ p.ep_id }}" data-type="leistung" data-kategorie="{{ category }}">
+                                            <span class="input-group-text input-group-text-unit js-unit-label"></span>
+                                        </div>
+
+                                        <div class="req-hint">
+                                            <span class="req-val-b" title="Bronze">B:<span class="js-val-b">-</span></span>
+                                            <span class="req-val-s" title="Silber">S:<span class="js-val-s">-</span></span>
+                                            <span class="req-val-g" title="Gold">G:<span class="js-val-g">-</span></span>
+                                        </div>
+                                    </div>
                                 </td>
                             {% endif %}
                         {% endfor %}
@@ -123,5 +185,5 @@
 
 {% block javascripts %}
     {{ parent() }}
-    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}

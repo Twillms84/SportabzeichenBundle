@@ -1,91 +1,80 @@
-/* Tabellen-Architektur */
+/* --- Bestehende Tabellen-Architektur --- */
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: 1.1rem !important; /* Etwas größer für bessere Lesbarkeit */
+    font-size: 1.1rem !important;
     border-collapse: collapse;
 }
 
 /* Spaltenbreiten */
 .col-name { width: 170px !important; }
-.col-class { width: 50px !important; } /* Neue Spalte für Klasse */
+.col-class { width: 50px !important; }
 .col-discipline { width: 145px !important; }
 
-/* Medaillen-Farben: SEHR spezifisch, damit Bootstrap verliert */
+/* --- Medaillen-Farben für Inputs/Selects --- */
 select.medal-gold, input.medal-gold { 
-    background-color: #ffd700 !important; 
-    color: #000 !important; 
-    border: 2px solid #b8860b !important; 
-    font-weight: bold !important; 
+    background-color: #ffd700 !important; color: #000 !important; border: 2px solid #b8860b !important; font-weight: bold !important; 
 }
-
 select.medal-silber, input.medal-silber { 
-    background-color: #e0e0e0 !important; 
-    color: #000 !important; 
-    border: 2px solid #a0a0a0 !important; 
-    font-weight: bold !important; 
+    background-color: #e0e0e0 !important; color: #000 !important; border: 2px solid #a0a0a0 !important; font-weight: bold !important; 
 }
-
 select.medal-bronze, input.medal-bronze { 
-    background-color: #cd7f32 !important; 
-    color: #fff !important; 
-    border: 2px solid #8b4513 !important; 
-    font-weight: bold !important; 
+    background-color: #cd7f32 !important; color: #fff !important; border: 2px solid #8b4513 !important; font-weight: bold !important; 
 }
 
-/* --- Standard-Status (keine Medaille): LIGHT MODE (Standard) --- */
+/* Standard-Status */
 select.medal-none, input.medal-none { 
-    background-color: #ffffff !important; 
-    color: #212529 !important;
-    border: 1px solid #dee2e6 !important;
+    background-color: #ffffff !important; color: #212529 !important; border: 1px solid #dee2e6 !important;
 }
+input.medal-none { background-image: none !important; }
 
-/* --- DARK MODE Support --- */
-/* Greift, wenn das Gerät auf Dark Mode steht oder IServ das Attribut setzt */
+/* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
     select.medal-none, input.medal-none { 
-        background-color: #212529 !important; /* Dunkelgrau */
-        color: #dee2e6 !important;           /* Helles Grau */
-        border: 1px solid #495057 !important;
+        background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
     }
 }
-
-/* IServ spezifischer Dark-Mode Override (falls via HTML-Attribut gesteuert) */
 [data-bs-theme="dark"] select.medal-none, 
 [data-bs-theme="dark"] input.medal-none {
-    background-color: #212529 !important;
-    color: #dee2e6 !important;
-    border: 1px solid #495057 !important;
+    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
 }
 
-/* Nur beim Input das Hintergrundbild (Pfeil) entfernen */
-input.medal-none {
-    background-image: none !important; 
+/* Formularelemente */
+.discipline-selector, .form-control-custom {
+    font-size: 1.1rem !important; padding: 6px 3px !important; height: auto !important; width: 100% !important; text-align: center !important;
 }
 
-/* Eingabefelder */
-.discipline-selector, 
-.form-control-custom {
-    font-size: 1.1rem !important; 
-    padding: 6px 3px !important;
-    height: auto !important;
-    width: 100% !important;
-    text-align: center !important;
-}
+/* Text-Container */
+.name-container { line-height: 1.2; }
+.name-main { font-weight: bold; display: block; }
+.name-age { font-weight: normal; font-size: 0.95rem; color: #555; }
+.badge-mini { font-size: 0.7rem !important; vertical-align: middle; }
 
+/* --- NEU: Anforderungen & Helper (aus dem Style-Block) --- */
+
+/* Helper zum Ausblenden via JS */
+.col-hidden { display: none !important; }
+
+/* Container für Anforderungen (B/S/G) */
 .req-hint { 
-    font-size: 0.95rem !important; /* Etwas größer */
+    font-size: 0.75rem !important;
     display: flex; 
     justify-content: space-between; 
     padding: 2px 4px;
     font-weight: 600;
+    white-space: nowrap;
 }
 
-.name-container { line-height: 1.2; }
-.name-main { font-weight: bold; display: block; }
-.name-age { font-weight: normal; font-size: 0.95rem; color: #555; }
+/* Farben für die Text-Anzeige der Anforderungen */
+.req-val-b { color: #cd7f32; } /* Bronze */
+.req-val-s { color: #808080; } /* Silber */
+.req-val-g { color: #b8860b; } /* Gold (dunkler für Lesbarkeit auf Weiß) */
 
-.badge-mini {
-    font-size: 0.7rem !important;
-    vertical-align: middle;
+/* Einheit hinter dem Eingabefeld */
+.input-group-text-unit {
+    padding: 2px 4px !important;
+    font-size: 0.8rem !important;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
 }
