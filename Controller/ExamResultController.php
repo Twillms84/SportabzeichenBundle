@@ -84,15 +84,6 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    Das sind zwei sehr wichtige Punkte. Das CSS-Problem liegt an einer kleinen Unstimmigkeit zwischen dem Variablennamen im PHP (stufe) und im JS (medal). Das Schwimmnachweis-Problem liegt daran, dass wir ihn zwar setzen, aber beim Wechsel der Disziplin (oder bei 0 Punkten) nicht wieder löschen.
-
-Hier ist die Korrektur.
-
-1. PHP Controller (ExamResultController.php)
-Ich habe die Methode saveExamResult angepasst. Die wichtige Änderung: Am Ende der Methode wird jetzt "aufgeräumt". Wir prüfen, ob für diesen Teilnehmer noch Schwimmnachweise existieren, die auf Disziplinen basieren, für die es gar keine gültigen Punkte mehr gibt (z.B. weil man von Schwimmen auf Laufen gewechselt hat).
-
-PHP
-
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request, Connection $conn): JsonResponse
     {
