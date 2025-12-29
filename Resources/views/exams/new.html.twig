@@ -39,15 +39,22 @@
             <hr />
 
             <div class="mb-3">
-                <label class="form-label" for="class">{{ 'Teilnehmer direkt importieren (optional)'|trans }}</label>
-                <select name="class" id="class" class="form-control">
-                    <option value="">-- {{ 'Keine Klasse importieren'|trans }} --</option>
+                <label class="form-label" for="classes">{{ 'Teilnehmer direkt importieren (Mehrfachauswahl möglich)'|trans }}</label>
+                
+                {# 
+                   ACHTUNG: 
+                   1. name="classes[]" -> Damit PHP ein Array bekommt
+                   2. multiple="multiple" -> Erlaubt Mehrfachauswahl
+                   3. class="form-control select2" -> Aktiviert das IServ Such-Feature
+                #}
+                <select name="classes[]" id="classes" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Bitte wählen (z.B. 5a, 6b)...'|trans }}">
                     {% for c in classes %}
                         <option value="{{ c }}">{{ c }}</option>
                     {% endfor %}
                 </select>
-                <small class="text-muted">
-                    {{ 'Wähle eine Klasse, um alle Schüler dieser Klasse direkt der Prüfung hinzuzufügen.'|trans }}
+                
+                <small class="text-muted d-block mt-1">
+                    {{ 'Klicke in das Feld, um Klassen zu suchen und hinzuzufügen.'|trans }}
                 </small>
             </div>
 

@@ -39,12 +39,15 @@ final class ExamController extends AbstractPageController
      * CREATE: Neue Prüfung erstellen
      * (Integriert die Logik aus deinem ExamCreateController)
      */
+    /**
+     * CREATE: Neue Prüfung erstellen
+     */
     #[Route('/new', name: 'new')]
     public function new(Request $request, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN'); // Oder dein Recht
 
-        // Klassen laden für das Dropdown
+        // Klassen laden
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
@@ -57,11 +60,15 @@ final class ExamController extends AbstractPageController
                 $name = trim($request->request->get('exam_name'));
                 $year = (int)$request->request->get('exam_year');
                 
-                // Jahr normalisieren (25 -> 2025)
+                // Jahr normalisieren
                 if ($year < 100) $year += 2000;
                 
                 $date = $request->request->get('exam_date') ?: null;
-                $classFilter = $request->request->get('class'); // Optional: Klasse direkt importieren
+                
+                // HIER IST DIE ÄNDERUNG: Wir holen ein Array ('classes')
+                // Wir nutzen $request->request->all(), um sicher auf das Array zuzugreifen
+                $postData = $request->request->all();
+                $selectedClasses = $postData['classes'] ?? []; 
 
                 // 1. Prüfung anlegen
                 $conn->insert('sportabzeichen_exams', [
@@ -71,12 +78,16 @@ final class ExamController extends AbstractPageController
                 ]);
                 $examId = (int)$conn->lastInsertId();
 
-                // 2. Falls eine Klasse gewählt wurde, Teilnehmer importieren
-                if ($classFilter) {
-                    $this->importParticipantsFromClass($conn, $examId, $year, $classFilter);
-                    $this->addFlash('success', 'Prüfung angelegt und Klasse ' . $classFilter . ' importiert.');
+                // 2. Schleife über alle gewählten Klassen
+                $count = 0;
+                if (!empty($selectedClasses) && is_array($selectedClasses)) {
+                    foreach ($selectedClasses as $singleClass) {
+                        $this->importParticipantsFromClass($conn, $examId, $year, $singleClass);
+                        $count++;
+                    }
+                    $this->addFlash('success', sprintf('Prüfung angelegt und Teilnehmer aus %d Klassen/Gruppen importiert.', $count));
                 } else {
-                    $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
+                    $this->addFlash('success', 'Prüfung erfolgreich angelegt (ohne Teilnehmer).');
                 }
 
                 $conn->commit();
