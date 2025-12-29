@@ -1,52 +1,57 @@
 {% extends "@IServCore/page.html.twig" %}
 
-{% block page_title %}
-    {{ 'Neue Sportabzeichen-Prüfung anlegen'|trans }}
-{% endblock %}
+{% block page_title %}{{ 'Neue Prüfung anlegen'|trans }}{% endblock %}
 
 {% block page_content %}
-<div class="content">
+    <div class="content">
+        <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-default mb-3">
+            {{ icon('arrow-left') }} {{ 'Zurück'|trans }}
+        </a>
 
-    <h2>{{ 'Neue Prüfung anlegen'|trans }}</h2>
+        <h2>{{ 'Neue Prüfung anlegen'|trans }}</h2>
 
-    {% if message %}
-        <div class="alert alert-success">{{ message }}</div>
-    {% endif %}
-    {% if error %}
-        <div class="alert alert-danger">{{ error }}</div>
-    {% endif %}
+        {# --- HIER WAR DER FEHLER: Wir nutzen jetzt Flash-Messages --- #}
+        {% for label, messages in app.flashes %}
+            {% for message in messages %}
+                <div class="alert alert-{{ label == 'error' ? 'danger' : label }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endfor %}
 
-    <form method="post">
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label" for="exam_name">{{ 'Bezeichnung (optional)'|trans }}</label>
+                <input type="text" id="exam_name" name="exam_name" class="form-control" placeholder="z.B. Sommerfest">
+            </div>
 
-        <div class="form-group">
-            <label>Prüfungsjahr</label>
-            <input type="number" name="exam_year" class="form-control"
-                   value="{{ "now"|date("Y") }}" required>
-        </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="exam_year">{{ 'Jahr'|trans }} *</label>
+                    <input type="number" id="exam_year" name="exam_year" class="form-control" required value="{{ 'now'|date('Y') }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="exam_date">{{ 'Datum'|trans }}</label>
+                    <input type="date" id="exam_date" name="exam_date" class="form-control">
+                </div>
+            </div>
 
-        <div class="form-group">
-            <label>Prüfungsdatum</label>
-            <input type="date" name="exam_date" class="form-control">
-        </div>
+            <hr />
 
-        <div class="form-group">
-            <label>IServ-Klasse</label>
-                <select name="class" class="form-control" required>
-                    <option value="">-- Klasse auswählen --</option>
-
-                    {% for className in classes %}
-                        <option value="{{ className }}">
-                            {{ className }}
-                        </option>
+            <div class="mb-3">
+                <label class="form-label" for="class">{{ 'Teilnehmer direkt importieren (optional)'|trans }}</label>
+                <select name="class" id="class" class="form-control">
+                    <option value="">-- {{ 'Keine Klasse importieren'|trans }} --</option>
+                    {% for c in classes %}
+                        <option value="{{ c }}">{{ c }}</option>
                     {% endfor %}
                 </select>
-        </div>
+                <small class="text-muted">
+                    {{ 'Wähle eine Klasse, um alle Schüler dieser Klasse direkt der Prüfung hinzuzufügen.'|trans }}
+                </small>
+            </div>
 
-        <button class="btn btn-primary">
-            Prüfung anlegen & Teilnehmer zuweisen
-        </button>
-
-    </form>
-
-</div>
+            <button type="submit" class="btn btn-primary">{{ 'Speichern'|trans }}</button>
+        </form>
+    </div>
 {% endblock %}
