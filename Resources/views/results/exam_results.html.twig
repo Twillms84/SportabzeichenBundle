@@ -102,7 +102,12 @@
                                 {% set sortIcon = '' %}
                             {% endif %}
 
-                            <a href="{{ path(app.request.attributes.get('_route'), app.request.query.all|merge({'sort': 'lastname', 'order': nextOrder})) }}" 
+                            {# KORREKTUR HIER: 'examId': exam.id wurde hinzugefügt #}
+                            <a href="{{ path(app.request.attributes.get('_route'), app.request.query.all|merge({
+                                'examId': exam.id, 
+                                'sort': 'lastname', 
+                                'order': nextOrder
+                            })) }}" 
                                class="sort-header d-flex justify-content-between align-items-center text-dark">
                                 <span>Teilnehmer</span>
                                 <span>{{ sortIcon|raw }}</span>
