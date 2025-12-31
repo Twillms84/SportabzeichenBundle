@@ -2,13 +2,13 @@
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: 1.1rem !important;
+    font-size: 1.1rem !important; /* Schriftgröße Tabelle allgemein */
     border-collapse: collapse;
 }
 
 /* Spaltenbreiten */
-.col-name { width: 170px !important; }
-.col-class { width: 50px !important; }
+.col-name { width: 220px !important; } /* Etwas breiter für Name + Alter */
+.col-class { width: 60px !important; }
 .col-discipline { width: 145px !important; }
 
 /* --- Medaillen-Farben für Inputs/Selects --- */
@@ -33,7 +33,11 @@ input.medal-none { background-image: none !important; }
     select.medal-none, input.medal-none { 
         background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
     }
+    .name-main { color: #dee2e6 !important; }
+    .name-age { color: #adb5bd !important; }
+    .req-hint { color: #adb5bd !important; }
 }
+
 [data-bs-theme="dark"] select.medal-none, 
 [data-bs-theme="dark"] input.medal-none {
     background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
@@ -41,40 +45,76 @@ input.medal-none { background-image: none !important; }
 
 /* Formularelemente */
 .discipline-selector, .form-control-custom {
-    font-size: 1.1rem !important; padding: 6px 3px !important; height: auto !important; width: 100% !important; text-align: center !important;
+    font-size: 1.1rem !important; 
+    padding: 6px 3px !important; 
+    height: auto !important; 
+    width: 100% !important; 
+    text-align: center !important;
 }
 
-/* Text-Container */
-.name-container { line-height: 1.2; }
-.name-main { font-weight: bold; display: block; }
-.name-age { font-weight: normal; font-size: 0.95rem; color: #555; }
-.badge-mini { font-size: 0.7rem !important; vertical-align: middle; }
+/* --- NAME & ALTER LAYOUT --- */
+.name-container {
+    display: flex;          /* Flexbox für Nebeneinander */
+    align-items: baseline;  /* Textausrichtung unten bündig */
+    flex-wrap: nowrap;      /* Kein Umbruch */
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+}
 
-/* --- NEU: Anforderungen & Helper (aus dem Style-Block) --- */
+.name-main {
+    font-size: 1.15rem;     /* Name größer */
+    font-weight: bold;
+    color: #000;
+    margin-right: 6px;
+}
 
-/* Helper zum Ausblenden via JS */
-.col-hidden { display: none !important; }
+.name-age {
+    font-size: 1.0rem;      /* Alter gut lesbar */
+    font-weight: normal;
+    color: #555;
+    white-space: nowrap;
+}
 
-/* Container für Anforderungen (B/S/G) */
+.badge-mini { 
+    font-size: 0.75rem !important; 
+    vertical-align: middle; 
+}
+
+/* --- ANFORDERUNGEN & HELPER --- */
 .req-hint { 
-    font-size: 0.75rem !important;
+    font-size: 0.9rem !important; /* Anforderungen größer */
     display: flex; 
     justify-content: space-between; 
     padding: 2px 4px;
     font-weight: 600;
     white-space: nowrap;
+    color: #444;
+    margin-top: 2px;
 }
 
-/* Farben für die Text-Anzeige der Anforderungen */
-.req-val-b { color: #cd7f32; } /* Bronze */
-.req-val-s { color: #808080; } /* Silber */
-.req-val-g { color: #b8860b; } /* Gold (dunkler für Lesbarkeit auf Weiß) */
+/* Farben für B/S/G Text */
+.req-val-b { color: #cd7f32; } 
+.req-val-s { color: #666; } 
+.req-val-g { color: #b8860b; } 
 
-/* Einheit hinter dem Eingabefeld */
+/* Einheit hinter dem Input */
 .input-group-text-unit {
     padding: 2px 4px !important;
-    font-size: 0.8rem !important;
+    font-size: 0.9rem !important;
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     color: #6c757d;
+    min-width: 35px;
+    justify-content: center;
+}
+
+/* Sortier-Links im Header */
+a.sort-header {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    width: 100%;
+}
+a.sort-header:hover {
+    background-color: rgba(0,0,0,0.05);
 }
