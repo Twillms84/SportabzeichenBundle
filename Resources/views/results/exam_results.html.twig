@@ -102,7 +102,7 @@
                                 {% set sortIcon = '' %}
                             {% endif %}
 
-                            {# KORREKTUR HIER: 'examId': exam.id wurde hinzugefügt #}
+                            {# BUGFIX: 'examId' wird nun korrekt übergeben #}
                             <a href="{{ path(app.request.attributes.get('_route'), app.request.query.all|merge({
                                 'examId': exam.id, 
                                 'sort': 'lastname', 
@@ -114,7 +114,7 @@
                             </a>
                         </th>
 
-                        <th class="col-class">Kl.</th>
+                        {# ÄNDERUNG: Spalte "Klasse" hier entfernt #}
 
                         {# DISZIPLIN HEADERS #}
                         {% for category in disciplines|keys %}
@@ -129,12 +129,17 @@
                     {% set epResults = results[p.ep_id] ?? {} %}
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
-                        {# 1. NAME & INFO #}
+                        {# 1. NAME, KLASSE & INFO #}
                         <td class="col-name py-2">
-                            {# Name und Alter nebeneinander (CSS .name-container) #}
+                            {# Name und Alter #}
                             <div class="name-container">
-                                <span class="name-main">{{ p.vorname }} {{ p.nachname }}</span>
-                                <span class="name-age">({{ p.age_year }})</span>
+                                <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
+                                <span class="name-age text-muted">({{ p.age_year }})</span>
+                            </div>
+                            
+                            {# ÄNDERUNG: Klasse unter dem Namen #}
+                            <div class="small text-muted mb-2">
+                                Klasse: <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
                             </div>
                             
                             <div class="d-flex flex-column gap-1">
@@ -173,8 +178,7 @@
                             </div>
                         </td>
 
-                        {# 2. KLASSE #}
-                        <td class="col-class text-center fw-bold">{{ p.klasse|default('-') }}</td>
+                        {# ÄNDERUNG: Spalte "Klasse" (td) hier entfernt #}
 
                         {# 3. DISZIPLINEN #}
                         {% for category, items in disciplines %}
