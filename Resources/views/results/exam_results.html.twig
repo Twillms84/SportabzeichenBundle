@@ -150,7 +150,7 @@
                                 <div>
                                     {% set swimTitle = 'Fehlt' %}
                                     {% if p.has_swimming %}
-                                        {% if p.swimming_expiry % is defined and p.swimming_expiry %}
+                                        {% if p.swimming_expiry is defined and p.swimming_expiry %}
                                             {% set swimTitle = 'Gültig bis: ' ~ p.swimming_expiry|date('d.m.Y') %}
                                         {% else %}
                                             {% set swimTitle = 'Nachweis vorhanden' %}
