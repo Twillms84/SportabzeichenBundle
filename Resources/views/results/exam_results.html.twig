@@ -150,7 +150,7 @@
                                 <div>
                                     {% set swimTitle = 'Fehlt' %}
                                     {% if p.has_swimming %}
-                                        {% if p.swimming_expiry %}
+                                        {% if p.swimming_expiry % is defined and p.swimming_expiry %}
                                             {% set swimTitle = 'Gültig bis: ' ~ p.swimming_expiry|date('d.m.Y') %}
                                         {% else %}
                                             {% set swimTitle = 'Nachweis vorhanden' %}
@@ -162,7 +162,7 @@
                                           data-bs-toggle="tooltip" 
                                           data-bs-placement="right"
                                           title="{{ swimTitle }}">
-                                        {{ (p.has_swimming ? icon('check') : icon('x'))|raw }} Schwimmen
+                                         {{ p.has_swimming ? '🏊 OK' : '❌ Schwimmen' }}
                                     </span>
                                 </div>
                             </div>
@@ -247,5 +247,5 @@
 
 {% block javascripts %}
     {{ parent() }}
-    <script src="{{ asset('js/exam_results.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
