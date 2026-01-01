@@ -19,6 +19,14 @@
     'UNIT_NUMBER': 'Anz.'
 } %}
 
+{# --- PRÜFUNG: Gibt es überhaupt Schwimmen in den Disziplinen? --- #}
+{% set hasSwimmingCategory = false %}
+{% for cat in disciplines|keys %}
+    {% if cat|upper in ['SWIMMING', 'SCHWIMMEN'] %}
+        {% set hasSwimmingCategory = true %}
+    {% endif %}
+{% endfor %}
+
 <div class="container-fluid mt-3">
     
     {# --- HEADER & TOOLS --- #}
@@ -55,7 +63,6 @@
             {# FILTER: Klasse #}
             {% if classes|length > 0 %}
                 <form method="get" class="d-flex gap-1 align-items-center">
-                    {# Sortierung beibehalten beim Filtern #}
                     <input type="hidden" name="sort" value="{{ app.request.query.get('sort') }}">
                     <input type="hidden" name="order" value="{{ app.request.query.get('order') }}">
                     
@@ -102,7 +109,6 @@
                                 {% set sortIcon = '' %}
                             {% endif %}
 
-                            {# BUGFIX: 'examId' wird nun korrekt übergeben #}
                             <a href="{{ path(app.request.attributes.get('_route'), app.request.query.all|merge({
                                 'examId': exam.id, 
                                 'sort': 'lastname', 
@@ -113,8 +119,6 @@
                                 <span>{{ sortIcon|raw }}</span>
                             </a>
                         </th>
-
-                        {# ÄNDERUNG: Spalte "Klasse" hier entfernt #}
 
                         {# DISZIPLIN HEADERS #}
                         {% for category in disciplines|keys %}
@@ -131,13 +135,11 @@
                         
                         {# 1. NAME, KLASSE & INFO #}
                         <td class="col-name py-2">
-                            {# Name und Alter #}
                             <div class="name-container">
                                 <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
                                 <span class="name-age text-muted">({{ p.age_year }})</span>
                             </div>
                             
-                            {# ÄNDERUNG: Klasse unter dem Namen #}
                             <div class="small text-muted mb-2">
                                 Klasse: <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
                             </div>
@@ -150,41 +152,48 @@
                                     </span>
                                     
                                     <span class="badge badge-mini js-medal-badge" 
+                                          id="final-medal-{{ p.ep_id }}"
                                           data-medal="{{ p.final_medal|default('') }}"
                                           style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
                                         {{ p.final_medal }}
                                     </span>
                                 </div>
 
-                                {# Schwimm-Status #}
-                                <div>
-                                    {% set swimTitle = 'Fehlt' %}
-                                    {% if p.has_swimming %}
-                                        {% if p.swimming_expiry is defined and p.swimming_expiry %}
-                                            {% set swimTitle = 'Gültig bis: ' ~ p.swimming_expiry|date('d.m.Y') %}
-                                        {% else %}
-                                            {% set swimTitle = 'Nachweis vorhanden' %}
+                                {# NEU: Manueller Schwimmnachweis Switch #}
+                                {% if hasSwimmingCategory %}
+                                    <div class="mt-1">
+                                        <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
+                                            {# Checkbox: data-type="swimming" muss im Controller behandelt werden #}
+                                            <input class="form-check-input ms-0" type="checkbox" role="switch"
+                                                   id="swim-switch-{{ p.ep_id }}"
+                                                   {{ p.has_swimming ? 'checked' : '' }}
+                                                   data-save 
+                                                   data-ep-id="{{ p.ep_id }}" 
+                                                   data-type="swimming"
+                                                   style="cursor: pointer;">
+                                            
+                                            <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
+                                                   for="swim-switch-{{ p.ep_id }}"
+                                                   id="swimming-label-{{ p.ep_id }}">
+                                                {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
+                                            </label>
+                                        </div>
+                                        
+                                        {# Optional: Ablaufdatum anzeigen, falls vorhanden #}
+                                        {% if p.swimming_expiry and p.has_swimming %}
+                                            <div class="small text-muted fst-italic ms-1" style="font-size: 0.75rem;">
+                                                Gültig bis: {{ p.swimming_expiry|date('d.m.Y') }}
+                                            </div>
                                         {% endif %}
-                                    {% endif %}
-                                    
-                                    <span class="badge {{ p.has_swimming ? 'bg-success' : 'bg-danger' }} w-100 text-start badge-mini" 
-                                          id="swimming-status-{{ p.ep_id }}"
-                                          data-bs-toggle="tooltip" 
-                                          data-bs-placement="right"
-                                          title="{{ swimTitle }}">
-                                         {{ p.has_swimming ? '🏊 OK' : '❌ Schwimmen' }}
-                                    </span>
-                                </div>
+                                    </div>
+                                {% endif %}
                             </div>
                         </td>
-
-                        {# ÄNDERUNG: Spalte "Klasse" (td) hier entfernt #}
 
                         {# 3. DISZIPLINEN #}
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                {# Passende Disziplinen filtern (Geschlecht/Alter) #}
                                 {% set options = [] %}
                                 {% set pGender = (p.geschlecht|slice(0, 1)|upper == 'M') ? 'MALE' : 'FEMALE' %}
                                 {% for d in items %}
@@ -193,7 +202,6 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# Vorauswahl der Disziplin #}
                                 {% set selectedId = null %}
                                 {% for d in options %}
                                     {% if d.id in epResults|keys %}
@@ -207,14 +215,12 @@
 
                                 <td class="p-1 col-discipline col-cat-{{ category }}">
                                     <div class="d-flex flex-column">
-                                        
                                         <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
                                                 data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}">
                                             {% if options is empty %}
                                                 <option value="">--</option>
                                             {% else %}
                                                 {% for d in options %}
-                                                    {# Mapping anwenden für saubere Einheiten #}
                                                     {% set cleanUnit = unitMap[d.einheit] ?? d.einheit %}
                                                     <option value="{{ d.id }}" 
                                                             {{ selectedId == d.id ? 'selected' : '' }}
@@ -255,4 +261,24 @@
 {% block javascripts %}
     {{ parent() }}
     <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    {# Kleines Inline-Script, um das Label beim Umschalten visuell sofort anzupassen (für bessere UX) #}
+    <script>
+        document.addEventListener('change', function(e) {
+            if (e.target.matches('[data-type="swimming"]')) {
+                const epId = e.target.getAttribute('data-ep-id');
+                const label = document.getElementById('swimming-label-' + epId);
+                if (label) {
+                    if (e.target.checked) {
+                        label.textContent = 'Schwimmen: OK';
+                        label.classList.remove('text-danger');
+                        label.classList.add('text-success');
+                    } else {
+                        label.textContent = 'Schwimmen: Fehlt';
+                        label.classList.remove('text-success');
+                        label.classList.add('text-danger');
+                    }
+                }
+            }
+        });
+    </script>
 {% endblock %}
