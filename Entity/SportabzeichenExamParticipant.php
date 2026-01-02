@@ -7,6 +7,7 @@ namespace PulsR\SportabzeichenBundle\Entity;
 use Doctrine\ORM\Mapping as ORM;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
+use PulsR\SportabzeichenBundle\Entity\Participant; // <--- NEU
 
 #[ORM\Entity]
 #[ORM\Table(
@@ -29,9 +30,10 @@ class SportabzeichenExamParticipant
     #[ORM\JoinColumn(name: 'exam_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
     private SportabzeichenExam $exam;
 
-    #[ORM\ManyToOne(targetEntity: SportabzeichenParticipant::class, inversedBy: 'examParticipations')]
+    // --- ÄNDERUNG HIER: targetEntity ist jetzt Participant, inversedBy entfernt ---
+    #[ORM\ManyToOne(targetEntity: Participant::class)]
     #[ORM\JoinColumn(name: 'participant_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
-    private SportabzeichenParticipant $participant;
+    private Participant $participant;
 
     #[ORM\OneToMany(mappedBy: 'examParticipant', targetEntity: SportabzeichenExamResult::class, cascade: ['remove'])]
     private Collection $results;
@@ -61,12 +63,13 @@ class SportabzeichenExamParticipant
         return $this;
     }
 
-    public function getParticipant(): SportabzeichenParticipant
+    // --- ÄNDERUNG HIER: Type Hint auf Participant angepasst ---
+    public function getParticipant(): Participant
     {
         return $this->participant;
     }
 
-    public function setParticipant(SportabzeichenParticipant $participant): self
+    public function setParticipant(Participant $participant): self
     {
         $this->participant = $participant;
         return $this;
