@@ -8,12 +8,17 @@
         id: 'participants_upload',
         label: 'Teilnehmer hochladen',
         route: 'sportabzeichen_admin_upload_participants'
+    },
+    {
+        id: 'participants_manage',
+        label: 'Teilnehmer verwalten',
+        route: 'sportabzeichen_admin_participants_index'
     }
 ] %}
 
 <nav class="nav nav-tabs mb-3">
     {% for tab in tabs %}
-        <a class="nav-link {{ activeTab == tab.id ? 'active' : '' }}"
+        <a class="nav-link {{ activeTab|default('') == tab.id ? 'active' : '' }}"
            href="{{ path(tab.route) }}">
             {{ _(tab.label) }}
         </a>

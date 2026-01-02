@@ -1,0 +1,110 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block page_title %}{{ _('Teilnehmerverwaltung – Sportabzeichen') }}{% endblock %}
+
+{% block content %}
+    {# Oberste Navigation (Admin Tabs) #}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'active': 'participants'} %}
+
+    <div class="panel panel-default" style="border-top: 0;">
+        <div class="panel-body">
+            
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <ul class="nav nav-pills">
+                        <li class="active"><a href="#">{{ icon('list') }} {{ _('Aktive Teilnehmer') }}</a></li>
+                        <li><a href="{{ path('sportabzeichen_admin_participants_missing') }}">{{ icon('plus') }} {{ _('Benutzer nacherfassen') }}</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr>
+
+            <h3>{{ _('Registrierte Teilnehmer') }}</h3>
+            <p class="text-muted">{{ _('Hier können Geburtsdaten und Geschlecht korrigiert werden.') }}</p>
+
+            {# Einfache JS-Suche für die Tabelle #}
+            <input type="text" id="participantSearch" class="form-control mb-3" placeholder="{{ _('Suche nach Namen...') }}">
+
+            <div class="table-responsive mt-3">
+                <table class="table table-striped table-hover" id="participantTable">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Nachname') }}</th>
+                            <th>{{ _('Vorname') }}</th>
+                            <th>{{ _('Klasse') }}</th> {# Falls vorhanden #}
+                            <th>{{ _('Geburtsdatum') }}</th>
+                            <th>{{ _('Geschlecht') }}</th>
+                            <th class="text-end">{{ _('Aktion') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for p in participants %}
+                        <tr>
+                            <td>{{ p.nachname }}</td>
+                            <td>{{ p.vorname }}</td>
+                            <td>{{ p.klasse|default('-') }}</td>
+                            <td>{{ p.geburtsdatum ? p.geburtsdatum|date('d.m.Y') : '-' }}</td>
+                            <td>
+                                {% if p.geschlecht == 'm' %}{{ icon('male') }}
+                                {% elseif p.geschlecht == 'w' %}{{ icon('female') }}
+                                {% else %}{{ p.geschlecht }}{% endif %}
+                            </td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-xs btn-default" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editModal-{{ p.id }}">
+                                    {{ icon('pencil') }} {{ _('Bearbeiten') }}
+                                </button>
+                            </td>
+                        </tr>
+
+                        {# MODAL FÜR EDIT (Inline für Einfachheit, besser wäre Ajax load) #}
+                        <div class="modal fade" id="editModal-{{ p.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <form method="post" action="{{ path('sportabzeichen_admin_participants_edit', {'id': p.id}) }}">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                            <h4 class="modal-title">{{ _('Bearbeiten:') }} {{ p.vorname }} {{ p.nachname }}</h4>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="form-group">
+                                                <label>{{ _('Geburtsdatum') }}</label>
+                                                <input type="date" name="dob" class="form-control" 
+                                                       value="{{ p.geburtsdatum ? p.geburtsdatum|date('Y-m-d') : '' }}" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>{{ _('Geschlecht') }}</label>
+                                                <select name="gender" class="form-control">
+                                                    <option value="m" {{ p.geschlecht == 'm' ? 'selected' : '' }}>Männlich (m)</option>
+                                                    <option value="w" {{ p.geschlecht == 'w' ? 'selected' : '' }}>Weiblich (w)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-default" data-bs-dismiss="modal">{{ _('Abbrechen') }}</button>
+                                            <button type="submit" class="btn btn-primary">{{ _('Speichern') }}</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Einfacher Suchfilter
+        document.getElementById('participantSearch').addEventListener('keyup', function() {
+            var value = this.value.toLowerCase();
+            var rows = document.querySelectorAll('#participantTable tbody tr');
+            rows.forEach(function(row) {
+                var text = row.textContent.toLowerCase();
+                row.style.display = text.indexOf(value) > -1 ? '' : 'none';
+            });
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block page_title %}{{ _('Benutzer nacherfassen') }}{% endblock %}
+
+{% block content %}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading d-flex justify-content-between align-items-center">
+            <h3 class="panel-title">{{ _('IServ-Benutzer ohne Sportabzeichen-Eintrag') }}</h3>
+            <a href="{{ path('sportabzeichen_admin_participants_index') }}" class="btn btn-default btn-sm">
+                {{ icon('arrow-left') }} {{ _('Zurück zur Liste') }}
+            </a>
+        </div>
+
+        <div class="panel-body">
+            <div class="alert alert-info">
+                {{ icon('info') }} Hier werden alle aktiven IServ-Benutzer angezeigt, die noch nicht in der Sportabzeichen-Datenbank existieren.
+            </div>
+
+            <input type="text" id="searchMissing" class="form-control mb-3" placeholder="Suche nach Name oder Gruppe...">
+
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Name</th>
+                            <th>Gruppen (Klasse)</th>
+                            <th class="text-end">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="missingRows">
+                    {% for user in missingUsers %}
+                        <tr>
+                            <td><code>{{ user.username }}</code></td>
+                            <td>{{ user.name }}</td>
+                            <td>
+                                {% for group in user.groups %}
+                                    <span class="badge bg-secondary">{{ group.name }}</span>
+                                {% endfor %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{{ path('sportabzeichen_admin_participants_add', {username: user.username}) }}" 
+                                   class="btn btn-success btn-sm">
+                                    {{ icon('plus') }} Hinzufügen
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-3">
+                                Alle IServ-Benutzer sind bereits erfasst.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    {# Pfad anpassen, falls dein Asset-Package anders heißt #}
+    <script src="{{ asset('js/admin_participants.js', 'pulsr-sportabzeichen') }}"></script>
+{% endblock %}
