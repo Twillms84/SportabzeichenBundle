@@ -20,40 +20,46 @@ use Symfony\Component\Routing\Annotation\Route;
 final class AdminParticipantController extends AbstractController
 {
     /**
-     * Zeigt die Liste aller bereits registrierten Teilnehmer.
-     * ACHTUNG: Auch hier begrenzen wir auf 500, um Speicherüberlauf zu verhindern.
-     * * @Route("/", name="index")
+     * @Route("/", name="index")
      */
     public function index(ParticipantRepository $repo): Response
     {
-        // Wir nutzen den QueryBuilder statt findBy, um Kontrolle über das Limit zu haben
-        $participants = $repo->createQueryBuilder('p')
+        // NOTBREMSE: Wir laden keine Objekte, sondern nur ein Array.
+        // Wir begrenzen hart auf 100 Einträge, um zu sehen, ob die Seite überhaupt lädt.
+        $qb = $repo->createQueryBuilder('p')
+            ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse') // Nur Felder, keine Objekte!
             ->orderBy('p.nachname', 'ASC')
             ->addOrderBy('p.vorname', 'ASC')
-            ->setMaxResults(500) // Sicherheitslimit!
-            ->getQuery()
-            ->getResult();
+            ->setMaxResults(100); 
+
+        $participants = $qb->getQuery()->getArrayResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,
             'activeTab' => 'participants_manage',
-            'limit_reached' => count($participants) >= 500
+            'limit_reached' => count($participants) >= 100
         ]);
     }
 
     /**
-     * Speichert Änderungen.
      * @Route("/{id}/update", name="update", methods={"POST"})
      */
-    public function update(Request $request, Participant $participant, EntityManagerInterface $em): Response
+    public function update(Request $request, int $id, ParticipantRepository $repo, EntityManagerInterface $em): Response
     {
+        // Da wir im Index keine Objekte haben, laden wir hier das EINE Objekt zum Speichern nach
+        $participant = $repo->find($id);
+
+        if (!$participant) {
+            throw $this->createNotFoundException('Teilnehmer nicht gefunden');
+        }
+
         $dob = $request->request->get('dob');
         $gender = $request->request->get('gender');
 
         if ($dob) {
             try {
                 $participant->setGeburtsdatum(new \DateTime($dob));
-            } catch (\Exception $e) { /* ignore */ }
+            } catch (\Exception $e) {}
         }
         if ($gender) {
             $participant->setGeschlecht($gender);
@@ -66,13 +72,11 @@ final class AdminParticipantController extends AbstractController
     }
 
     /**
-     * Zeigt fehlende Nutzer an.
-     * EXTREME PERFORMANCE OPTIMIERUNG: Lädt nur Arrays, keine Objekte!
-     * * @Route("/missing", name="missing")
+     * @Route("/missing", name="missing")
      */
     public function missing(Request $request, ParticipantRepository $pRepo, UserRepository $uRepo): Response
     {
-        // 1. IDs der existierenden Teilnehmer holen (Nur IDs, winzig klein)
+        // 1. IDs holen (extrem sparsam)
         $existingIds = $pRepo->createQueryBuilder('p')
             ->select('IDENTITY(p.user)')
             ->where('p.user IS NOT NULL')
@@ -81,14 +85,12 @@ final class AdminParticipantController extends AbstractController
         
         $excludeIds = array_column($existingIds, 1);
 
-        // 2. Suche nach Usern vorbereiten
-        // WICHTIG: Wir selektieren nur Felder, nicht das Objekt "u"
+        // 2. User suchen (Nur Arrays!)
         $qb = $uRepo->createQueryBuilder('u')
-            ->select('u.username, u.firstname, u.lastname, u.id') // <--- Nur Text laden!
+            ->select('u.username, u.firstname, u.lastname') // KEINE ID, KEINE GRUPPEN laden
             ->where('u.act = true')
             ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC')
-            ->setMaxResults(100); // Strenges Limit für die Anzeige
+            ->setMaxResults(50); // Sehr striktes Limit
 
         if (!empty($excludeIds)) {
             $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
@@ -101,14 +103,13 @@ final class AdminParticipantController extends AbstractController
                ->setParameter('s', '%' . $searchTerm . '%');
         }
 
-        // WICHTIG: getArrayResult() statt getResult()
-        // Das verhindert, dass Symfony versucht, tausende User-Objekte zu bauen.
+        // ARRAY RESULT IST ENTSCHEIDEND
         $missingUsers = $qb->getQuery()->getArrayResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
-            'missingUsers' => $missingUsers, // Das ist jetzt ein Array von Arrays, keine User-Objekte!
+            'missingUsers' => $missingUsers,
             'activeTab' => 'participants_manage',
-            'limit_reached' => count($missingUsers) >= 100,
+            'limit_reached' => count($missingUsers) >= 50,
             'searchTerm' => $searchTerm,
         ]);
     }
@@ -118,7 +119,6 @@ final class AdminParticipantController extends AbstractController
      */
     public function add(string $username, UserRepository $userRepo, EntityManagerInterface $em): Response
     {
-        // Wir laden den User erst hier, wenn wir ihn wirklich brauchen (und nur einen!)
         $user = $userRepo->findOneBy(['username' => $username]);
 
         if (!$user) {
