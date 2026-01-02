@@ -1,26 +1,34 @@
-{% set tabs = [
-    {
-        id: 'requirements_upload',
-        label: 'Anforderungen hochladen',
-        route: 'sportabzeichen_admin_upload'
-    },
-    {
-        id: 'participants_upload',
-        label: 'Teilnehmer hochladen',
-        route: 'sportabzeichen_admin_upload_participants'
-    },
-    {
-        id: 'participants_manage',
-        label: 'Teilnehmer verwalten',
-        route: 'sportabzeichen_admin_participants_index'
-    }
-] %}
+{% extends '@IServCore/page.html.twig' %}
 
-<nav class="nav nav-tabs mb-3">
-    {% for tab in tabs %}
-        <a class="nav-link {{ activeTab|default('') == tab.id ? 'active' : '' }}"
-           href="{{ path(tab.route) }}">
-            {{ _(tab.label) }}
-        </a>
-    {% endfor %}
-</nav>
+{% block page_title %}
+    {{ _('Sportabzeichen – Verwaltung') }}
+{% endblock %}
+
+{% block content %}
+    {# Tabs einbinden (activeTab kommt aus dem Controller) #}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">
+                {{ _('Verwaltung') }}
+            </h3>
+        </div>
+
+        <div class="panel-body">
+            <p>
+                {{ _('In diesem Bereich können die Daten für das Sportabzeichen verwaltet werden.') }}
+            </p>
+
+            <ul>
+                <li>{{ _('Anforderungen (DOSB-Katalog) per CSV hochladen') }}</li>
+                <li>{{ _('Teilnehmerdaten per CSV importieren') }}</li>
+                <li>{{ _('Teilnehmer manuell bearbeiten und hinzufügen') }}</li>
+            </ul>
+
+            <div class="alert alert-info mt-3">
+                {{ icon('info-circle') }} {{ _('Bitte wählen Sie oben einen Reiter aus, um zu beginnen.') }}
+            </div>
+        </div>
+    </div>
+{% endblock %}
