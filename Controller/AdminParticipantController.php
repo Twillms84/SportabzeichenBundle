@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 final class AdminParticipantController extends AbstractController
 {
-    **
+    /**
     * @Route("/", name="index")
     */
 public function index(Request $request, ParticipantRepository $repo): Response
