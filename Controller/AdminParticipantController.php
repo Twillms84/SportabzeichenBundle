@@ -62,9 +62,6 @@ final class AdminParticipantController extends AbstractController
          return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
     
-    // missing() und add() hier einfügen (wie zuvor) ...
-}
-
     /**
      * @Route("/missing", name="missing")
      */
