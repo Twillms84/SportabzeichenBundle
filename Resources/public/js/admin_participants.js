@@ -1,88 +1,70 @@
-document.addEventListener('DOMContentLoaded', function() {
+// src/Resources/public/js/admin_participants.js
 
-    // ============================================================
-    // 1. SUCHFUNKTION (Dein existierender Code)
-    // ============================================================
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
 
-    /**
-     * Hilfsfunktion: Verbindet ein Suchfeld mit einer Tabelle
-     * @param {string} inputId - ID des Input-Feldes
-     * @param {string} tbodyId - ID des Table-Body
-     */
-    function attachTableSearch(inputId, tbodyId) {
-        const input = document.getElementById(inputId);
-        const tbody = document.getElementById(tbodyId);
+    // Wir prüfen sicherheitshalber, ob jQuery geladen wurde
+    if (typeof jQuery === 'undefined') {
+        console.warn('PulsR Sportabzeichen: jQuery wurde nicht gefunden! Modals funktionieren eventuell nicht.');
+        return;
+    }
 
-        // Abbruch, wenn Elemente auf dieser Seite nicht existieren
-        if (!input || !tbody) {
-            return;
-        }
+    var $ = jQuery; // Lokale Referenz
 
-        input.addEventListener('keyup', function() {
-            const filter = this.value.toLowerCase();
-            const rows = tbody.getElementsByTagName('tr');
+    // ------------------------------------------------------------------
+    // 1. Live-Suche (Vanilla JS - funktioniert auch ohne jQuery)
+    // ------------------------------------------------------------------
+    var searchInput = document.getElementById('searchTable');
+    var tbody = document.getElementById('participantRows');
 
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                // Textinhalt der Zeile prüfen
-                const text = row.textContent.toLowerCase();
-                // Anzeige umschalten
-                row.style.display = text.includes(filter) ? "" : "none";
+    if (searchInput && tbody) {
+        searchInput.addEventListener('keyup', function () {
+            var value = this.value.toLowerCase();
+            var rows = tbody.getElementsByTagName('tr');
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var text = row.textContent || row.innerText;
+                row.style.display = text.toLowerCase().indexOf(value) > -1 ? '' : 'none';
             }
         });
     }
 
-    // Suche aktivieren
-    attachTableSearch('searchTable', 'participantRows'); // Index
-    attachTableSearch('searchMissing', 'missingRows');   // Missing (falls benötigt)
+    // ------------------------------------------------------------------
+    // 2. Modal-Logik (Benötigt jQuery für Bootstrap Events)
+    // ------------------------------------------------------------------
+    var $editModal = $('#genericEditModal');
 
+    if ($editModal.length) {
+        $editModal.on('show.bs.modal', function (event) {
+            var $button = $(event.relatedTarget);
+            var $modal = $(this);
+            var $form = $modal.find('form');
 
-    // ============================================================
-    // 2. SINGLE MODAL HANDLING (Neu für Performance)
-    // ============================================================
-    
-    /* * Wir nutzen jQuery ($), da IServs Bootstrap-Modals darauf basieren.
-     * Das Event 'show.bs.modal' wird gefeuert, SOFORT wenn man auf den Button klickt,
-     * aber BEVOR das Modal sichtbar ist.
-     */
-    if (typeof $ !== 'undefined') {
-        
-        $('#genericEditModal').on('show.bs.modal', function (event) {
-            
-            // 'event.relatedTarget' ist der Button, der das Modal geöffnet hat
-            var button = $(event.relatedTarget); 
-            
-            // 1. Daten aus den data-Attributen des Buttons holen
-            var id = button.data('id');           // data-id="..."
-            var name = button.data('name');       // data-name="..."
-            var dob = button.data('dob');         // data-dob="..."
-            var gender = button.data('gender');   // data-gender="..."
+            // Daten holen
+            var id = $button.data('id');
+            var name = $button.data('name');
+            var dob = $button.data('dob');
+            var gender = $button.data('gender'); // MALE, FEMALE, DIVERSE
 
-            var modal = $(this);
-
-            // 2. Visuelle Elemente im Modal aktualisieren
-            // Wir suchen das span mit der ID modalUserName und setzen den Text
-            modal.find('#modalUserName').text(name);
-
-            // 3. Formularfelder befüllen
-            modal.find('#modalDob').val(dob);
-            modal.find('#modalGender').val(gender);
-
-            // 4. Formular-Action dynamisch bauen
-            // Wir holen uns die Template-URL aus dem <form data-url-template="...">
-            var form = modal.find('form');
-            var urlTemplate = form.data('url-template');
-
-            if (urlTemplate) {
-                // Wir ersetzen den Platzhalter 'PLACEHOLDER_ID' durch die echte ID
-                // Beispiel vorher: /admin/participants/PLACEHOLDER_ID/update
-                // Beispiel nachher: /admin/participants/42/update
-                var newUrl = urlTemplate.replace('PLACEHOLDER_ID', id);
-                form.attr('action', newUrl);
+            // URL anpassen
+            var urlTemplate = $form.data('url-template');
+            if (urlTemplate && id) {
+                $form.attr('action', urlTemplate.replace('PLACEHOLDER_ID', id));
             }
+
+            // UI befüllen
+            $modal.find('#modalUserName').text(name);
+            $modal.find('#modalDob').val(dob);
+            
+            // WICHTIG: Sicherstellen, dass der Wert im Select existiert
+            $modal.find('#modalGender').val(gender);
         });
 
-    } else {
-        console.warn('PulsR Sportabzeichen: jQuery nicht gefunden. Modal-Logik inaktiv.');
+        // Reset beim Schließen
+        $editModal.on('hidden.bs.modal', function () {
+            $(this).find('form')[0].reset();
+            $(this).find('#modalUserName').text('');
+        });
     }
 });

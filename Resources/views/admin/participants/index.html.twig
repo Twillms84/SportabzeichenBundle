@@ -131,11 +131,15 @@
                         </div>
                         <div class="form-group">
                             <label>{{ _('Geschlecht') }}</label>
-                            <select name="gender" id="modalGender" class="form-control">
-                                <option value="m">{{ _('Männlich') }}</option>
-                                <option value="w">{{ _('Weiblich') }}</option>
-                                <option value="d">{{ _('Divers') }}</option>
-                            </select>
+                            <div class="form-group">
+                                <label>{{ _('Geschlecht') }}</label>
+                                <select name="gender" id="modalGender" class="form-control">
+                                    {# Die Values müssen exakt so heißen wie im Controller/Datenbank #}
+                                    <option value="MALE">{{ _('Männlich') }}</option>
+                                    <option value="FEMALE">{{ _('Weiblich') }}</option>
+                                    <option value="DIVERSE">{{ _('Divers') }}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
