@@ -6,64 +6,101 @@
     {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'participants_manage'} %}
 
     <div class="panel panel-default">
-        <div class="panel-heading d-flex justify-content-between align-items-center">
+        <div class="panel-heading">
             <h3 class="panel-title">{{ _('Registrierte Teilnehmer') }}</h3>
-            <a href="{{ path('sportabzeichen_admin_participants_missing') }}" class="btn btn-primary btn-sm">
-                {{ icon('plus') }} {{ _('Nacherfassen') }}
-            </a>
         </div>
 
         <div class="panel-body">
-            
-            {# --- JS SUCHFELD --- #}
+            {# Suchfeld #}
             <div class="input-group mb-3">
                 <span class="input-group-addon">{{ icon('search') }}</span>
-                <input type="text" id="searchTable" class="form-control" placeholder="{{ _('In der angezeigten Liste filtern...') }}">
+                <input type="text" id="searchTable" class="form-control" placeholder="{{ _('Liste filtern...') }}">
             </div>
-            
+
             {% if limit_reached %}
-                <div class="alert alert-warning mt-2">
-                    {{ icon('exclamation-triangle') }} Liste begrenzt. Bitte Suchfeld nutzen.
+                <div class="alert alert-warning">
+                    {{ icon('exclamation-triangle') }} {{ _('Liste auf 200 Einträge begrenzt.') }}
                 </div>
             {% endif %}
 
-            <div class="table-responsive mt-3">
-                <table class="table table-striped table-hover align-middle">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Klasse</th>
-                            <th>Geburtsdatum</th>
+                            <th>Geburtstag</th>
                             <th>Geschlecht</th>
                             <th class="text-end">Aktion</th>
                         </tr>
                     </thead>
-                    {# --- WICHTIG: ID FÜR JS --- #}
                     <tbody id="participantRows">
                     {% for p in participants %}
                         <tr>
-                            <td class="fw-bold">{{ p.nachname }}, {{ p.vorname }}</td>
+                            <td>{{ p.nachname }}, {{ p.vorname }}</td>
                             <td>{{ p.klasse|default('-') }}</td>
                             <td>{{ p.geburtsdatum ? p.geburtsdatum|date('d.m.Y') : '-' }}</td>
                             <td>{{ p.geschlecht }}</td>
                             <td class="text-end">
-                                <button type="button" class="btn btn-default btn-sm" 
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#editModal{{ p.id }}">
+                                {# Button mit Data-Attributen für JS #}
+                                <button type="button" class="btn btn-default btn-sm"
+                                        data-toggle="modal" 
+                                        data-target="#genericEditModal"
+                                        data-id="{{ p.id }}"
+                                        data-name="{{ p.vorname }} {{ p.nachname }}"
+                                        data-dob="{{ p.geburtsdatum ? p.geburtsdatum|date('Y-m-d') : '' }}"
+                                        data-gender="{{ p.geschlecht }}">
                                     {{ icon('pencil') }}
                                 </button>
                             </td>
                         </tr>
-                        {# Modal Code hier (gekürzt für Übersicht) #}
                     {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
+    {# --- EINZIGES MODAL (Single Source of Truth) --- #}
+    <div class="modal fade" id="genericEditModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            {# 
+               TRICK: Wir setzen hier eine Dummy-Route mit der ID 'PLACEHOLDER_ID'.
+               Das JS ersetzt diesen String später durch die echte ID.
+            #}
+            <form method="post" 
+                  data-url-template="{{ path('sportabzeichen_admin_participants_update', {id: 'PLACEHOLDER_ID'}) }}">
+                
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title">{{ _('Bearbeiten') }}: <span id="modalUserName"></span></h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="control-label">{{ _('Geburtsdatum') }}</label>
+                            <input type="date" name="dob" id="modalDob" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="control-label">{{ _('Geschlecht') }}</label>
+                            <select name="gender" id="modalGender" class="form-control">
+                                <option value="m">{{ _('Männlich') }}</option>
+                                <option value="w">{{ _('Weiblich') }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">{{ _('Abbrechen') }}</button>
+                        <button type="submit" class="btn btn-primary">{{ _('Speichern') }}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
 {% endblock %}
 
-{# --- JAVASCRIPT EINBINDEN --- #}
+{# --- JS EINBINDEN --- #}
 {% block javascripts %}
     {{ parent() }}
     <script src="{{ asset('js/admin_participants.js', 'pulsr-sportabzeichen') }}"></script>

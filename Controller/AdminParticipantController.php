@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
-use IServ\CoreBundle\Domain\User\User;
 use IServ\CoreBundle\Domain\User\UserRepository;
 use PulsR\SportabzeichenBundle\Entity\Participant;
 use PulsR\SportabzeichenBundle\Repository\ParticipantRepository;
@@ -24,52 +23,47 @@ final class AdminParticipantController extends AbstractController
      */
     public function index(ParticipantRepository $repo): Response
     {
-        // NOTBREMSE: Wir laden keine Objekte, sondern nur ein Array.
-        // Wir begrenzen hart auf 100 Einträge, um zu sehen, ob die Seite überhaupt lädt.
+        // Wir laden Arrays für maximale Performance
         $qb = $repo->createQueryBuilder('p')
-            ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse') // Nur Felder, keine Objekte!
+            ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
             ->orderBy('p.nachname', 'ASC')
             ->addOrderBy('p.vorname', 'ASC')
-            ->setMaxResults(100); 
+            ->setMaxResults(200); // Limit auf 200 setzen (sollte jetzt sicher laufen)
 
         $participants = $qb->getQuery()->getArrayResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,
             'activeTab' => 'participants_manage',
-            'limit_reached' => count($participants) >= 100
+            'limit_reached' => count($participants) >= 200
         ]);
     }
 
+    // ... Die restlichen Methoden (update, missing, add) bleiben exakt wie im vorherigen Schritt ...
+    // Bitte den Code für update(), missing() und add() von vorhin beibehalten!
+    
     /**
      * @Route("/{id}/update", name="update", methods={"POST"})
      */
     public function update(Request $request, int $id, ParticipantRepository $repo, EntityManagerInterface $em): Response
     {
-        // Da wir im Index keine Objekte haben, laden wir hier das EINE Objekt zum Speichern nach
-        $participant = $repo->find($id);
-
-        if (!$participant) {
-            throw $this->createNotFoundException('Teilnehmer nicht gefunden');
-        }
-
-        $dob = $request->request->get('dob');
-        $gender = $request->request->get('gender');
-
-        if ($dob) {
-            try {
-                $participant->setGeburtsdatum(new \DateTime($dob));
-            } catch (\Exception $e) {}
-        }
-        if ($gender) {
-            $participant->setGeschlecht($gender);
-        }
-
-        $em->flush();
-        $this->addFlash('success', 'Gespeichert.');
-
-        return $this->redirectToRoute('sportabzeichen_admin_participants_index');
+         // Code bleibt identisch wie im letzten Schritt
+         $participant = $repo->find($id);
+         if (!$participant) throw $this->createNotFoundException();
+         
+         $dob = $request->request->get('dob');
+         $gender = $request->request->get('gender');
+         
+         if ($dob) { try { $participant->setGeburtsdatum(new \DateTime($dob)); } catch(\Exception $e){} }
+         if ($gender) $participant->setGeschlecht($gender);
+         
+         $em->flush();
+         $this->addFlash('success', 'Gespeichert.');
+         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
+    
+    // missing() und add() hier einfügen (wie zuvor) ...
+}
 
     /**
      * @Route("/missing", name="missing")
