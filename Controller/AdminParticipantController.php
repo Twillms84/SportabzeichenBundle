@@ -21,45 +21,39 @@ final class AdminParticipantController extends AbstractController
     /**
      * @Route("/", name="index")
      */
-    public function index(ParticipantRepository $repo): Response
+    public function index(Request $request, ParticipantRepository $repo): Response
     {
-        // Wir laden Arrays für maximale Performance
-        $qb = $repo->createQueryBuilder('p')
+        // 1. Paginierung Parameter
+        $page = $request->query->getInt('page', 1); // Standard: Seite 1
+        $limit = 50; // Maximal 50 Einträge pro Seite (Sicherheitslimit für Speicher!)
+        if ($page < 1) $page = 1;
+        
+        // 2. Gesamtanzahl zählen (für die Berechnung der letzten Seite)
+        // Wir zählen effizient nur die IDs
+        $totalCount = $repo->createQueryBuilder('p')
+            ->select('count(p.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        $maxPages = (int) ceil($totalCount / $limit);
+
+        // 3. Datensätze für die aktuelle Seite holen
+        $participants = $repo->createQueryBuilder('p')
             ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
             ->orderBy('p.nachname', 'ASC')
             ->addOrderBy('p.vorname', 'ASC')
-            ->setMaxResults(200); // Limit auf 200 setzen (sollte jetzt sicher laufen)
-
-        $participants = $qb->getQuery()->getArrayResult();
+            ->setFirstResult(($page - 1) * $limit) // OFFSET
+            ->setMaxResults($limit) // LIMIT
+            ->getQuery()
+            ->getArrayResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,
             'activeTab' => 'participants_manage',
-            'limit_reached' => count($participants) >= 200
+            'currentPage' => $page,
+            'maxPages' => $maxPages,
+            'totalCount' => $totalCount
         ]);
-    }
-
-    // ... Die restlichen Methoden (update, missing, add) bleiben exakt wie im vorherigen Schritt ...
-    // Bitte den Code für update(), missing() und add() von vorhin beibehalten!
-    
-    /**
-     * @Route("/{id}/update", name="update", methods={"POST"})
-     */
-    public function update(Request $request, int $id, ParticipantRepository $repo, EntityManagerInterface $em): Response
-    {
-         // Code bleibt identisch wie im letzten Schritt
-         $participant = $repo->find($id);
-         if (!$participant) throw $this->createNotFoundException();
-         
-         $dob = $request->request->get('dob');
-         $gender = $request->request->get('gender');
-         
-         if ($dob) { try { $participant->setGeburtsdatum(new \DateTime($dob)); } catch(\Exception $e){} }
-         if ($gender) $participant->setGeschlecht($gender);
-         
-         $em->flush();
-         $this->addFlash('success', 'Gespeichert.');
-         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
     
     /**
