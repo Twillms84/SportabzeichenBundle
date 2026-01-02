@@ -1,14 +1,28 @@
 {# templates/admin/_tabs.html.twig #}
-<ul class="nav nav-tabs" style="margin-bottom: 15px;">
+<ul class="nav nav-tabs" style="margin-bottom: 20px;">
+    
     <li class="{{ activeTab == 'dashboard' ? 'active' : '' }}">
         <a href="{{ path('sportabzeichen_admin_dashboard') }}">
-            {{ icon('home') }} Übersicht
+            {{ icon('home') }} {{ _('Übersicht') }}
         </a>
     </li>
+
     <li class="{{ activeTab == 'participants_manage' ? 'active' : '' }}">
         <a href="{{ path('sportabzeichen_admin_participants_index') }}">
-            {{ icon('users') }} Teilnehmer
+            {{ icon('users') }} {{ _('Teilnehmer') }}
         </a>
     </li>
-    {# Hier später weitere Tabs wie 'Import' etc. #}
+
+    <li class="{{ activeTab == 'import' ? 'active' : '' }}">
+        <a href="{{ path('sportabzeichen_admin_import_index') }}">
+            {{ icon('upload') }} {{ _('Import') }}
+        </a>
+    </li>
+
+    <li class="{{ activeTab == 'requirements' ? 'active' : '' }}">
+        <a href="{{ path('sportabzeichen_admin_requirements_index') }}">
+            {{ icon('list-alt') }} {{ _('Anforderungen') }}
+        </a>
+    </li>
+
 </ul>

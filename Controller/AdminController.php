@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace PulsR\SportabzeichenBundle\Controller;
 
+use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
+use IServ\CoreBundle\Domain\User\UserRepository;
+use PulsR\SportabzeichenBundle\Entity\Participant;
+use PulsR\SportabzeichenBundle\Repository\ParticipantRepository;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
@@ -12,7 +17,7 @@ use Symfony\Component\Routing\Annotation\Route;
 final class AdminController extends AbstractPageController
 {
     /**
-     * Dashboard / Einstieg Verwaltung
+     * DASHBOARD: Startseite
      */
     #[Route('/', name: 'dashboard')]
     public function dashboard(): Response
@@ -20,33 +25,189 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         return $this->render('@PulsRSportabzeichen/admin/dashboard.html.twig', [
-            'activeTab' => 'requirements_upload',
+            'activeTab' => 'dashboard',
         ]);
     }
 
     /**
-     * Anforderungen (CSV) hochladen
+     * TEILNEHMER: Liste anzeigen (Optimiert auf Speicherverbrauch)
      */
-    #[Route('/upload-requirements', name: 'upload')]
-    public function uploadRequirements(): Response
+    #[Route('/participants', name: 'participants_index')]
+    public function participantsIndex(Request $request, ParticipantRepository $repo): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
-            'activeTab' => 'requirements_upload',
+        $page = $request->query->getInt('page', 1);
+        $limit = 50; 
+        if ($page < 1) $page = 1;
+
+        // Gesamtanzahl für Paginierung
+        $totalCount = $repo->createQueryBuilder('p')
+            ->select('count(p.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        $maxPages = (int) ceil($totalCount / $limit);
+        if ($maxPages < 1) $maxPages = 1;
+
+        // Daten als Array laden (WICHTIG für Performance/Speicher)
+        $participants = $repo->createQueryBuilder('p')
+            ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
+            ->orderBy('p.nachname', 'ASC')
+            ->addOrderBy('p.vorname', 'ASC')
+            ->setFirstResult(($page - 1) * $limit)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getArrayResult();
+
+        return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
+            'participants' => $participants,
+            'activeTab'    => 'participants_manage',
+            'currentPage'  => $page,
+            'maxPages'     => $maxPages,
+            'totalCount'   => $totalCount,
         ]);
     }
 
     /**
-     * Teilnehmer (CSV) hochladen
+     * TEILNEHMER: Nacherfassen (Suche)
      */
-    #[Route('/upload-participants', name: 'upload_participants')]
-    public function uploadParticipants(): Response
+    #[Route('/participants/missing', name: 'participants_missing')]
+    public function participantsMissing(Request $request, ParticipantRepository $pRepo, UserRepository $uRepo): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
+        $searchTerm = $request->query->get('q');
+        $missingUsers = [];
+        $limitReached = false;
+
+        // Nur suchen, wenn Text eingegeben wurde (Verhindert Laden aller User)
+        if ($searchTerm && strlen($searchTerm) > 2) {
+            
+            // Bereits vorhandene IDs ausschließen
+            $existingIds = $pRepo->createQueryBuilder('p')
+                ->select('IDENTITY(p.user)')
+                ->where('p.user IS NOT NULL')
+                ->getQuery()
+                ->getScalarResult();
+            
+            $excludeIds = array_column($existingIds, 1);
+
+            // Suche im IServ User Repository
+            $qb = $uRepo->createQueryBuilder('u')
+                ->select('u.username, u.firstname, u.lastname')
+                ->where('u.act = true')
+                ->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
+                ->setParameter('s', '%' . $searchTerm . '%')
+                ->orderBy('u.lastname', 'ASC')
+                ->setMaxResults(50);
+
+            if (!empty($excludeIds)) {
+                $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
+            }
+
+            $missingUsers = $qb->getQuery()->getArrayResult();
+            $limitReached = count($missingUsers) >= 50;
+        }
+
+        return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
+            'missingUsers' => $missingUsers,
+            'searchTerm'   => $searchTerm,
+            'limitReached' => $limitReached,
+            'activeTab'    => 'participants_manage'
+        ]);
+    }
+
+    /**
+     * TEILNEHMER: Einen User hinzufügen
+     */
+    #[Route('/participants/add/{username}', name: 'participants_add')]
+    public function participantsAdd(string $username, UserRepository $uRepo, EntityManagerInterface $em): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+
+        $user = $uRepo->findOneBy(['username' => $username]);
+        if (!$user) {
+            $this->addFlash('error', 'Benutzer nicht gefunden.');
+            return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+        }
+
+        // Prüfen ob schon da
+        $exists = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        if ($exists) {
+            $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
+        } else {
+            $participant = new Participant();
+            $participant->setUser($user);
+            $participant->setVorname($user->getFirstname());
+            $participant->setNachname($user->getLastname());
+            
+            $em->persist($participant);
+            $em->flush();
+            
+            $this->addFlash('success', $user->getName() . ' wurde hinzugefügt.');
+        }
+
+        return $this->redirectToRoute('sportabzeichen_admin_participants_missing', ['q' => $user->getLastname()]);
+    }
+
+    /**
+     * TEILNEHMER: Update (per Modal / POST)
+     */
+    #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
+    public function participantsUpdate(Request $request, int $id, ParticipantRepository $repo, EntityManagerInterface $em): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+
+        $participant = $repo->find($id);
+        if (!$participant) {
+            throw $this->createNotFoundException('Teilnehmer nicht gefunden.');
+        }
+
+        $dob = $request->request->get('dob');
+        $gender = $request->request->get('gender');
+
+        if ($dob) {
+            try {
+                $participant->setGeburtsdatum(new \DateTime($dob));
+            } catch (\Exception $e) { }
+        }
+        
+        if ($gender) {
+            $participant->setGeschlecht($gender);
+        }
+
+        $em->flush();
+        $this->addFlash('success', 'Daten gespeichert.');
+
+        return $this->redirectToRoute('sportabzeichen_admin_participants_index');
+    }
+
+    /**
+     * IMPORT: CSV Hochladen (Platzhalter)
+     */
+    #[Route('/import', name: 'import_index')]
+    public function importIndex(): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+
+        // Früher: uploadParticipants
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
-            'activeTab' => 'participants_upload',
+            'activeTab' => 'import',
+        ]);
+    }
+
+    /**
+     * ANFORDERUNGEN: DOSB Tabelle (Platzhalter)
+     */
+    #[Route('/requirements', name: 'requirements_index')]
+    public function requirementsIndex(): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+
+        // Früher: uploadRequirements
+        return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
+            'activeTab' => 'requirements',
         ]);
     }
 }
