@@ -1,6 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+namespace PulsR\SportabzeichenBundle\Controller;
+
+use Doctrine\ORM\EntityManagerInterface;
+use IServ\CoreBundle\Domain\User\UserRepository;
+use PulsR\SportabzeichenBundle\Entity\Participant;
+use PulsR\SportabzeichenBundle\Repository\ParticipantRepository;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Annotation\Route;
+
 /**
- * @Route("/", name="index")
+ * @Route("/admin/participants", name="sportabzeichen_admin_participants_")
  */
+final class AdminParticipantController extends AbstractController
+{
+    **
+    * @Route("/", name="index")
+    */
 public function index(Request $request, ParticipantRepository $repo): Response
 {
     // 1. Minimalste Abfrage: Keine Klasse, nur Name, Limit 10!
@@ -19,4 +39,5 @@ public function index(Request $request, ParticipantRepository $repo): Response
         'maxPages' => 1,
         'totalCount' => 10
     ]);
+}
 }
