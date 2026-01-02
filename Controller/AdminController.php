@@ -10,7 +10,7 @@ use IServ\CoreBundle\Entity\User;
 use PulsR\SportabzeichenBundle\Entity\Participant;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Annotation\Route;
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class AdminController extends AbstractPageController

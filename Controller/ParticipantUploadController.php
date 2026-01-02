@@ -8,7 +8,7 @@ use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route; // Nutzung von Attribute (PHP 8+)
+use Symfony\Component\Routing\Annotation\Route; // Nutzung von Attribute (PHP 8+)
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class ParticipantUploadController extends AbstractPageController
