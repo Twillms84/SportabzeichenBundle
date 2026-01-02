@@ -3,33 +3,64 @@
 {% block page_title %}{{ _('Benutzer nacherfassen') }}{% endblock %}
 
 {% block content %}
-    {% include '@PulsRSportabzeichenBundle/admin/_tabs.html.twig' %}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'participants_manage'} %}
 
     <div class="panel panel-default">
+        <div class="panel-heading d-flex justify-content-between align-items-center">
+            <h3 class="panel-title">{{ _('IServ-Benutzer hinzufügen') }}</h3>
+            <a href="{{ path('sportabzeichen_admin_participants_index') }}" class="btn btn-default btn-sm">
+                {{ icon('arrow-left') }} {{ _('Zurück') }}
+            </a>
+        </div>
+
         <div class="panel-body">
-            {# ... #}
             
+            {# --- ECHTES Suchformular (Server-Side) --- #}
+            <form method="get" action="{{ path('sportabzeichen_admin_participants_missing') }}" class="mb-3">
+                <div class="input-group">
+                    <input type="text" name="q" class="form-control" placeholder="Benutzer suchen..." value="{{ searchTerm }}">
+                    <span class="input-group-btn">
+                        <button class="btn btn-primary" type="submit">{{ icon('search') }} Suchen</button>
+                    </span>
+                </div>
+            </form>
+
             {% if limit_reached %}
                 <div class="alert alert-warning">
-                    {{ icon('exclamation-triangle') }}
-                    {{ _('Die Liste wurde aus Performance-Gründen auf 200 Einträge begrenzt.') }}
-                    {{ _('Bitte fügen Sie fehlende Benutzer ggf. direkt über den Nutzernamen hinzu, falls sie hier nicht erscheinen.') }}
+                    {{ icon('info') }} Anzeige auf 100 Ergebnisse begrenzt. Bitte Suchfunktion nutzen.
                 </div>
             {% endif %}
 
-            {# Da wir jetzt nur 200 Leute laden, funktioniert die JavaScript-Suche 
-               nur innerhalb dieser 200 Leute. Das ist wichtig zu wissen! #}
-            
             <div class="table-responsive">
-               {# ... Tabelle ... #}
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Vorname</th>
+                            <th>Nachname</th>
+                            <th class="text-end">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for user in missingUsers %}
+                        <tr>
+                            {# Zugriff jetzt via Array-Syntax #}
+                            <td><code>{{ user.username }}</code></td>
+                            <td>{{ user.firstname }}</td>
+                            <td>{{ user.lastname }}</td>
+                            <td class="text-end">
+                                <a href="{{ path('sportabzeichen_admin_participants_add', {username: user.username}) }}" 
+                                   class="btn btn-success btn-sm">
+                                    {{ icon('plus') }}
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="text-center text-muted">Keine Benutzer gefunden.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-
-{% endblock %}
-
-{% block javascripts %}
-    {{ parent() }}
-    {# Pfad anpassen, falls dein Asset-Package anders heißt #}
-    <script src="{{ asset('js/admin_participants.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}

@@ -21,23 +21,28 @@ final class AdminParticipantController extends AbstractController
 {
     /**
      * Zeigt die Liste aller bereits registrierten Teilnehmer.
-     *
-     * @Route("/", name="index")
+     * ACHTUNG: Auch hier begrenzen wir auf 500, um Speicherüberlauf zu verhindern.
+     * * @Route("/", name="index")
      */
     public function index(ParticipantRepository $repo): Response
     {
-        // Alle Teilnehmer holen, sortiert nach Nachname, Vorname
-        $participants = $repo->findBy([], ['nachname' => 'ASC', 'vorname' => 'ASC']);
+        // Wir nutzen den QueryBuilder statt findBy, um Kontrolle über das Limit zu haben
+        $participants = $repo->createQueryBuilder('p')
+            ->orderBy('p.nachname', 'ASC')
+            ->addOrderBy('p.vorname', 'ASC')
+            ->setMaxResults(500) // Sicherheitslimit!
+            ->getQuery()
+            ->getResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,
-            'activeTab' => 'participants_manage', // Markiert den Reiter als aktiv
+            'activeTab' => 'participants_manage',
+            'limit_reached' => count($participants) >= 500
         ]);
     }
 
     /**
-     * Speichert Änderungen (Geburtsdatum/Geschlecht) aus dem Modal.
-     *
+     * Speichert Änderungen.
      * @Route("/{id}/update", name="update", methods={"POST"})
      */
     public function update(Request $request, Participant $participant, EntityManagerInterface $em): Response
@@ -48,98 +53,90 @@ final class AdminParticipantController extends AbstractController
         if ($dob) {
             try {
                 $participant->setGeburtsdatum(new \DateTime($dob));
-            } catch (\Exception $e) {
-                $this->addFlash('error', 'Ungültiges Datum.');
-            }
+            } catch (\Exception $e) { /* ignore */ }
         }
-
         if ($gender) {
             $participant->setGeschlecht($gender);
         }
 
         $em->flush();
-        $this->addFlash('success', sprintf('Daten für %s %s aktualisiert.', $participant->getVorname(), $participant->getNachname()));
+        $this->addFlash('success', 'Gespeichert.');
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 
     /**
-     * Zeigt IServ-Nutzer an, die noch NICHT in der Teilnehmerliste sind.
-     * Optimiert um "Memory Exhausted" Fehler zu vermeiden.
-     *
-     * @Route("/missing", name="missing")
+     * Zeigt fehlende Nutzer an.
+     * EXTREME PERFORMANCE OPTIMIERUNG: Lädt nur Arrays, keine Objekte!
+     * * @Route("/missing", name="missing")
      */
     public function missing(Request $request, ParticipantRepository $pRepo, UserRepository $uRepo): Response
     {
-        // 1. IDs aller existierenden Teilnehmer holen (Performant via ScalarResult)
-        // Wir holen nur die User-IDs, nicht die ganzen Objekte.
-        $existingIdsResult = $pRepo->createQueryBuilder('p')
+        // 1. IDs der existierenden Teilnehmer holen (Nur IDs, winzig klein)
+        $existingIds = $pRepo->createQueryBuilder('p')
             ->select('IDENTITY(p.user)')
             ->where('p.user IS NOT NULL')
             ->getQuery()
             ->getScalarResult();
         
-        // Array flachklopfen (z.B. [1, 5, 99, ...])
-        $excludeIds = array_column($existingIdsResult, 1);
+        $excludeIds = array_column($existingIds, 1);
 
-        // 2. QueryBuilder für IServ User erstellen
+        // 2. Suche nach Usern vorbereiten
+        // WICHTIG: Wir selektieren nur Felder, nicht das Objekt "u"
         $qb = $uRepo->createQueryBuilder('u')
-            ->where('u.act = true') // Nur aktive Nutzer
-            ->orderBy('u.username', 'ASC')
-            ->setMaxResults(200); // WICHTIG: Begrenzung gegen Speicherüberlauf
+            ->select('u.username, u.firstname, u.lastname, u.id') // <--- Nur Text laden!
+            ->where('u.act = true')
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->setMaxResults(100); // Strenges Limit für die Anzeige
 
-        // Bereits vorhandene Nutzer ausschließen
         if (!empty($excludeIds)) {
             $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
         }
 
-        // 3. Optionale Suche (falls jemand spezifisch gesucht wird)
-        // Das Suchfeld im Template müsste dazu name="q" haben und das Formular absenden.
-        // Wenn du nur JS-Filterung nutzt, greift dies hier nicht, schadet aber auch nicht.
+        // Suche
         $searchTerm = $request->query->get('q');
         if ($searchTerm) {
-            $qb->andWhere('u.username LIKE :search OR u.firstname LIKE :search OR u.lastname LIKE :search')
-               ->setParameter('search', '%' . $searchTerm . '%');
+            $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
+               ->setParameter('s', '%' . $searchTerm . '%');
         }
 
-        $missingUsers = $qb->getQuery()->getResult();
+        // WICHTIG: getArrayResult() statt getResult()
+        // Das verhindert, dass Symfony versucht, tausende User-Objekte zu bauen.
+        $missingUsers = $qb->getQuery()->getArrayResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
-            'missingUsers' => $missingUsers,
+            'missingUsers' => $missingUsers, // Das ist jetzt ein Array von Arrays, keine User-Objekte!
             'activeTab' => 'participants_manage',
-            'limit_reached' => count($missingUsers) >= 200,
+            'limit_reached' => count($missingUsers) >= 100,
             'searchTerm' => $searchTerm,
         ]);
     }
 
     /**
-     * Fügt einen IServ-User als Teilnehmer hinzu.
-     *
      * @Route("/add/{username}", name="add")
      */
-    public function add(User $user, EntityManagerInterface $em): Response
+    public function add(string $username, UserRepository $userRepo, EntityManagerInterface $em): Response
     {
-        // Prüfen, ob der User nicht doch schon existiert (doppelte Einträge verhindern)
-        // Das Repository müsste man hier eigentlich nochmal fragen, aber wir vertrauen der UI.
-        
+        // Wir laden den User erst hier, wenn wir ihn wirklich brauchen (und nur einen!)
+        $user = $userRepo->findOneBy(['username' => $username]);
+
+        if (!$user) {
+            $this->addFlash('error', 'Benutzer nicht gefunden.');
+            return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+        }
+
         $p = new Participant();
         $p->setUser($user);
         $p->setVorname($user->getName()->getFirstname());
         $p->setNachname($user->getName()->getLastname());
-        
-        // Standardwerte setzen (müssen vom Admin geprüft werden)
         $p->setGeschlecht('m'); 
-        // Standard-Geburtsdatum (z.B. 01.01.2010), damit das Feld nicht NULL ist
         $p->setGeburtsdatum(new \DateTime('2010-01-01')); 
-
-        // Optional: Klasse auslesen (falls IServ Gruppenstruktur das hergibt)
-        // $groups = $user->getGroups(); ...
 
         $em->persist($p);
         $em->flush();
 
-        $this->addFlash('success', sprintf('Benutzer %s wurde hinzugefügt. Bitte Geburtsdatum und Geschlecht prüfen.', $user->getName()));
-
+        $this->addFlash('success', 'Hinzugefügt.');
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 }
