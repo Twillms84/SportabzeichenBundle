@@ -9,16 +9,16 @@ use IServ\CrudBundle\Mapper\FormMapper;
 use IServ\CrudBundle\Mapper\ListMapper;
 use IServ\CrudBundle\Mapper\ShowMapper;
 use Psr\Container\ContainerInterface;
-use PulsR\SportabzeichenBundle\Entity\SportabzeichenParticipant;
+use PulsR\SportabzeichenBundle\Entity\Participant;
 
 final class ParticipantCrud extends ServiceCrud
 {
     
-    protected static $entityClass = SportabzeichenParticipant::class;
+    protected static $entityClass = Participant::class;
 
     public function __construct(ContainerInterface $locator)
     {
-        parent::__construct($locator, SportabzeichenParticipant::class);
+        parent::__construct($locator, Participant::class);
     }
 
     protected function configure(): void
