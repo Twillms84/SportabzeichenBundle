@@ -199,7 +199,7 @@ final class AdminController extends AbstractPageController
     }
 
     // ... Import und Requirements Methoden bleiben einfach Render-Aufrufe ...
-    #[Route('/import', name: 'import_index')]
+    #[Route('/upload', name: 'upload_participants')]
     public function importIndex(): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
