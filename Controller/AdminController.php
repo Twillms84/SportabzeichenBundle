@@ -52,10 +52,13 @@ final class AdminController extends AbstractPageController
         $maxPages = (int) ceil($totalCount / $limit);
         if ($maxPages < 1) $maxPages = 1;
 
+        // --- HIER IST DIE ÄNDERUNG ---
         $participants = $repo->createQueryBuilder('p')
-            ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
-            ->orderBy('p.nachname', 'ASC')
-            ->addOrderBy('p.vorname', 'ASC')
+            ->leftJoin('p.user', 'u') // Wir verbinden mit der User Tabelle
+            ->select('p.id, p.geburtsdatum, p.geschlecht, p.klasse')
+            ->addSelect('u.firstname AS vorname, u.lastname AS nachname') // Wir holen die Namen als Alias
+            ->orderBy('u.lastname', 'ASC') // Sortierung nach User-Nachname
+            ->addOrderBy('u.firstname', 'ASC')
             ->setFirstResult(($page - 1) * $limit)
             ->setMaxResults($limit)
             ->getQuery()

@@ -9,7 +9,7 @@ use IServ\CoreBundle\Entity\User;
 use IServ\CrudBundle\Entity\CrudInterface;
 
 #[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\ParticipantRepository')]
-#[ORM\Table(name: 'sportabzeichen_participants')] // Wir behalten den alten Tabellennamen
+#[ORM\Table(name: 'sportabzeichen_participants')]
 class Participant implements CrudInterface
 {
     #[ORM\Id]
@@ -21,20 +21,17 @@ class Participant implements CrudInterface
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
     private ?User $user = null;
 
-    #[ORM\Column(type: 'string', length: 255, nullable: true)]
-    private ?string $vorname = null;
-
-    #[ORM\Column(type: 'string', length: 255, nullable: true)]
-    private ?string $nachname = null;
+    // Vorname/Nachname als Spalten ENTFERNT.
+    // Wir holen das live aus dem User-Objekt.
 
     #[ORM\Column(type: 'date', nullable: true)]
     private ?\DateTimeInterface $geburtsdatum = null;
 
     #[ORM\Column(type: 'string', length: 10, nullable: true)]
-    private ?string $geschlecht = null; // m, w, d
+    private ?string $geschlecht = null; 
 
     #[ORM\Column(type: 'string', length: 50, nullable: true)]
-    private ?string $klasse = null; // z.B. "5a", "LK Sport"
+    private ?string $klasse = null; // Klasse speichern wir oft besser lokal wg. Historie
 
     // ------------------------------------
     // GETTER & SETTER
@@ -56,27 +53,20 @@ class Participant implements CrudInterface
         return $this;
     }
 
-    public function getVorname(): ?string
+    // --- WICHTIG: Virtuelle Getter ---
+    // Holt den Namen direkt vom verknüpften IServ-User
+
+    public function getVorname(): string
     {
-        return $this->vorname;
+        return $this->user ? $this->user->getFirstname() : '';
     }
 
-    public function setVorname(?string $vorname): self
+    public function getNachname(): string
     {
-        $this->vorname = $vorname;
-        return $this;
+        return $this->user ? $this->user->getLastname() : '';
     }
 
-    public function getNachname(): ?string
-    {
-        return $this->nachname;
-    }
-
-    public function setNachname(?string $nachname): self
-    {
-        $this->nachname = $nachname;
-        return $this;
-    }
+    // Setter entfernen wir, da wir den User-Namen hier nicht ändern wollen.
 
     public function getGeburtsdatum(): ?\DateTimeInterface
     {
@@ -113,6 +103,6 @@ class Participant implements CrudInterface
 
     public function __toString(): string
     {
-        return $this->nachname . ', ' . $this->vorname;
+        return $this->getNachname() . ', ' . $this->getVorname();
     }
 }
