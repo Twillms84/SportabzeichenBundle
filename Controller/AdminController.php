@@ -8,7 +8,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use IServ\CoreBundle\Domain\User\UserRepository;
 use PulsR\SportabzeichenBundle\Entity\Participant;
-use PulsR\SportabzeichenBundle\Repository\ParticipantRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -30,18 +29,21 @@ final class AdminController extends AbstractPageController
     }
 
     /**
-     * TEILNEHMER: Liste anzeigen (Optimiert auf Speicherverbrauch)
+     * TEILNEHMER: Liste anzeigen
      */
     #[Route('/participants', name: 'participants_index')]
-    public function participantsIndex(Request $request, ParticipantRepository $repo): Response
+    public function participantsIndex(Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+
+        // Wir holen das Repo manuell via EntityManager, um DI-Fehler zu vermeiden
+        $repo = $em->getRepository(Participant::class);
 
         $page = $request->query->getInt('page', 1);
         $limit = 50; 
         if ($page < 1) $page = 1;
 
-        // Gesamtanzahl für Paginierung
+        // Gesamtanzahl
         $totalCount = $repo->createQueryBuilder('p')
             ->select('count(p.id)')
             ->getQuery()
@@ -50,7 +52,7 @@ final class AdminController extends AbstractPageController
         $maxPages = (int) ceil($totalCount / $limit);
         if ($maxPages < 1) $maxPages = 1;
 
-        // Daten als Array laden (WICHTIG für Performance/Speicher)
+        // Daten als Array laden
         $participants = $repo->createQueryBuilder('p')
             ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
             ->orderBy('p.nachname', 'ASC')
@@ -73,19 +75,20 @@ final class AdminController extends AbstractPageController
      * TEILNEHMER: Nacherfassen (Suche)
      */
     #[Route('/participants/missing', name: 'participants_missing')]
-    public function participantsMissing(Request $request, ParticipantRepository $pRepo, UserRepository $uRepo): Response
+    public function participantsMissing(Request $request, EntityManagerInterface $em, UserRepository $uRepo): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
+        
+        $repo = $em->getRepository(Participant::class);
 
         $searchTerm = $request->query->get('q');
         $missingUsers = [];
         $limitReached = false;
 
-        // Nur suchen, wenn Text eingegeben wurde (Verhindert Laden aller User)
         if ($searchTerm && strlen($searchTerm) > 2) {
             
             // Bereits vorhandene IDs ausschließen
-            $existingIds = $pRepo->createQueryBuilder('p')
+            $existingIds = $repo->createQueryBuilder('p')
                 ->select('IDENTITY(p.user)')
                 ->where('p.user IS NOT NULL')
                 ->getQuery()
@@ -93,7 +96,6 @@ final class AdminController extends AbstractPageController
             
             $excludeIds = array_column($existingIds, 1);
 
-            // Suche im IServ User Repository
             $qb = $uRepo->createQueryBuilder('u')
                 ->select('u.username, u.firstname, u.lastname')
                 ->where('u.act = true')
@@ -132,7 +134,6 @@ final class AdminController extends AbstractPageController
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Prüfen ob schon da
         $exists = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
         if ($exists) {
             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
@@ -142,6 +143,9 @@ final class AdminController extends AbstractPageController
             $participant->setVorname($user->getFirstname());
             $participant->setNachname($user->getLastname());
             
+            // Klasse/Gruppen auslesen (Optional, falls möglich)
+            // $participant->setKlasse(...);
+
             $em->persist($participant);
             $em->flush();
             
@@ -155,11 +159,11 @@ final class AdminController extends AbstractPageController
      * TEILNEHMER: Update (per Modal / POST)
      */
     #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
-    public function participantsUpdate(Request $request, int $id, ParticipantRepository $repo, EntityManagerInterface $em): Response
+    public function participantsUpdate(Request $request, int $id, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        $participant = $repo->find($id);
+        $participant = $em->getRepository(Participant::class)->find($id);
         if (!$participant) {
             throw $this->createNotFoundException('Teilnehmer nicht gefunden.');
         }
@@ -184,30 +188,30 @@ final class AdminController extends AbstractPageController
     }
 
     /**
-     * IMPORT: CSV Hochladen (Platzhalter)
+     * IMPORT: CSV Hochladen (Fix: message Variable hinzugefügt)
      */
     #[Route('/import', name: 'import_index')]
     public function importIndex(): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Früher: uploadParticipants
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'import',
+            'message' => null, // <--- WICHTIG: Leere Variable übergeben
         ]);
     }
 
     /**
-     * ANFORDERUNGEN: DOSB Tabelle (Platzhalter)
+     * ANFORDERUNGEN: DOSB Tabelle (Fix: message Variable hinzugefügt)
      */
     #[Route('/requirements', name: 'requirements_index')]
     public function requirementsIndex(): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Früher: uploadRequirements
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements',
+            'message' => null, // <--- WICHTIG: Leere Variable übergeben
         ]);
     }
 }
