@@ -1,6 +1,6 @@
 <?php
 
-namespace PulsR\Sportabzeichen\Controller;
+namespace PulsR\SportabzeichenBundle\Controller;
 
 use PulsR\Sportabzeichen\Entity\Participant; // Deine Entity
 use PulsR\Sportabzeichen\Repository\ParticipantRepository;
