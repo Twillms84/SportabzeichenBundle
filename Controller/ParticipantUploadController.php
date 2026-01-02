@@ -8,7 +8,7 @@ use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route; // Nutzung von Attribute (PHP 8+)
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class ParticipantUploadController extends AbstractPageController
@@ -30,58 +30,63 @@ final class ParticipantUploadController extends AbstractPageController
                 $error = 'Bitte eine gültige CSV-Datei auswählen.';
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
-                fgetcsv($handle); // Header
+                if ($handle !== false) {
+                    fgetcsv($handle); // Header überspringen
 
-                while (($row = fgetcsv($handle)) !== false) {
-                    try {
-                        if (count($row) < 3) {
+                    while (($row = fgetcsv($handle)) !== false) {
+                        try {
+                            // Mindestens 3 Spalten erwartet
+                            if (count($row) < 3) {
+                                $skipped++;
+                                continue;
+                            }
+
+                            [$importId, $geschlechtRaw, $geburtsdatumRaw] = array_map('trim', $row);
+
+                            if ($importId === '') {
+                                $skipped++;
+                                continue;
+                            }
+
+                            $geschlecht = match (strtolower($geschlechtRaw)) {
+                                'm', 'male', 'männlich' => 'MALE',
+                                'w', 'female', 'weiblich' => 'FEMALE',
+                                default => null,
+                            };
+
+                            $geburtsdatum = self::parseDate($geburtsdatumRaw);
+
+                            // Upsert (Insert oder Update bei Konflikt)
+                            $conn->executeStatement(
+                                <<<SQL
+                                    INSERT INTO sportabzeichen_participants (import_id, geschlecht, geburtsdatum)
+                                    VALUES (:import_id, :geschlecht, :geburtsdatum)
+                                    ON CONFLICT (import_id)
+                                    DO UPDATE SET
+                                        geschlecht = EXCLUDED.geschlecht,
+                                        geburtsdatum = EXCLUDED.geburtsdatum,
+                                        updated_at = NOW()
+                                SQL,
+                                [
+                                    'import_id'    => $importId,
+                                    'geschlecht'   => $geschlecht,
+                                    'geburtsdatum' => $geburtsdatum,
+                                ]
+                            );
+
+                            $imported++;
+
+                        } catch (\Throwable $e) {
+                            // Optional: $error loggen ($e->getMessage())
                             $skipped++;
-                            continue;
                         }
-
-                        [$importId, $geschlechtRaw, $geburtsdatumRaw] =
-                            array_map('trim', $row);
-
-                        if ($importId === '') {
-                            $skipped++;
-                            continue;
-                        }
-
-                        $geschlecht = match (strtolower($geschlechtRaw)) {
-                            'm' => 'MALE',
-                            'w' => 'FEMALE',
-                            default => null,
-                        };
-
-                        $geburtsdatum = self::parseDate($geburtsdatumRaw);
-
-                        $conn->executeStatement(
-                            <<<SQL
-INSERT INTO sportabzeichen_participants
-(import_id, geschlecht, geburtsdatum)
-VALUES
-(:import_id, :geschlecht, :geburtsdatum)
-ON CONFLICT (import_id)
-DO UPDATE SET
- geschlecht = EXCLUDED.geschlecht,
- geburtsdatum = EXCLUDED.geburtsdatum,
- updated_at = NOW()
-SQL,
-                            [
-                                'import_id'    => $importId,
-                                'geschlecht'   => $geschlecht,
-                                'geburtsdatum' => $geburtsdatum,
-                            ]
-                        );
-
-                        $imported++;
-
-                    } catch (\Throwable) {
-                        $skipped++;
+                    }
+                    fclose($handle);
+                    
+                    if ($imported > 0) {
+                        $message = sprintf('%d Teilnehmer erfolgreich importiert/aktualisiert.', $imported);
                     }
                 }
-
-                fclose($handle);
             }
         }
 
@@ -90,7 +95,7 @@ SQL,
             'imported'  => $imported,
             'skipped'   => $skipped,
             'error'     => $error,
-            'message' => $message,
+            'message'   => $message,
         ]);
     }
 
@@ -100,7 +105,8 @@ SQL,
             return null;
         }
 
-        foreach (['d.m.Y', 'd-m-Y', 'd/m/Y'] as $fmt) {
+        // Gängige deutsche und internationale Formate
+        foreach (['d.m.Y', 'Y-m-d', 'd-m-Y', 'd/m/Y'] as $fmt) {
             $dt = \DateTime::createFromFormat($fmt, $input);
             if ($dt !== false) {
                 return $dt->format('Y-m-d');

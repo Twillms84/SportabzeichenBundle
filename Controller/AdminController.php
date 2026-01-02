@@ -6,21 +6,18 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use IServ\CoreBundle\Entity\User; // <--- Wir nutzen jetzt direkt die Entity
+use IServ\CoreBundle\Entity\User;
 use PulsR\SportabzeichenBundle\Entity\Participant;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class AdminController extends AbstractPageController
 {
-    private EntityManagerInterface $em;
-
-    // Nur noch der EntityManager wird injected - das klappt immer.
-    public function __construct(EntityManagerInterface $em)
-    {
-        $this->em = $em;
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {
     }
 
     #[Route('/', name: 'dashboard')]
@@ -40,29 +37,27 @@ final class AdminController extends AbstractPageController
 
         $repo = $this->em->getRepository(Participant::class);
 
-        $page = $request->query->getInt('page', 1);
-        $limit = 50; 
-        if ($page < 1) $page = 1;
+        $page = max(1, $request->query->getInt('page', 1));
+        $limit = 50;
 
-        // Gesamtanzahl zählen
-        $totalCount = $repo->createQueryBuilder('p')
+        // Gesamtanzahl für Pagination
+        $totalCount = (int) $repo->createQueryBuilder('p')
             ->select('count(p.id)')
             ->getQuery()
             ->getSingleScalarResult();
 
-        $maxPages = (int) ceil($totalCount / $limit);
-        if ($maxPages < 1) $maxPages = 1;
+        $maxPages = max(1, (int) ceil($totalCount / $limit));
 
-        // Objekte laden!
+        // Teilnehmer laden inkl. User für Sortierung und Performance
         $participants = $repo->createQueryBuilder('p')
-            ->leftJoin('p.user', 'u') // Join für Sortierung nötig
-            ->addSelect('u')          // User gleich mitladen (Performance!)
+            ->leftJoin('p.user', 'u')
+            ->addSelect('u')
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
             ->setFirstResult(($page - 1) * $limit)
             ->setMaxResults($limit)
             ->getQuery()
-            ->getResult(); // <--- WICHTIG: getResult() statt getArrayResult()
+            ->getResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,
@@ -79,36 +74,48 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         
         $participantRepo = $this->em->getRepository(Participant::class);
-        $userRepo = $this->em->getRepository(User::class); // <--- Hier holen wir es sicher
+        $userRepo = $this->em->getRepository(User::class);
 
-        $searchTerm = $request->query->get('q');
+        $searchTerm = trim((string)$request->query->get('q'));
         $missingUsers = [];
         $limitReached = false;
 
-        if ($searchTerm && strlen($searchTerm) > 2) {
-            // Bereits vorhandene User-IDs holen
-            $existingIds = $participantRepo->createQueryBuilder('p')
+        // Suche erst starten, wenn mind. 3 Zeichen eingegeben wurden
+        if (strlen($searchTerm) >= 3) {
+            // 1. IDs aller User holen, die schon Participant sind
+            // Wir nutzen IDENTITY(), um nur die IDs zu laden, nicht die ganzen Objekte
+            $existingIdsResult = $participantRepo->createQueryBuilder('p')
                 ->select('IDENTITY(p.user)')
                 ->where('p.user IS NOT NULL')
                 ->getQuery()
                 ->getScalarResult();
             
-            $excludeIds = array_column($existingIds, 1);
+            // Flache Liste der IDs erstellen
+            $excludeIds = array_column($existingIdsResult, 1);
 
+            // 2. User suchen, die NICHT in dieser Liste sind
             $qb = $userRepo->createQueryBuilder('u')
-                ->select('u.username, u.firstname, u.lastname')
-                ->where('u.act = true')
+                ->select('u') // Hier laden wir die ganzen User-Objekte für die Anzeige
+                ->where('u.act = true') // Nur aktive Nutzer
+                // Suche in Vorname, Nachname oder Username
                 ->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
                 ->setParameter('s', '%' . $searchTerm . '%')
                 ->orderBy('u.lastname', 'ASC')
-                ->setMaxResults(50);
+                ->addOrderBy('u.firstname', 'ASC')
+                ->setMaxResults(51); // Eins mehr laden, um "limitReached" zu prüfen
 
             if (!empty($excludeIds)) {
                 $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
             }
 
-            $missingUsers = $qb->getQuery()->getArrayResult();
-            $limitReached = count($missingUsers) >= 50;
+            $results = $qb->getQuery()->getResult();
+            
+            if (count($results) > 50) {
+                $limitReached = true;
+                array_pop($results); // Den 51. Eintrag entfernen
+            }
+            
+            $missingUsers = $results;
         }
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
@@ -124,29 +131,35 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Sicherer Zugriff auf User Repo
-        $user = $this->em->getRepository(User::class)->findOneBy(['username' => $username]);
+        $userRepo = $this->em->getRepository(User::class);
+        $participantRepo = $this->em->getRepository(Participant::class);
+
+        $user = $userRepo->findOneBy(['username' => $username]);
         
         if (!$user) {
             $this->addFlash('error', 'Benutzer nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        $exists = $this->em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        // Doppelprüfung, falls jemand F5 drückt
+        $exists = $participantRepo->findOneBy(['user' => $user]);
         if ($exists) {
-            $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
+            $this->addFlash('warning', sprintf('Benutzer "%s" ist bereits Teilnehmer.', $user->getName()));
         } else {
             $participant = new Participant();
             $participant->setUser($user);
+            // Wir speichern Namen als Snapshot, falls der User später gelöscht wird
+            // (vorausgesetzt deine Entity hat diese Felder, sonst diese Zeilen löschen)
             $participant->setVorname($user->getFirstname());
             $participant->setNachname($user->getLastname());
             
             $this->em->persist($participant);
             $this->em->flush();
             
-            $this->addFlash('success', $user->getName() . ' wurde hinzugefügt.');
+            $this->addFlash('success', sprintf('%s wurde erfolgreich hinzugefügt.', $user->getName()));
         }
 
+        // Weiterleitung zurück zur Suche, damit man weitermachen kann
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing', ['q' => $user->getLastname()]);
     }
 
@@ -156,6 +169,7 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         $participant = $this->em->getRepository(Participant::class)->find($id);
+        
         if (!$participant) {
             throw $this->createNotFoundException('Teilnehmer nicht gefunden.');
         }
@@ -166,11 +180,16 @@ final class AdminController extends AbstractPageController
         if ($dob) {
             try {
                 $participant->setGeburtsdatum(new \DateTime($dob));
-            } catch (\Exception $e) { }
+            } catch (\Exception $e) {
+                // Ungültiges Datum ignorieren oder Flash-Message setzen
+            }
         }
         
         if ($gender) {
-            $participant->setGeschlecht($gender);
+            // Validierung: Nur erlaubte Werte
+            if (in_array($gender, ['MALE', 'FEMALE', 'DIVERSE'])) {
+                 $participant->setGeschlecht($gender);
+            }
         }
 
         $this->em->flush();
@@ -179,27 +198,14 @@ final class AdminController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 
+    // ... Import und Requirements Methoden bleiben einfach Render-Aufrufe ...
     #[Route('/import', name: 'import_index')]
     public function importIndex(): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'import',
-            'message' => null, 
-            'error'   => null,
-        ]);
-    }
-
-    #[Route('/requirements', name: 'requirements_index')]
-    public function requirementsIndex(): Response
-    {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-
-        return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
-            'activeTab' => 'requirements',
-            'message' => null, 
-            'error'   => null,
+            'message' => null, 'error' => null, 'imported' => 0, 'skipped' => 0
         ]);
     }
 }
