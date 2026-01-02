@@ -6,56 +6,22 @@
     {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' %}
 
     <div class="panel panel-default">
-        <div class="panel-heading d-flex justify-content-between align-items-center">
-            <h3 class="panel-title">{{ _('IServ-Benutzer ohne Sportabzeichen-Eintrag') }}</h3>
-            <a href="{{ path('sportabzeichen_admin_participants_index') }}" class="btn btn-default btn-sm">
-                {{ icon('arrow-left') }} {{ _('Zurück zur Liste') }}
-            </a>
-        </div>
-
         <div class="panel-body">
-            <div class="alert alert-info">
-                {{ icon('info') }} Hier werden alle aktiven IServ-Benutzer angezeigt, die noch nicht in der Sportabzeichen-Datenbank existieren.
-            </div>
+            {# ... #}
+            
+            {% if limit_reached %}
+                <div class="alert alert-warning">
+                    {{ icon('exclamation-triangle') }}
+                    {{ _('Die Liste wurde aus Performance-Gründen auf 200 Einträge begrenzt.') }}
+                    {{ _('Bitte fügen Sie fehlende Benutzer ggf. direkt über den Nutzernamen hinzu, falls sie hier nicht erscheinen.') }}
+                </div>
+            {% endif %}
 
-            <input type="text" id="searchMissing" class="form-control mb-3" placeholder="Suche nach Name oder Gruppe...">
-
+            {# Da wir jetzt nur 200 Leute laden, funktioniert die JavaScript-Suche 
+               nur innerhalb dieser 200 Leute. Das ist wichtig zu wissen! #}
+            
             <div class="table-responsive">
-                <table class="table table-striped align-middle">
-                    <thead>
-                        <tr>
-                            <th>Account</th>
-                            <th>Name</th>
-                            <th>Gruppen (Klasse)</th>
-                            <th class="text-end">Aktion</th>
-                        </tr>
-                    </thead>
-                    <tbody id="missingRows">
-                    {% for user in missingUsers %}
-                        <tr>
-                            <td><code>{{ user.username }}</code></td>
-                            <td>{{ user.name }}</td>
-                            <td>
-                                {% for group in user.groups %}
-                                    <span class="badge bg-secondary">{{ group.name }}</span>
-                                {% endfor %}
-                            </td>
-                            <td class="text-end">
-                                <a href="{{ path('sportabzeichen_admin_participants_add', {username: user.username}) }}" 
-                                   class="btn btn-success btn-sm">
-                                    {{ icon('plus') }} Hinzufügen
-                                </a>
-                            </td>
-                        </tr>
-                    {% else %}
-                        <tr>
-                            <td colspan="4" class="text-center text-muted py-3">
-                                Alle IServ-Benutzer sind bereits erfasst.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+               {# ... Tabelle ... #}
             </div>
         </div>
     </div>

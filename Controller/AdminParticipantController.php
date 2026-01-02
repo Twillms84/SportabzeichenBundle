@@ -1,120 +1,45 @@
-<?php
-
-namespace PulsR\SportabzeichenBundle\Controller;
-
-use PulsR\Sportabzeichen\Entity\Participant; // Deine Entity
-use PulsR\Sportabzeichen\Repository\ParticipantRepository;
-use IServ\Core\Domain\User\User; // IServ User Klasse
-use IServ\Core\Domain\User\UserRepository; // Um IServ User zu finden
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
-
 /**
- * @Route("/admin/participants", name="sportabzeichen_admin_participants_")
- */
-class AdminParticipantController extends AbstractController
-{
-    /**
-     * Hauptansicht: Liste aller Teilnehmer
-     * @Route("/", name="index")
-     */
-    public function index(ParticipantRepository $repo): Response
-    {
-        // Hole alle Teilnehmer, sortiert nach Nachname
-        $participants = $repo->findBy([], ['nachname' => 'ASC', 'vorname' => 'ASC']);
-
-        return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
-            'participants' => $participants,
-        ]);
-    }
-
-    /**
-     * Bearbeiten eines Teilnehmers (Modal-Ziel oder Seite)
-     * @Route("/{id}/edit", name="edit", methods={"POST"})
-     */
-    public function edit(Request $request, Participant $participant, EntityManagerInterface $em): Response
-    {
-        // Hier einfach die POST-Daten auslesen (Quick & Dirty für Admin-Panel)
-        // Sauberer wäre eine Symfony Form, aber für 2 Felder reicht das:
-        
-        $dobStr = $request->request->get('dob');
-        $gender = $request->request->get('gender'); // 'm', 'w', ...
-
-        if ($dobStr) {
-            $participant->setGeburtsdatum(new \DateTime($dobStr));
-        }
-        if ($gender) {
-            $participant->setGeschlecht($gender);
-        }
-
-        $em->flush();
-
-        $this->addFlash('success', 'Teilnehmerdaten aktualisiert.');
-        return $this->redirectToRoute('sportabzeichen_admin_participants_index');
-    }
-
-    /**
-     * Ansicht: Fehlende Benutzer finden (IServ User vs. Teilnehmer)
+     * Zeigt IServ-Nutzer an, die noch NICHT in der Teilnehmerliste sind.
+     * Optimiert für Speicherplatz (lädt nicht alle User).
+     *
      * @Route("/missing", name="missing")
      */
-    public function missing(ParticipantRepository $pRepo, UserRepository $uRepo): Response
+    public function missing(Request $request, ParticipantRepository $pRepo, UserRepository $uRepo): Response
     {
-        // 1. Alle aktuellen Teilnehmer-User-IDs holen
-        $existing = $pRepo->findAll();
-        $existingUserIds = [];
-        foreach ($existing as $p) {
-            if ($p->getUser()) { // Angenommen es gibt eine Relation zum IServ User
-                $existingUserIds[] = $p->getUser()->getId();
-            }
+        // 1. Nur die IDs der bereits vorhandenen Teilnehmer holen (sehr speicherschonend)
+        // Wir nutzen DQL, um nur eine Liste von Integers zu bekommen.
+        $existingIds = $pRepo->createQueryBuilder('p')
+            ->select('IDENTITY(p.user)')
+            ->getQuery()
+            ->getScalarResult();
+        
+        // Das Ergebnis ist ein Array von Arrays, wir brauchen ein flaches Array von IDs.
+        $excludeIds = array_column($existingIds, 1);
+
+        // 2. QueryBuilder für User erstellen
+        // Wir nutzen NICHT findAllActive(), da das keine Limits erlaubt.
+        $qb = $uRepo->createQueryBuilder('u')
+            ->where('u.act = true') // 'act' ist das IServ-Standardfeld für aktive User
+            ->orderBy('u.username', 'ASC')
+            ->setMaxResults(200); // WICHTIG: Hard-Limit setzen, damit der Speicher nicht vollläuft!
+
+        // Wenn es bereits Teilnehmer gibt, schließen wir diese per SQL aus
+        if (!empty($excludeIds)) {
+            $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
         }
 
-        // 2. Alle aktiven IServ Benutzer holen (evtl. filtern auf Schüler?)
-        // Hier holen wir ALLE aktiven. Ggf. Repository-Methode findActiveStudents() nutzen falls verfügbar.
-        $allUsers = $uRepo->findAllActive(); 
-
-        $missingUsers = [];
-        foreach ($allUsers as $user) {
-            // Nur Benutzer anzeigen, die NICHT in der Teilnehmerliste sind
-            if (!in_array($user->getId(), $existingUserIds)) {
-                // Optional: Filter, z.B. System-User ausschließen
-                if (!$user->hasRole('ROLE_STUDENT') && !$user->hasRole('ROLE_TEACHER')) {
-                   continue;
-                }
-                $missingUsers[] = $user;
-            }
+        // Optional: Server-seitige Suche (falls du das Suchfeld im Template umbaust)
+        $q = $request->query->get('q');
+        if ($q) {
+            $qb->andWhere('u.username LIKE :q OR u.firstname LIKE :q OR u.lastname LIKE :q')
+               ->setParameter('q', '%' . $q . '%');
         }
+
+        $missingUsers = $qb->getQuery()->getResult();
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
             'missingUsers' => $missingUsers,
+            'activeTab' => 'participants_manage',
+            'limit_reached' => count($missingUsers) >= 200, // Info ans Template übergeben
         ]);
     }
-
-    /**
-     * Fehlenden Benutzer hinzufügen
-     * @Route("/add/{username}", name="add")
-     */
-    public function add(User $user, EntityManagerInterface $em): Response
-    {
-        // Neuen Teilnehmer aus IServ User erstellen
-        $p = new Participant();
-        $p->setUser($user);
-        $p->setVorname($user->getName()->getFirstname());
-        $p->setNachname($user->getName()->getLastname());
-        // Versuchen Geschlecht/Geburtstag aus Profil zu holen, falls möglich
-        // $p->setGeburtsdatum($user->getBirthday()); 
-        // $p->setGeschlecht(...) 
-        // Falls nicht vorhanden, Standardwerte setzen, die der Admin dann ändert:
-        $p->setGeschlecht('m'); 
-        $p->setGeburtsdatum(new \DateTime('2010-01-01')); 
-
-        $em->persist($p);
-        $em->flush();
-
-        $this->addFlash('success', sprintf('%s wurde hinzugefügt.', $user));
-
-        return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
-    }
-}
