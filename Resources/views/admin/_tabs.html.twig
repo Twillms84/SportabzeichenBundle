@@ -14,13 +14,13 @@
     </li>
 
     <li class="{{ activeTab == 'import' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_import_index') }}">
+        <a href="{{ path('sportabzeichen_admin_upload_participants') }}">
             {{ icon('upload') }} {{ _('Import') }}
         </a>
     </li>
 
     <li class="{{ activeTab == 'requirements' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_requirements_index') }}">
+        <a href="{{ path('sportabzeichen_admin_upload') }}">
             {{ icon('list-alt') }} {{ _('Anforderungen') }}
         </a>
     </li>
