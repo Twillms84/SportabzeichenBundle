@@ -5,19 +5,28 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use IServ\CoreBundle\Entity\User;
 use IServ\CrudBundle\Entity\CrudInterface;
+use PulsR\SportabzeichenBundle\Repository\ParticipantRepository;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: ParticipantRepository::class)] // <--- WICHTIG: Verknüpfung zum Repo
 #[ORM\Table(name: 'sportabzeichen_participants')]
-class SportabzeichenParticipant implements CrudInterface
+class Participant implements CrudInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
-    private int $id;
+    private ?int $id = null;
 
-    #[ORM\Column(type: 'text', unique: true)]
-    private string $importId;
+    /**
+     * Verknüpfung zum IServ-Benutzer (Wichtig für Nacherfassen)
+     */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?User $user = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $importId = null;
 
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $vorname = null;
@@ -27,6 +36,9 @@ class SportabzeichenParticipant implements CrudInterface
 
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $geschlecht = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $klasse = null; // <--- Fehlte im Controller-View
 
     #[ORM\Column(type: 'date', nullable: true)]
     private ?\DateTimeInterface $geburtsdatum = null;
@@ -39,24 +51,35 @@ class SportabzeichenParticipant implements CrudInterface
         $this->updatedAt = new \DateTimeImmutable();
     }
 
-    // --- CrudInterface: REQUIRED ---
     public function __toString(): string
     {
         return trim(($this->nachname ?? '') . ', ' . ($this->vorname ?? ''));
     }
 
-    // --- Getter/Setter ---
-    public function getId(): int
+    // --- Getter / Setter ---
+
+    public function getId(): ?int
     {
         return $this->id;
     }
 
-    public function getImportId(): string
+    public function getUser(): ?User
+    {
+        return $this->user;
+    }
+
+    public function setUser(?User $user): self
+    {
+        $this->user = $user;
+        return $this;
+    }
+
+    public function getImportId(): ?string
     {
         return $this->importId;
     }
 
-    public function setImportId(string $importId): self
+    public function setImportId(?string $importId): self
     {
         $this->importId = $importId;
         return $this;
@@ -95,19 +118,37 @@ class SportabzeichenParticipant implements CrudInterface
         return $this;
     }
 
+    public function getKlasse(): ?string
+    {
+        return $this->klasse;
+    }
+
+    public function setKlasse(?string $klasse): self
+    {
+        $this->klasse = $klasse;
+        return $this;
+    }
+
     public function getGeburtsdatum(): ?\DateTimeInterface
     {
         return $this->geburtsdatum;
     }
 
-    public function setGeburtsdatum(?\DateTimeInterface $date): self
+    public function setGeburtsdatum(?\DateTimeInterface $geburtsdatum): self
     {
-        $this->geburtsdatum = $date;
+        $this->geburtsdatum = $geburtsdatum;
         return $this;
     }
 
     public function getUpdatedAt(): \DateTimeInterface
     {
         return $this->updatedAt;
+    }
+
+    #[ORM\PreUpdate]
+    public function setUpdatedAt(): self
+    {
+        $this->updatedAt = new \DateTimeImmutable();
+        return $this;
     }
 }
