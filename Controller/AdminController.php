@@ -15,9 +15,17 @@ use Symfony\Component\Routing\Annotation\Route;
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class AdminController extends AbstractPageController
 {
-    /**
-     * DASHBOARD: Startseite
-     */
+    private EntityManagerInterface $em;
+    private UserRepository $userRepo;
+
+    // --- WICHTIG: Constructor Injection ---
+    // Wir laden die Dienste hier einmalig, damit sie überall verfügbar sind.
+    public function __construct(EntityManagerInterface $em, UserRepository $userRepo)
+    {
+        $this->em = $em;
+        $this->userRepo = $userRepo;
+    }
+
     #[Route('/', name: 'dashboard')]
     public function dashboard(): Response
     {
@@ -28,22 +36,18 @@ final class AdminController extends AbstractPageController
         ]);
     }
 
-    /**
-     * TEILNEHMER: Liste anzeigen
-     */
     #[Route('/participants', name: 'participants_index')]
-    public function participantsIndex(Request $request, EntityManagerInterface $em): Response
+    public function participantsIndex(Request $request): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Wir holen das Repo manuell via EntityManager, um DI-Fehler zu vermeiden
-        $repo = $em->getRepository(Participant::class);
+        // Zugriff über $this->em statt Argument
+        $repo = $this->em->getRepository(Participant::class);
 
         $page = $request->query->getInt('page', 1);
         $limit = 50; 
         if ($page < 1) $page = 1;
 
-        // Gesamtanzahl
         $totalCount = $repo->createQueryBuilder('p')
             ->select('count(p.id)')
             ->getQuery()
@@ -52,7 +56,6 @@ final class AdminController extends AbstractPageController
         $maxPages = (int) ceil($totalCount / $limit);
         if ($maxPages < 1) $maxPages = 1;
 
-        // Daten als Array laden
         $participants = $repo->createQueryBuilder('p')
             ->select('p.id, p.vorname, p.nachname, p.geburtsdatum, p.geschlecht, p.klasse')
             ->orderBy('p.nachname', 'ASC')
@@ -71,23 +74,18 @@ final class AdminController extends AbstractPageController
         ]);
     }
 
-    /**
-     * TEILNEHMER: Nacherfassen (Suche)
-     */
     #[Route('/participants/missing', name: 'participants_missing')]
-    public function participantsMissing(Request $request, EntityManagerInterface $em, UserRepository $uRepo): Response
+    public function participantsMissing(Request $request): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         
-        $repo = $em->getRepository(Participant::class);
+        $repo = $this->em->getRepository(Participant::class);
 
         $searchTerm = $request->query->get('q');
         $missingUsers = [];
         $limitReached = false;
 
         if ($searchTerm && strlen($searchTerm) > 2) {
-            
-            // Bereits vorhandene IDs ausschließen
             $existingIds = $repo->createQueryBuilder('p')
                 ->select('IDENTITY(p.user)')
                 ->where('p.user IS NOT NULL')
@@ -96,7 +94,8 @@ final class AdminController extends AbstractPageController
             
             $excludeIds = array_column($existingIds, 1);
 
-            $qb = $uRepo->createQueryBuilder('u')
+            // Zugriff über $this->userRepo
+            $qb = $this->userRepo->createQueryBuilder('u')
                 ->select('u.username, u.firstname, u.lastname')
                 ->where('u.act = true')
                 ->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
@@ -120,21 +119,18 @@ final class AdminController extends AbstractPageController
         ]);
     }
 
-    /**
-     * TEILNEHMER: Einen User hinzufügen
-     */
     #[Route('/participants/add/{username}', name: 'participants_add')]
-    public function participantsAdd(string $username, UserRepository $uRepo, EntityManagerInterface $em): Response
+    public function participantsAdd(string $username): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        $user = $uRepo->findOneBy(['username' => $username]);
+        $user = $this->userRepo->findOneBy(['username' => $username]);
         if (!$user) {
             $this->addFlash('error', 'Benutzer nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        $exists = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        $exists = $this->em->getRepository(Participant::class)->findOneBy(['user' => $user]);
         if ($exists) {
             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
         } else {
@@ -143,11 +139,8 @@ final class AdminController extends AbstractPageController
             $participant->setVorname($user->getFirstname());
             $participant->setNachname($user->getLastname());
             
-            // Klasse/Gruppen auslesen (Optional, falls möglich)
-            // $participant->setKlasse(...);
-
-            $em->persist($participant);
-            $em->flush();
+            $this->em->persist($participant);
+            $this->em->flush();
             
             $this->addFlash('success', $user->getName() . ' wurde hinzugefügt.');
         }
@@ -155,15 +148,12 @@ final class AdminController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing', ['q' => $user->getLastname()]);
     }
 
-    /**
-     * TEILNEHMER: Update (per Modal / POST)
-     */
     #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
-    public function participantsUpdate(Request $request, int $id, EntityManagerInterface $em): Response
+    public function participantsUpdate(Request $request, int $id): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        $participant = $em->getRepository(Participant::class)->find($id);
+        $participant = $this->em->getRepository(Participant::class)->find($id);
         if (!$participant) {
             throw $this->createNotFoundException('Teilnehmer nicht gefunden.');
         }
@@ -181,14 +171,14 @@ final class AdminController extends AbstractPageController
             $participant->setGeschlecht($gender);
         }
 
-        $em->flush();
+        $this->em->flush();
         $this->addFlash('success', 'Daten gespeichert.');
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 
     /**
-     * IMPORT: CSV Hochladen (Fix: message Variable hinzugefügt)
+     * IMPORT: CSV Hochladen
      */
     #[Route('/import', name: 'import_index')]
     public function importIndex(): Response
@@ -197,12 +187,13 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'import',
-            'message' => null, // <--- WICHTIG: Leere Variable übergeben
+            'message' => null, // Fix für Twig Error
+            'error'   => null, // Fix für Twig Error
         ]);
     }
 
     /**
-     * ANFORDERUNGEN: DOSB Tabelle (Fix: message Variable hinzugefügt)
+     * ANFORDERUNGEN: DOSB Tabelle
      */
     #[Route('/requirements', name: 'requirements_index')]
     public function requirementsIndex(): Response
@@ -211,7 +202,8 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements',
-            'message' => null, // <--- WICHTIG: Leere Variable übergeben
+            'message' => null, // Fix für Twig Error
+            'error'   => null, // Fix für Twig Error
         ]);
     }
 }
