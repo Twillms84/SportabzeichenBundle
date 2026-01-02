@@ -44,6 +44,7 @@ final class AdminController extends AbstractPageController
         $limit = 50; 
         if ($page < 1) $page = 1;
 
+        // Gesamtanzahl zählen
         $totalCount = $repo->createQueryBuilder('p')
             ->select('count(p.id)')
             ->getQuery()
@@ -52,17 +53,16 @@ final class AdminController extends AbstractPageController
         $maxPages = (int) ceil($totalCount / $limit);
         if ($maxPages < 1) $maxPages = 1;
 
-        // --- HIER IST DIE ÄNDERUNG ---
+        // Objekte laden!
         $participants = $repo->createQueryBuilder('p')
-            ->leftJoin('p.user', 'u') // Wir verbinden mit der User Tabelle
-            ->select('p.id, p.geburtsdatum, p.geschlecht, p.klasse')
-            ->addSelect('u.firstname AS vorname, u.lastname AS nachname') // Wir holen die Namen als Alias
-            ->orderBy('u.lastname', 'ASC') // Sortierung nach User-Nachname
+            ->leftJoin('p.user', 'u') // Join für Sortierung nötig
+            ->addSelect('u')          // User gleich mitladen (Performance!)
+            ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
             ->setFirstResult(($page - 1) * $limit)
             ->setMaxResults($limit)
             ->getQuery()
-            ->getArrayResult();
+            ->getResult(); // <--- WICHTIG: getResult() statt getArrayResult()
 
         return $this->render('@PulsRSportabzeichen/admin/participants/index.html.twig', [
             'participants' => $participants,

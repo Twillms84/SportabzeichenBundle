@@ -29,7 +29,7 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Klasse</th>
+                            <th>Gruppen / Klasse</th>
                             <th>Geburtstag</th>
                             <th>Geschlecht</th>
                             <th class="text-end">Aktion</th>
@@ -38,17 +38,39 @@
                     <tbody id="participantRows">
                     {% for p in participants %}
                         <tr>
-                            <td>{{ p.nachname }}, {{ p.vorname }}</td>
-                            <td>{{ p.klasse|default('-') }}</td>
+                            <td>
+                                {% if p.user %}
+                                    {{ p.user.lastname }}, {{ p.user.firstname }}
+                                {% else %}
+                                    <span class="text-muted"><em>{{ _('Gelöschter Nutzer') }}</em></span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if p.user %}
+                                    {# IServ-Logik: Wir zeigen die Gruppen an #}
+                                    {% for group in p.user.groups %}
+                                        <span class="label label-default">{{ group.name }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endfor %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td>{{ p.geburtsdatum ? p.geburtsdatum|date('d.m.Y') : '-' }}</td>
-                            <td>{{ p.geschlecht }}</td>
+                            <td>
+                                {% if p.geschlecht == 'm' %}{{ _('Männlich') }}
+                                {% elseif p.geschlecht == 'w' %}{{ _('Weiblich') }}
+                                {% else %}{{ p.geschlecht }}{% endif %}
+                            </td>
                             <td class="text-end">
                                 {# Button mit Data-Attributen (Single Modal Logic) #}
+                                {# Wir müssen hier prüfen, ob user existiert, um Fehler bei .firstname zu vermeiden #}
                                 <button type="button" class="btn btn-default btn-sm"
                                         data-toggle="modal" 
                                         data-target="#genericEditModal"
                                         data-id="{{ p.id }}"
-                                        data-name="{{ p.vorname }} {{ p.nachname }}"
+                                        data-name="{% if p.user %}{{ p.user.firstname }} {{ p.user.lastname }}{% else %}{{ _('Unbekannt') }}{% endif %}"
                                         data-dob="{{ p.geburtsdatum ? p.geburtsdatum|date('Y-m-d') : '' }}"
                                         data-gender="{{ p.geschlecht }}">
                                     {{ icon('pencil') }}

@@ -21,17 +21,13 @@ class Participant implements CrudInterface
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
     private ?User $user = null;
 
-    // Vorname/Nachname als Spalten ENTFERNT.
-    // Wir holen das live aus dem User-Objekt.
-
     #[ORM\Column(type: 'date', nullable: true)]
     private ?\DateTimeInterface $geburtsdatum = null;
 
     #[ORM\Column(type: 'string', length: 10, nullable: true)]
     private ?string $geschlecht = null; 
 
-    #[ORM\Column(type: 'string', length: 50, nullable: true)]
-    private ?string $klasse = null; // Klasse speichern wir oft besser lokal wg. Historie
+    // KEINE Spalten für Vorname, Nachname, Klasse!
 
     // ------------------------------------
     // GETTER & SETTER
@@ -52,21 +48,6 @@ class Participant implements CrudInterface
         $this->user = $user;
         return $this;
     }
-
-    // --- WICHTIG: Virtuelle Getter ---
-    // Holt den Namen direkt vom verknüpften IServ-User
-
-    public function getVorname(): string
-    {
-        return $this->user ? $this->user->getFirstname() : '';
-    }
-
-    public function getNachname(): string
-    {
-        return $this->user ? $this->user->getLastname() : '';
-    }
-
-    // Setter entfernen wir, da wir den User-Namen hier nicht ändern wollen.
 
     public function getGeburtsdatum(): ?\DateTimeInterface
     {
@@ -90,19 +71,9 @@ class Participant implements CrudInterface
         return $this;
     }
 
-    public function getKlasse(): ?string
-    {
-        return $this->klasse;
-    }
-
-    public function setKlasse(?string $klasse): self
-    {
-        $this->klasse = $klasse;
-        return $this;
-    }
-
+    // Hilfsmethode für die Anzeige als String
     public function __toString(): string
     {
-        return $this->getNachname() . ', ' . $this->getVorname();
+        return $this->user ? (string)$this->user : 'Unbekannt';
     }
 }
