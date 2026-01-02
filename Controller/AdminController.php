@@ -6,7 +6,7 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use IServ\CoreBundle\Domain\User\UserRepository;
+use IServ\CoreBundle\Entity\User; // <--- Wir nutzen jetzt direkt die Entity
 use PulsR\SportabzeichenBundle\Entity\Participant;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,14 +16,11 @@ use Symfony\Component\Routing\Annotation\Route;
 final class AdminController extends AbstractPageController
 {
     private EntityManagerInterface $em;
-    private UserRepository $userRepo;
 
-    // --- WICHTIG: Constructor Injection ---
-    // Wir laden die Dienste hier einmalig, damit sie überall verfügbar sind.
-    public function __construct(EntityManagerInterface $em, UserRepository $userRepo)
+    // Nur noch der EntityManager wird injected - das klappt immer.
+    public function __construct(EntityManagerInterface $em)
     {
         $this->em = $em;
-        $this->userRepo = $userRepo;
     }
 
     #[Route('/', name: 'dashboard')]
@@ -41,7 +38,6 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Zugriff über $this->em statt Argument
         $repo = $this->em->getRepository(Participant::class);
 
         $page = $request->query->getInt('page', 1);
@@ -79,14 +75,16 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         
-        $repo = $this->em->getRepository(Participant::class);
+        $participantRepo = $this->em->getRepository(Participant::class);
+        $userRepo = $this->em->getRepository(User::class); // <--- Hier holen wir es sicher
 
         $searchTerm = $request->query->get('q');
         $missingUsers = [];
         $limitReached = false;
 
         if ($searchTerm && strlen($searchTerm) > 2) {
-            $existingIds = $repo->createQueryBuilder('p')
+            // Bereits vorhandene User-IDs holen
+            $existingIds = $participantRepo->createQueryBuilder('p')
                 ->select('IDENTITY(p.user)')
                 ->where('p.user IS NOT NULL')
                 ->getQuery()
@@ -94,8 +92,7 @@ final class AdminController extends AbstractPageController
             
             $excludeIds = array_column($existingIds, 1);
 
-            // Zugriff über $this->userRepo
-            $qb = $this->userRepo->createQueryBuilder('u')
+            $qb = $userRepo->createQueryBuilder('u')
                 ->select('u.username, u.firstname, u.lastname')
                 ->where('u.act = true')
                 ->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
@@ -124,7 +121,9 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        $user = $this->userRepo->findOneBy(['username' => $username]);
+        // Sicherer Zugriff auf User Repo
+        $user = $this->em->getRepository(User::class)->findOneBy(['username' => $username]);
+        
         if (!$user) {
             $this->addFlash('error', 'Benutzer nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
@@ -177,9 +176,6 @@ final class AdminController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 
-    /**
-     * IMPORT: CSV Hochladen
-     */
     #[Route('/import', name: 'import_index')]
     public function importIndex(): Response
     {
@@ -187,14 +183,11 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
             'activeTab' => 'import',
-            'message' => null, // Fix für Twig Error
-            'error'   => null, // Fix für Twig Error
+            'message' => null, 
+            'error'   => null,
         ]);
     }
 
-    /**
-     * ANFORDERUNGEN: DOSB Tabelle
-     */
     #[Route('/requirements', name: 'requirements_index')]
     public function requirementsIndex(): Response
     {
@@ -202,8 +195,8 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/upload.html.twig', [
             'activeTab' => 'requirements',
-            'message' => null, // Fix für Twig Error
-            'error'   => null, // Fix für Twig Error
+            'message' => null, 
+            'error'   => null,
         ]);
     }
 }
