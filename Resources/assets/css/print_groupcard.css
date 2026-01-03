@@ -16,6 +16,11 @@
         display: none !important;
     }
 }
+/* Nach dem allerletzten .sheet keinen Umbruch mehr machen */
+.sheet:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+}
 
 body {
     margin: 0;
