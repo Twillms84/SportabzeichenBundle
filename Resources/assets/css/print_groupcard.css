@@ -1,0 +1,124 @@
+/* public/css/print_groupcard.css */
+
+@page {
+    size: A4 landscape;
+    margin: 0;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+    background-color: white;
+}
+
+/* --- Grundgerüst Blatt --- */
+.sheet {
+    width: 297mm;
+    height: 210mm;
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+    background-color: white;
+}
+
+/* --- Layering --- */
+.bg-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 297mm;
+    height: 210mm;
+    z-index: 1;
+}
+
+.data-layer {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+/* --- Header Positionierung --- */
+.header-info {
+    position: absolute;
+    top: 42.5mm;
+    left: 51mm;
+    display: flex;
+}
+
+.header-item {
+    height: 6mm;
+    line-height: 6mm;
+    padding-left: 2mm;
+    /* Optional: Zur Fehlersuche Border aktivieren */
+    /* border: 1px solid red; */
+}
+
+/* Spezifische Breiten für Header (ersetzt inline styles) */
+.w-club   { width: 18.5mm; }
+.w-school { width: 29.4mm; }
+.w-org    { width: 28mm; }
+.w-city   { width: 150mm; }
+
+/* --- Tabelle Positionierung --- */
+.table-container {
+    position: absolute;
+    top: 98mm;
+    left: 7.1mm;
+}
+
+table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+
+td {
+    height: 5.7mm;
+    border: none; /* Rahmen kommt vom SVG */
+    padding: 0;
+    padding-left: 2mm;
+    white-space: nowrap;
+    overflow: hidden;
+    vertical-align: middle;
+    font-size: 10pt;
+}
+
+/* --- Spaltenbreiten --- */
+.col-name    { width: 64mm; }
+.col-gender  { width: 5.2mm; text-align: center; padding: 0; }
+.col-birth   { width: 19mm; text-align: center; padding: 0; }
+
+.col-dis-nr  { width: 5.2mm; }
+.col-dis-res { width: 19mm; }
+.col-dis-pts { width: 8mm; }
+
+.col-swim    { width: 8mm; }
+.col-sum     { width: 8mm; }
+
+/* --- Footer Positionierung (ersetzt inline styles) --- */
+.footer-verifier {
+    position: absolute;
+    bottom: 23mm;
+    left: 8mm;
+    font-size: 10pt;
+}
+
+.footer-date {
+    position: absolute;
+    bottom: 23mm;
+    left: 60mm;
+    font-size: 10pt;
+}
+
+/* --- Druckanweisungen --- */
+@media print {
+    .sheet { 
+        margin: 0; 
+    }
+}

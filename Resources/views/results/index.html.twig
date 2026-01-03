@@ -25,6 +25,15 @@
                     </select>
                 </form>
             {% endif %}
+
+            {# --- NEUER BUTTON: DRUCKEN --- #}
+            <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': selectedClass}) }}" 
+               class="btn btn-secondary btn-sm" 
+               target="_blank" 
+               title="Gruppenprüfkarte drucken">
+                <span class="icon icon-print"></span> <span class="d-none d-md-inline">Drucken</span>
+            </a>
+
             <a href="{{ path('sportabzeichen_results_exams') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
         </div>
     </div>

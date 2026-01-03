@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Gruppenprüfkarte Sportabzeichen</title>
+    
+    {# Einbindung des externen CSS Files #}
+    <link rel="stylesheet" href="{{ asset('css/print_groupcard.css') }}">
+</head>
+<body>
+
+{% for batch in batches %}
+    <div class="sheet">
+        
+        {# SVG Hintergrund #}
+        <img src="{{ asset('img/dsa_groupcard_18.svg') }}" class="bg-svg" alt="Hintergrund">
+
+        <div class="data-layer">
+            
+            {# HEADER #}
+            <div class="header-info">
+                {# CSS Klassen statt style="..." #}
+                <div class="header-item w-club"></div>
+                <div class="header-item w-school">Schule</div>
+                <div class="header-item w-org"></div>
+                <div class="header-item w-city">Musterstadt / DE</div>
+            </div>
+
+            {# TABELLE #}
+            <div class="table-container">
+                <table>
+                    <colgroup>
+                        <col class="col-name">
+                        <col class="col-gender">
+                        <col class="col-birth">
+                        {# 4x Disziplinen #}
+                        <col class="col-dis-nr"><col class="col-dis-res"><col class="col-dis-pts">
+                        <col class="col-dis-nr"><col class="col-dis-res"><col class="col-dis-pts">
+                        <col class="col-dis-nr"><col class="col-dis-res"><col class="col-dis-pts">
+                        <col class="col-dis-nr"><col class="col-dis-res"><col class="col-dis-pts">
+                        <col class="col-swim">
+                        <col class="col-sum">
+                    </colgroup>
+                    
+                    {% for participant in batch %}
+                        <tr>
+                            <td>
+                                {% if participant %}
+                                    {{ participant.user.lastname }}, {{ participant.user.firstname }}
+                                {% endif %}
+                            </td>
+                            <td class="col-gender">
+                                {% if participant %}
+                                    {% if participant.geschlecht == 'MALE' %}m
+                                    {% elseif participant.geschlecht == 'FEMALE' %}w
+                                    {% elseif participant.geschlecht == 'DIVERSE' %}d
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td class="col-birth">
+                                {% if participant and participant.geburtsdatum %}
+                                    {{ participant.geburtsdatum|date('d.m.Y') }}
+                                {% endif %}
+                            </td>
+                            
+                            {# Leere Zellen für die SVG-Linien #}
+                            <td></td><td></td><td></td>
+                            <td></td><td></td><td></td>
+                            <td></td><td></td><td></td>
+                            <td></td><td></td><td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            {# FOOTER #}
+            <div class="footer-verifier">
+                Prüfer: {{ app.user.firstname }} {{ app.user.lastname }}
+            </div>
+             <div class="footer-date">
+                {{ today|date('d.m.Y') }}
+            </div>
+
+        </div>
+    </div>
+{% endfor %}
+
+</body>
+</html>

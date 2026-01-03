@@ -262,5 +262,53 @@ final class ExamResultController extends AbstractPageController
 
         return new JsonResponse(['status' => 'ok']);
     }
+    // --- NEUE DRUCKFUNKTION ---
+    // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
+    #[Route('/exam/{examId}/print/groupcard', name: 'print_groupcard', methods: ['GET'])]
+    public function printGroupcard(int $examId, Request $request, EntityManagerInterface $em): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        // Klasse aus der URL holen (z.B. ?class=5a)
+        $selectedClass = $request->query->get('class');
+
+        // QueryBuilder erstellen
+        $qb = $em->getRepository(Participant::class)
+            ->createQueryBuilder('p')
+            ->leftJoin('p.user', 'u')
+            ->addSelect('u')
+            // WICHTIG: Nur Teilnehmer anzeigen, die auch diesem Sportfest (examId) zugeordnet sind!
+            ->join('p.examParticipants', 'ep') 
+            ->where('ep.exam = :examId')
+            ->setParameter('examId', $examId)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC');
+
+        // Filter anwenden, wenn Klasse gewählt wurde
+        if ($selectedClass) {
+            $qb->andWhere('u.auxinfo = :klasse')
+               ->setParameter('klasse', $selectedClass);
+        }
+
+        $participants = $qb->getQuery()->getResult();
+
+        // In 10er Gruppen aufteilen
+        $batches = array_chunk($participants, 10);
+
+        // Auffüllen der letzten Seite, damit Twig nicht stolpert (optional, aber sauberer)
+        if (count($batches) > 0) {
+            $lastIndex = count($batches) - 1;
+            $missing = 10 - count($batches[$lastIndex]);
+            for ($i = 0; $i < $missing; $i++) {
+                $batches[$lastIndex][] = null;
+            }
+        }
+
+        // Pfad zur View angepasst: Liegt vermutlich unter 'print', nicht 'exams'
+        return $this->render('@PulsRSportabzeichen/print/groupcard.html.twig', [
+            'batches' => $batches,
+            'today' => new \DateTime(),
+        ]);
+    }
 
 }

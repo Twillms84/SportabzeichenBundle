@@ -331,3 +331,4 @@ final class AdminController extends AbstractPageController
         ]);
     }
 }
+
