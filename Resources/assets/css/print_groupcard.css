@@ -97,8 +97,8 @@ body {
 /* Die Institution / Stadt an die richtige Stelle zwingen */
 .w-city {
     position: absolute;
-    top: -20mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
-    left: 169mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
+    top: -27mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
+    left: 120mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
     
     font-weight: bold;
     white-space: nowrap;
@@ -107,13 +107,13 @@ body {
 .mark-institution-type {
     position: absolute;
     /* Vertikal: Je nach Kästchenhöhe anpassen */
-    top: -25mm; 
+    top: -27mm; 
     
     /* Horizontal: Abstand vom Start der Zeile (linkes Kästchen) */
     /* 5mm  = ca. 1. Kästchen (Verein) */
     /* 23mm = ca. 2. Kästchen (Schule) <-- Startwert */
     /* 45mm = ca. 3. Kästchen (Org) */
-    left: 114mm; 
+    left: 93mm; 
     
     font-weight: bold;
     font-size: 11pt; /* Etwas größer, damit es wie ein Stift-Kreuz wirkt */
@@ -179,8 +179,8 @@ td {
 
 .footer-date {
     position: absolute;
-    top: 180mm; /* Angepasst an das Formular */
-    left: 95mm;
+    top: 182mm; /* Angepasst an das Formular */
+    left: 103mm;
     font-size: 10pt;
     z-index: 3;
 }
