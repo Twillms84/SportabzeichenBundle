@@ -207,7 +207,7 @@ final class AdminController extends AbstractPageController
             }
         }
 
-        return $this->render('@PulsRSportabzeichen/admin/add.html.twig', [
+        return $this->render('@PulsRSportabzeichen/admin/participants/add.html.twig', [
             'form' => $form->createView(),
             'user' => $userData
         ]);
