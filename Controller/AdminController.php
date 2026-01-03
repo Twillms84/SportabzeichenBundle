@@ -132,47 +132,55 @@ final class AdminController extends AbstractPageController
 
         $conn = $em->getConnection();
 
-        // SCHRITT 1: Die ECHTE NUMERISCHE ID herausfinden (Raw SQL)
-        $sqlUserId = 'SELECT id FROM users WHERE act = :name';
-        $realId = $conn->fetchOne($sqlUserId, ['name' => $username]);
+        // ---------------------------------------------------------
+        // SCHRITT 1: Import-ID anhand des Benutzernamens (act) ermitteln
+        // ---------------------------------------------------------
+        $sqlGetImportId = 'SELECT importid FROM users WHERE act = :username';
+        $importId = $conn->fetchOne($sqlGetImportId, ['username' => $username]);
 
-        // Fallback: Import-ID
-        if (!$realId) {
-             $sqlImport = 'SELECT id FROM users WHERE import_id = :name';
-             $realId = $conn->fetchOne($sqlImport, ['name' => $username]);
-        }
-
-        if (!$realId) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" nicht in der Datenbank gefunden.');
+        if (!$importId) {
+            $this->addFlash('error', 'Benutzer "' . $username . '" hat keine Import-ID und kann nicht hinzugefügt werden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 2: Prüfen, ob Teilnehmer existiert (Raw SQL)
+        // ---------------------------------------------------------
+        // SCHRITT 2: Die numerische ID anhand der Import-ID holen
+        // ---------------------------------------------------------
+        // Wir suchen jetzt den User, der diese Import-ID hat, und holen seine echte ID (Zahl).
+        $sqlGetId = 'SELECT id FROM users WHERE importid = :iid LIMIT 1';
+        $realId = $conn->fetchOne($sqlGetId, ['iid' => $importId]);
+
+        if (!$realId) {
+            // Das sollte theoretisch nie passieren, wenn Schritt 1 erfolgreich war,
+            // außer die Datenbank ist inkonsistent.
+            $this->addFlash('error', 'Konnte keine User-ID zur Import-ID "' . $importId . '" finden.');
+            return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+        }
+
+        // ---------------------------------------------------------
+        // SCHRITT 3: Prüfen, ob dieser User schon Teilnehmer ist
+        // ---------------------------------------------------------
         $sqlCheck = 'SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid LIMIT 1';
         $exists = $conn->fetchOne($sqlCheck, ['uid' => $realId]);
 
         if ($exists) {
-             $this->addFlash('warning', 'Benutzer ' . $username . ' ist bereits Teilnehmer.');
+             $this->addFlash('warning', 'Benutzer ' . $username . ' (ImportID: ' . $importId . ') ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 3: Speichern per Referenz (Bypassing Loading Issues)
+        // ---------------------------------------------------------
+        // SCHRITT 4: Speichern (Raw SQL Insert)
+        // ---------------------------------------------------------
         try {
-            // Wir holen uns eine Referenz auf den User (kein DB-Select nötig)
-            // Stelle sicher, dass oben "use IServ\CoreBundle\Entity\User;" steht!
-            $userRef = $em->getReference(User::class, $realId);
-
-            $participant = new Participant();
-            $participant->setUser($userRef);
-            
-            $em->persist($participant);
-            $em->flush();
+            $conn->insert('sportabzeichen_participants', [
+                'user_id' => $realId,
+                // Optional weitere Felder hier initialisieren
+            ]);
 
             $this->addFlash('success', 'Teilnehmer hinzugefügt: ' . $username);
 
         } catch (\Exception $e) {
-            // Sollte eigentlich nicht passieren, da wir alles vorher geprüft haben
-            $this->addFlash('error', 'Fehler beim Speichern: ' . $e->getMessage());
+            $this->addFlash('error', 'Datenbank-Fehler: ' . $e->getMessage());
         }
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
