@@ -272,27 +272,20 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
     $selectedClass = $request->query->get('class');
 
-    // --- NEU: 1. Prüfungsdaten laden (Behebt den Fehler) ---
+    // 1. Prüfungsdaten laden
     $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
+    if (!$exam) { throw $this->createNotFoundException('Prüfung nicht gefunden.'); }
 
-    if (!$exam) {
-        throw $this->createNotFoundException('Prüfung nicht gefunden.');
-    }
-
-    // Da $exam ein Array ist, setzen wir exam_year für das Template
-    $examYear = $exam['exam_year']; 
-
-    // 2. Basis-Teilnehmerdaten (nur die mit Medaille)
+    // 2. Teilnehmer laden - NUR fertige (Medaille bronze/silber/gold)
     $sql = "
-    SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
-           (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
-            WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
-    FROM sportabzeichen_exam_participants ep
-    JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-    JOIN users u ON u.importid = p.import_id
-    WHERE ep.exam_id = ? 
-      AND ep.final_medal IN ('bronze', 'silber', 'gold') -- Nur echte Medaillen
-      AND ep.total_points > 0                            -- Sicherheitshalber Punkte-Check
+        SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
+               (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
+                WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
+        FROM sportabzeichen_exam_participants ep
+        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+        JOIN users u ON u.importid = p.import_id
+        WHERE ep.exam_id = ? 
+          AND ep.final_medal IN ('bronze', 'silber', 'gold')
     ";
     
     $params = [$examId];
@@ -302,9 +295,18 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     }
     $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
 
-    // 3. Ergebnisse für diese Teilnehmer laden
+    $unitMap = [
+        'UNIT_MINUTES' => 'min', 'UNIT_SECONDS' => 's', 'UNIT_METERS' => 'm',
+        'UNIT_CENTIMETERS' => 'cm', 'UNIT_HOURS' => 'h', 'UNIT_NUMBER' => 'x'
+    ];
+    $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
+
     $enrichedParticipants = [];
-    foreach ($participants as $p) {
+    foreach ($participants as $p) { // Wir bauen ein neues Array auf, das ist sicherer als Referenzen
+        // Geschlecht mapping
+        $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
+
+        // Ergebnisse laden
         $resultsRaw = $conn->fetchAllAssociative("
             SELECT r.auswahlnummer, res.leistung, res.points, d.kategorie, d.einheit
             FROM sportabzeichen_exam_results res
@@ -317,20 +319,16 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
                 AND r.geschlecht = (CASE WHEN part.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
                 AND ep.age_year BETWEEN r.age_min AND r.age_max
             WHERE res.ep_id = ?
-            ORDER BY CASE d.kategorie 
-                WHEN 'Ausdauer' THEN 1 WHEN 'Kraft' THEN 2 
-                WHEN 'Schnelligkeit' THEN 3 WHEN 'Koordination' THEN 4 ELSE 5 END
         ", [$p['ep_id']]);
 
         $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
-        $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
-        
         foreach ($resultsRaw as $res) {
             if (isset($catMap[$res['kategorie']])) {
                 $idx = $catMap[$res['kategorie']];
+                $einheit = $unitMap[$res['einheit']] ?? '';
                 $p['disciplines'][$idx] = [
                     'nr'  => $res['auswahlnummer'],
-                    'res' => number_format((float)$res['leistung'], 2, ',', '') . ' ' . ($res['einheit'] ?? ''),
+                    'res' => str_replace('.', ',', (string)$res['leistung']) . ' ' . $einheit,
                     'pts' => $res['points']
                 ];
             }
@@ -339,20 +337,18 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     }
 
     $batches = array_chunk($enrichedParticipants, 10);
-    
     if (count($batches) > 0) {
         $lastIndex = count($batches) - 1;
-        while (count($batches[$lastIndex]) < 10) {
-            $batches[$lastIndex][] = null;
-        }
+        while (count($batches[$lastIndex]) < 10) { $batches[$lastIndex][] = null; }
     }
 
-    return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
+    return $this->render('@Sportabzeichen/exams/print_groupcard.html.twig', [
         'batches' => $batches,
         'exam' => $exam,
-        'exam_year' => $examYear,
+        'exam_year' => $exam['exam_year'],
         'selectedClass' => $selectedClass,
         'today' => new \DateTime(),
+        'userNumber' => ''
     ]);
 }
 
