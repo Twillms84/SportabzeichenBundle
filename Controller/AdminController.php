@@ -126,40 +126,39 @@ final class AdminController extends AbstractPageController
     }
 
     #[Route('/participants/add/{username}', name: 'participants_add')]
-    public function participantsAdd(string $username): Response
+    public function participantsAdd(string $username, EntityManagerInterface $em, Request $request): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        $userRepo = $this->em->getRepository(User::class);
-        $participantRepo = $this->em->getRepository(Participant::class);
-
-        $user = $userRepo->findOneBy(['username' => $username]);
+        $userRepo = $em->getRepository(User::class);
         
+        // HIER WAR DER FEHLER: Wir suchen jetzt nach 'username' (entspricht 'act'), nicht nach 'id'
+        $user = $userRepo->findOneBy(['username' => $username]);
+
         if (!$user) {
-            $this->addFlash('error', 'Benutzer nicht gefunden.');
+            $this->addFlash('error', 'Benutzer ' . $username . ' nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Doppelprüfung, falls jemand F5 drückt
-        $exists = $participantRepo->findOneBy(['user' => $user]);
-        if ($exists) {
-            $this->addFlash('warning', sprintf('Benutzer "%s" ist bereits Teilnehmer.', $user->getName()));
-        } else {
-            $participant = new Participant();
-            $participant->setUser($user);
-            // Wir speichern Namen als Snapshot, falls der User später gelöscht wird
-            // (vorausgesetzt deine Entity hat diese Felder, sonst diese Zeilen löschen)
-            $participant->setVorname($user->getFirstname());
-            $participant->setNachname($user->getLastname());
-            
-            $this->em->persist($participant);
-            $this->em->flush();
-            
-            $this->addFlash('success', sprintf('%s wurde erfolgreich hinzugefügt.', $user->getName()));
+        // Prüfen, ob schon existiert (doppelt hält besser)
+        $existing = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        if ($existing) {
+             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
+             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Weiterleitung zurück zur Suche, damit man weitermachen kann
-        return $this->redirectToRoute('sportabzeichen_admin_participants_missing', ['q' => $user->getLastname()]);
+        // Neuen Teilnehmer anlegen
+        $participant = new Participant();
+        $participant->setUser($user);
+        // Standardwerte setzen, falls nötig
+        // $participant->setYear(date('Y')); 
+
+        $em->persist($participant);
+        $em->flush();
+
+        $this->addFlash('success', $user->getFirstname() . ' ' . $user->getLastname() . ' wurde hinzugefügt.');
+
+        return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
 
     #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
