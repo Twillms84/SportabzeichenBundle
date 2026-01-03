@@ -338,11 +338,14 @@ final class ExamResultController extends AbstractPageController
             }
         }
 
-        return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
-            'batches' => $batches,
-            'today' => new \DateTime(),
-            'exam_year' => $conn->fetchOne("SELECT exam_year FROM sportabzeichen_exams WHERE id = ?", [$examId])
-        ]);
+    return $this->render('@Sportabzeichen/exams/print_groupcard.html.twig', [
+        'batches' => $batches,
+        'exam' => $exam,
+        'exam_year' => $exam->getExamYear(),
+        'selectedClass' => $request->query->get('class'), // Diese Zeile hinzufügen
+        'today' => new \DateTime(),
+        // ... weitere Variablen
+    ]);
     }
 
 }
