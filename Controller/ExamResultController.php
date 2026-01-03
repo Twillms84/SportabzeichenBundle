@@ -267,22 +267,33 @@ final class ExamResultController extends AbstractPageController
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
-    public function printGroupcard(int $examId, Request $request, Connection $conn): Response
-    {
+public function printGroupcard(int $examId, Request $request, Connection $conn): Response
+{
     $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
     $selectedClass = $request->query->get('class');
 
     // 1. Prüfungsdaten laden
     $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
-    if (!$exam) { throw $this->createNotFoundException('Prüfung nicht gefunden.'); }
+    if (!$exam) {
+        throw $this->createNotFoundException('Prüfung nicht gefunden.');
+    }
 
-    // 2. Teilnehmer laden - geänderter Feldname: p.geburtsdatum
+    // 2. Teilnehmer laden - NUR fertige (Medaille bronze/silber/gold)
+    // Nutzt p.geburtsdatum und holt das Jahr des Schwimmprüfungs-Datums (confirmed_at)
     $sql = "
-        SELECT ep.id as ep_id, u.lastname, u.firstname, p.geburtsdatum, p.geschlecht, 
-               ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
-               (SELECT sp.date FROM sportabzeichen_swimming_proofs sp 
-                WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
-                ORDER BY sp.date DESC LIMIT 1) as swimming_date
+        SELECT 
+            ep.id as ep_id, 
+            u.lastname, 
+            u.firstname, 
+            p.geburtsdatum, 
+            p.geschlecht, 
+            ep.age_year, 
+            ep.total_points, 
+            ep.final_medal, 
+            ep.participant_id,
+            (SELECT sp.confirmed_at FROM sportabzeichen_swimming_proofs sp 
+             WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
+             ORDER BY sp.confirmed_at DESC LIMIT 1) as swimming_date
         FROM sportabzeichen_exam_participants ep
         JOIN sportabzeichen_participants p ON p.id = ep.participant_id
         JOIN users u ON u.importid = p.import_id
@@ -297,23 +308,25 @@ final class ExamResultController extends AbstractPageController
     }
     $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
 
+    // Mappings für die Druckausgabe
     $unitMap = [
-        'UNIT_MINUTES' => 'min', 'UNIT_SECONDS' => 's', 'UNIT_METERS' => 'm',
-        'UNIT_CENTIMETERS' => 'cm', 'UNIT_HOURS' => 'h', 'UNIT_NUMBER' => 'x'
+        'UNIT_MINUTES' => 'min', 
+        'UNIT_SECONDS' => 's', 
+        'UNIT_METERS' => 'm',
+        'UNIT_CENTIMETERS' => 'cm', 
+        'UNIT_HOURS' => 'h', 
+        'UNIT_NUMBER' => 'x'
     ];
     $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
     $enrichedParticipants = [];
     foreach ($participants as $p) {
+        // Mapping: Geschlecht (w/m), Geburtsdatum (DD.MM.YYYY) und Schwimmjahr (YY)
         $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
-        
-        // Geburtsdatum formatieren (DD.MM.YYYY)
         $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
-
-        // Schwimmjahr (zweistellig, z.B. 25)
         $p['swimming_year'] = $p['swimming_date'] ? (new \DateTime($p['swimming_date']))->format('y') : '';
 
-        // Ergebnisse laden
+        // Ergebnisse für diesen Teilnehmer laden
         $resultsRaw = $conn->fetchAllAssociative("
             SELECT r.auswahlnummer, res.leistung, res.points, d.kategorie, d.einheit
             FROM sportabzeichen_exam_results res
@@ -326,8 +339,12 @@ final class ExamResultController extends AbstractPageController
                 AND r.geschlecht = (CASE WHEN part.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
                 AND ep.age_year BETWEEN r.age_min AND r.age_max
             WHERE res.ep_id = ?
+            ORDER BY CASE d.kategorie 
+                WHEN 'Ausdauer' THEN 1 WHEN 'Kraft' THEN 2 
+                WHEN 'Schnelligkeit' THEN 3 WHEN 'Koordination' THEN 4 ELSE 5 END
         ", [$p['ep_id']]);
 
+        // Raster für die 4 Kategorien befüllen
         $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
         foreach ($resultsRaw as $res) {
             if (isset($catMap[$res['kategorie']])) {
@@ -343,20 +360,25 @@ final class ExamResultController extends AbstractPageController
         $enrichedParticipants[] = $p;
     }
 
+    // Teilnehmer in 10er Gruppen für die Seiten aufteilen
     $batches = array_chunk($enrichedParticipants, 10);
+    
+    // Letzte Seite mit Leerzeilen auffüllen für stabiles Layout
     if (count($batches) > 0) {
         $lastIndex = count($batches) - 1;
-        while (count($batches[$lastIndex]) < 10) { $batches[$lastIndex][] = null; }
+        while (count($batches[$lastIndex]) < 10) {
+            $batches[$lastIndex][] = null;
+        }
     }
 
     return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
         'batches' => $batches,
         'exam' => $exam,
-        'exam_year_short' => substr((string)$exam['exam_year'], -2), // "2026" -> "26"
+        'exam_year_short' => substr((string)$exam['exam_year'], -2), // z.B. "26"
         'selectedClass' => $selectedClass,
         'today' => new \DateTime(),
-        'userNumber' => ''
+        'userNumber' => '', // Platzhalter für Prüfernummer
     ]);
-    }
+}
 
 }
