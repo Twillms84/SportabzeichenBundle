@@ -132,13 +132,37 @@ final class AdminController extends AbstractPageController
 
         $userRepo = $em->getRepository(User::class);
         
-        // HIER WAR DER FEHLER: Wir suchen jetzt nach 'username' (entspricht 'act'), nicht nach 'id'
+        // HIER WAR DER FEHLER:
+        // Wir suchen explizit nach 'username' (entspricht der Spalte 'act'), 
+        // nicht automatisch nach der ID.
         $user = $userRepo->findOneBy(['username' => $username]);
 
         if (!$user) {
-            $this->addFlash('error', 'Benutzer ' . $username . ' nicht gefunden.');
+            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
+
+        // Prüfen, ob der User schon existiert (Sicherheitshalber)
+        $existing = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        if ($existing) {
+             $this->addFlash('warning', $user->getFirstname() . ' ist bereits Teilnehmer.');
+             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+        }
+
+        // Neuen Teilnehmer anlegen
+        $participant = new Participant();
+        $participant->setUser($user);
+        
+        // Falls du das Jahr setzen musst (z.B. aktuelles Jahr):
+        // $participant->setYear((int)date('Y')); 
+
+        $em->persist($participant);
+        $em->flush();
+
+        $this->addFlash('success', $user->getFirstname() . ' ' . $user->getLastname() . ' wurde hinzugefügt.');
+
+        return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+    }
 
         // Prüfen, ob schon existiert (doppelt hält besser)
         $existing = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
