@@ -60,10 +60,10 @@ body {
 /* --- Header & Jahr --- */
 .header-year {
     position: absolute;
-    top: 29mm;
+    top: 30mm;
     left: 62mm;
     font-weight: bold;
-    letter-spacing: 1.5mm; /* Abstand passend zu den SVG-Kästchen */
+    letter-spacing: 1.8mm; /* Abstand passend zu den SVG-Kästchen */
     z-index: 3;
 }
 
@@ -98,7 +98,7 @@ body {
 .w-city {
     position: absolute;
     top: -27mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
-    left: 120mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
+    left: 125mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
     
     font-weight: bold;
     white-space: nowrap;
@@ -113,7 +113,7 @@ body {
     /* 5mm  = ca. 1. Kästchen (Verein) */
     /* 23mm = ca. 2. Kästchen (Schule) <-- Startwert */
     /* 45mm = ca. 3. Kästchen (Org) */
-    left: 93mm; 
+    left: 71mm; 
     
     font-weight: bold;
     font-size: 11pt; /* Etwas größer, damit es wie ein Stift-Kreuz wirkt */
