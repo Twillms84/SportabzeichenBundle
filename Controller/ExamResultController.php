@@ -300,10 +300,11 @@ final class ExamResultController extends AbstractPageController
                 JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
                 JOIN sportabzeichen_exam_participants ep ON ep.id = res.ep_id
                 JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+                JOIN sportabzeichen_participants part ON part.id = ep.participant_id -- Join korrigiert
                 LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
-                     AND r.jahr = ex.exam_year 
-                     AND r.geschlecht = (CASE WHEN p.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
-                     AND ep.age_year BETWEEN r.age_min AND r.age_max
+                    AND r.jahr = ex.exam_year 
+                    AND r.geschlecht = (CASE WHEN part.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
+                    AND ep.age_year BETWEEN r.age_min AND r.age_max
                 WHERE res.ep_id = ?
                 ORDER BY CASE d.kategorie 
                     WHEN 'Ausdauer' THEN 1 WHEN 'Kraft' THEN 2 
