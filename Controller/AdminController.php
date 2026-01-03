@@ -161,7 +161,13 @@ final class AdminController extends AbstractPageController
 
         // Prüfen, ob schon Teilnehmer
         // WICHTIG: Hier übergeben wir das gefundene User-OBJEKT ($user), keinen String!
-        $existing = $participantRepo->findOneBy(['user' => $user]);
+        $existing = $participantRepo->createQueryBuilder('p')
+            // Wir schauen direkt auf die ID der Verknüpfung (Foreign Key)
+            ->where('IDENTITY(p.user) = :userId')
+            // Und wir übergeben explizit die Zahl (Int), kein Objekt!
+            ->setParameter('userId', $user->getId()) 
+            ->getQuery()
+            ->getOneOrNullResult();
 
         if ($existing) {
              $this->addFlash('warning', $user->getFirstname() . ' ist bereits Teilnehmer.');
