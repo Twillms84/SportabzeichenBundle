@@ -80,6 +80,14 @@
                 </form>
             {% endif %}
             
+            {# --- BUTTON: DRUCKEN --- #}
+            <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
+               class="btn btn-default btn-sm" 
+               target="_blank" 
+               title="Gruppenprüfkarte drucken">
+                {{ icon('print')|raw }} Drucken
+            </a>
+            
             <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-outline-secondary btn-sm">Zurück</a>
         </div>
     </div>
