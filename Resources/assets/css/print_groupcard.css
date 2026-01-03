@@ -97,7 +97,7 @@ body {
 /* Die Institution / Stadt an die richtige Stelle zwingen */
 .w-city {
     position: absolute;
-    top: -26.4mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
+    top: -27mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
     left: 125mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
     
     font-weight: bold;
