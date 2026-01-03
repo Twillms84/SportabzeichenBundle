@@ -267,37 +267,45 @@ final class ExamResultController extends AbstractPageController
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
     #[Route('/exam/{examId}/print/groupcard', name: 'print_groupcard', methods: ['GET'])]
-    public function printGroupcard(int $examId, Request $request, EntityManagerInterface $em): Response
+    public function printGroupcard(int $examId, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // Klasse aus der URL holen (z.B. ?class=5a)
         $selectedClass = $request->query->get('class');
 
-        // QueryBuilder erstellen
-        $qb = $em->getRepository(Participant::class)
-            ->createQueryBuilder('p')
-            ->leftJoin('p.user', 'u')
-            ->addSelect('u')
-            // WICHTIG: Nur Teilnehmer anzeigen, die auch diesem Sportfest (examId) zugeordnet sind!
-            ->join('p.examParticipants', 'ep') 
-            ->where('ep.exam = :examId')
-            ->setParameter('examId', $examId)
-            ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC');
+        // Wir bauen das SQL Statement manuell, genau wie in deiner index()-Funktion.
+        // Das umgeht alle Doctrine-Entity-Fehler.
+        $sql = "
+            SELECT 
+                u.lastname, 
+                u.firstname, 
+                u.auxinfo AS klasse,
+                ep.age_year,
+                p.geschlecht
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+            JOIN users u ON u.importid = p.import_id
+            WHERE ep.exam_id = ?
+        ";
 
-        // Filter anwenden, wenn Klasse gewählt wurde
+        $params = [$examId];
+
+        // Filter: Wenn eine Klasse gewählt wurde
         if ($selectedClass) {
-            $qb->andWhere('u.auxinfo = :klasse')
-               ->setParameter('klasse', $selectedClass);
+            $sql .= " AND u.auxinfo = ?";
+            $params[] = $selectedClass;
         }
 
-        $participants = $qb->getQuery()->getResult();
+        // Sortierung
+        $sql .= " ORDER BY u.lastname ASC, u.firstname ASC";
 
-        // In 10er Gruppen aufteilen
-        $batches = array_chunk($participants, 10);
+        // Daten abrufen
+        $rows = $conn->fetchAllAssociative($sql, $params);
 
-        // Auffüllen der letzten Seite, damit Twig nicht stolpert (optional, aber sauberer)
+        // In 10er Gruppen aufteilen für den Druck
+        $batches = array_chunk($rows, 10);
+
+        // Letzte Seite auffüllen (damit das Layout nicht springt)
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
             $missing = 10 - count($batches[$lastIndex]);
@@ -309,6 +317,8 @@ final class ExamResultController extends AbstractPageController
         return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
             'batches' => $batches,
             'today' => new \DateTime(),
+            'examId' => $examId,
+            'selectedClass' => $selectedClass
         ]);
     }
 
