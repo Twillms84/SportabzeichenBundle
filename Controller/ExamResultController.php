@@ -266,50 +266,73 @@ final class ExamResultController extends AbstractPageController
     }
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
-    #[Route('/exam/{examId}/print/groupcard', name: 'print_groupcard', methods: ['GET'])]
+    #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
         $selectedClass = $request->query->get('class');
 
-        // Wir bauen das SQL Statement manuell, genau wie in deiner index()-Funktion.
-        // Das umgeht alle Doctrine-Entity-Fehler.
+        // 1. Basis-Teilnehmerdaten (nur die mit Medaille)
         $sql = "
-            SELECT 
-                u.lastname, 
-                u.firstname, 
-                u.auxinfo AS klasse,
-                ep.age_year,
-                p.geschlecht
+            SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal,
+                   (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
+                    WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
-            WHERE ep.exam_id = ?
+            WHERE ep.exam_id = ? AND ep.final_medal <> 'none' AND ep.final_medal IS NOT NULL
         ";
-
+        
         $params = [$examId];
-
-        // Filter: Wenn eine Klasse gewählt wurde
         if ($selectedClass) {
             $sql .= " AND u.auxinfo = ?";
             $params[] = $selectedClass;
         }
+        $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
 
-        // Sortierung
-        $sql .= " ORDER BY u.lastname ASC, u.firstname ASC";
+        // 2. Ergebnisse für diese Teilnehmer laden
+        $enrichedParticipants = [];
+        foreach ($participants as $p) {
+            // Wir holen die Ergebnisse sortiert nach den 4 Standard-Kategorien
+            $resultsRaw = $conn->fetchAllAssociative("
+                SELECT r.auswahlnummer, res.leistung, res.points, d.kategorie, d.einheit
+                FROM sportabzeichen_exam_results res
+                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
+                JOIN sportabzeichen_exam_participants ep ON ep.id = res.ep_id
+                JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+                LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
+                     AND r.jahr = ex.exam_year 
+                     AND r.geschlecht = (CASE WHEN p.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
+                     AND ep.age_year BETWEEN r.age_min AND r.age_max
+                WHERE res.ep_id = ?
+                ORDER BY CASE d.kategorie 
+                    WHEN 'Ausdauer' THEN 1 WHEN 'Kraft' THEN 2 
+                    WHEN 'Schnelligkeit' THEN 3 WHEN 'Koordination' THEN 4 ELSE 5 END
+            ", [$p['ep_id']]);
 
-        // Daten abrufen
-        $rows = $conn->fetchAllAssociative($sql, $params);
+            // Ergebnisse in ein festes 4er-Raster mappen
+            $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
+            $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
+            
+            foreach ($resultsRaw as $res) {
+                if (isset($catMap[$res['kategorie']])) {
+                    $idx = $catMap[$res['kategorie']];
+                    $p['disciplines'][$idx] = [
+                        'nr'  => $res['auswahlnummer'],
+                        'res' => number_format((float)$res['leistung'], 2, ',', '') . ' ' . $res['einheit'],
+                        'pts' => $res['points']
+                    ];
+                }
+            }
+            $enrichedParticipants[] = $p;
+        }
 
-        // In 10er Gruppen aufteilen für den Druck
-        $batches = array_chunk($rows, 10);
-
-        // Letzte Seite auffüllen (damit das Layout nicht springt)
+        $batches = array_chunk($enrichedParticipants, 10);
+        
+        // Letzte Seite auf 10 Zeilen auffüllen
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
-            $missing = 10 - count($batches[$lastIndex]);
-            for ($i = 0; $i < $missing; $i++) {
+            while (count($batches[$lastIndex]) < 10) {
                 $batches[$lastIndex][] = null;
             }
         }
@@ -317,8 +340,7 @@ final class ExamResultController extends AbstractPageController
         return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
             'batches' => $batches,
             'today' => new \DateTime(),
-            'examId' => $examId,
-            'selectedClass' => $selectedClass
+            'exam_year' => $conn->fetchOne("SELECT exam_year FROM sportabzeichen_exams WHERE id = ?", [$examId])
         ]);
     }
 
