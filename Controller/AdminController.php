@@ -126,40 +126,45 @@ final class AdminController extends AbstractPageController
     }
 
     #[Route('/participants/add/{username}', name: 'participants_add')]
-    public function participantsAdd(string $username, EntityManagerInterface $em, Request $request): Response
+    public function participantsAdd(string $username, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
+        // 1. Wir holen das Repository für IServ-Benutzer (nicht Participants!)
         $userRepo = $em->getRepository(User::class);
         
-        // HIER WAR DER FEHLER:
-        // Wir suchen explizit nach 'username' (entspricht der Spalte 'act'), 
-        // nicht automatisch nach der ID.
+        // 2. Wir suchen den User anhand des Namens (test.dulli)
+        // In der IServ-Datenbank heißt die Spalte 'act', in Symfony meist 'username'
         $user = $userRepo->findOneBy(['username' => $username]);
 
+        // Falls nicht gefunden, Sicherheitshalber auch nach Import-ID suchen?
         if (!$user) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
+             $user = $userRepo->findOneBy(['importId' => $username]);
+        }
+
+        // Wenn immer noch keiner gefunden wurde -> Abbruch
+        if (!$user) {
+            $this->addFlash('error', 'Benutzer "' . $username . '" konnte nicht gefunden werden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Prüfen, ob der User schon existiert (Sicherheitshalber)
-        $existing = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        // 3. Jetzt prüfen wir, ob dieser User schon in der Participant-Tabelle ist
+        $participantRepo = $em->getRepository(Participant::class);
+        $existing = $participantRepo->findOneBy(['user' => $user]);
+
         if ($existing) {
-             $this->addFlash('warning', $user->getFirstname() . ' ist bereits Teilnehmer.');
+             $this->addFlash('warning', $user->getFirstname() . ' ist bereits erfasst.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Neuen Teilnehmer anlegen
+        // 4. Anlegen
         $participant = new Participant();
         $participant->setUser($user);
         
-        // Falls du das Jahr setzen musst (z.B. aktuelles Jahr):
-        // $participant->setYear((int)date('Y')); 
-
         $em->persist($participant);
         $em->flush();
 
-        $this->addFlash('success', $user->getFirstname() . ' ' . $user->getLastname() . ' wurde hinzugefügt.');
+        $this->addFlash('success', $user->getFirstname() . ' wurde hinzugefügt.');
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
