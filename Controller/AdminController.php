@@ -130,63 +130,55 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
+        $conn = $em->getConnection();
         $userRepo = $em->getRepository(User::class);
-        $participantRepo = $em->getRepository(Participant::class);
 
-        // SCHRITT 1: User über Username suchen (String "timo.willms")
-        $tempUser = $userRepo->findOneBy(['username' => $username]);
+        // SCHRITT 1: Die ECHTE NUMERISCHE ID herausfinden
+        // Wir fragen die Datenbank direkt: "Gib mir die Zahl (id) für den Namen (act) '...'"
+        // Hinweis: In IServ heißt die Benutzertabelle meistens 'users' und die Namensspalte 'act'.
+        
+        $sqlUserId = 'SELECT id FROM users WHERE act = :name';
+        $realId = $conn->fetchOne($sqlUserId, ['name' => $username]);
 
-        if (!$tempUser) {
-            // Fallback: Vielleicht war es schon die ImportID?
-            $tempUser = $userRepo->findOneBy(['importId' => $username]);
+        // Falls nicht gefunden, checken wir die import_id
+        if (!$realId) {
+             $sqlImport = 'SELECT id FROM users WHERE import_id = :name';
+             $realId = $conn->fetchOne($sqlImport, ['name' => $username]);
         }
 
-        if (!$tempUser) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
+        if (!$realId) {
+            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden (Keine ID ermittelbar).');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 2: Die ImportID holen
-        $importId = $tempUser->getImportId();
-
-        if (!$importId) {
-            // Falls User keine ImportID hat, nehmen wir den User direkt
-            $finalUser = $tempUser;
-        } else {
-            // SCHRITT 3: Den User explizit über die ImportID identifizieren
-            $finalUser = $userRepo->findOneBy(['importId' => $importId]);
-        }
+        // $realId ist jetzt garantiert eine Zahl (z.B. 505) oder ein String, der eine Zahl ist "505".
         
-        // Sollte eigentlich nicht passieren, aber sicher ist sicher
-        if (!$finalUser) {
-             $finalUser = $tempUser;
-        }
-
-        // SCHRITT 4: EXISTENZ-CHECK (Hier passierte der Fehler)
-        // Wir nutzen jetzt explizit die ID (Zahl) des Users.
-        // Das verhindert, dass "timo.willms" an die DB gesendet wird.
+        // SCHRITT 2: Prüfen, ob Teilnehmer existiert (Mit der Nummer!)
+        // Tabelle: sportabzeichen_participants, Spalte: user_id
         
-        $userIdAsInt = $finalUser->getId(); // Das ist z.B. 105 (Integer)
+        $sqlCheck = 'SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid LIMIT 1';
+        $exists = $conn->fetchOne($sqlCheck, ['uid' => $realId]);
 
-        $existing = $participantRepo->createQueryBuilder('p')
-            ->where('IDENTITY(p.user) = :uid') // Wir prüfen direkt auf die ID-Spalte
-            ->setParameter('uid', $userIdAsInt) // Wir übergeben ZWINGEND den Integer
-            ->getQuery()
-            ->getOneOrNullResult();
-
-        if ($existing) {
-             $this->addFlash('warning', $finalUser->getFirstname() . ' ist bereits Teilnehmer.');
+        if ($exists) {
+             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 5: Speichern
-        $participant = new Participant();
-        $participant->setUser($finalUser); // Hier übergeben wir das Objekt, Doctrine löst das beim Speichern selbst
-        
-        $em->persist($participant);
-        $em->flush();
+        // SCHRITT 3: Objekt laden und speichern
+        // Wir laden den User jetzt sauber über die ID, die wir gefunden haben.
+        $user = $userRepo->find($realId);
 
-        $this->addFlash('success', 'Hinzugefügt: ' . $finalUser->getFirstname());
+        if ($user) {
+            $participant = new Participant();
+            $participant->setUser($user);
+            
+            $em->persist($participant);
+            $em->flush(); // Hoffen wir, dass das Mapping beim Speichern mitspielt
+
+            $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname());
+        } else {
+             $this->addFlash('error', 'Fehler beim Laden des Benutzer-Objekts.');
+        }
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
