@@ -266,15 +266,6 @@ final class ExamResultController extends AbstractPageController
     }
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
-    Das ist der letzte Puzzlestein. Da wir die SQL-Abfrage geändert haben, um das konkrete Datum (confirmed_at) zu holen, fehlte dem Template plötzlich das Feld has_swimming, das es für die Entscheidung "Anzeigen oder nicht" erwartete.
-
-Wir müssen die SQL-Abfrage nicht ändern, sondern können has_swimming einfach im PHP berechnen (wenn ein Datum da ist, ist der Nachweis da).
-
-Hier ist die finale, vollständige und korrigierte Funktion für deinen ExamResultController.php.
-
-Die korrigierte Funktion (ExamResultController.php)
-PHP
-
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request, Connection $conn): Response
     {
