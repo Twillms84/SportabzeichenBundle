@@ -69,54 +69,56 @@ final class AdminController extends AbstractPageController
     }
 
     #[Route('/participants/missing', name: 'participants_missing')]
-    public function participantsMissing(Request $request): Response
+    public function participantsMissing(Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         
-        $participantRepo = $this->em->getRepository(Participant::class);
-        $userRepo = $this->em->getRepository(User::class);
+        $participantRepo = $em->getRepository(Participant::class);
+        $userRepo = $em->getRepository(User::class);
 
         $searchTerm = trim((string)$request->query->get('q'));
         $missingUsers = [];
         $limitReached = false;
 
-        // Suche erst starten, wenn mind. 3 Zeichen eingegeben wurden
-        if (strlen($searchTerm) >= 3) {
-            // 1. IDs aller User holen, die schon Participant sind
-            // Wir nutzen IDENTITY(), um nur die IDs zu laden, nicht die ganzen Objekte
-            $existingIdsResult = $participantRepo->createQueryBuilder('p')
-                ->select('IDENTITY(p.user)')
-                ->where('p.user IS NOT NULL')
-                ->getQuery()
-                ->getScalarResult();
-            
-            // Flache Liste der IDs erstellen
-            $excludeIds = array_column($existingIdsResult, 1);
+        // IDs der existierenden Teilnehmer holen (immer nötig)
+        $existingIdsResult = $participantRepo->createQueryBuilder('p')
+            ->select('IDENTITY(p.user)')
+            ->where('p.user IS NOT NULL')
+            ->getQuery()
+            ->getScalarResult();
+        
+        $excludeIds = array_column($existingIdsResult, 1);
 
-            // 2. User suchen, die NICHT in dieser Liste sind
-            $qb = $userRepo->createQueryBuilder('u')
-                ->select('u') // Hier laden wir die ganzen User-Objekte für die Anzeige
-                ->where('u.act = true') // Nur aktive Nutzer
-                // Suche in Vorname, Nachname oder Username
-                ->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
-                ->setParameter('s', '%' . $searchTerm . '%')
-                ->orderBy('u.lastname', 'ASC')
-                ->addOrderBy('u.firstname', 'ASC')
-                ->setMaxResults(51); // Eins mehr laden, um "limitReached" zu prüfen
+        // QueryBuilder für User
+        $qb = $userRepo->createQueryBuilder('u')
+            ->select('u')
+            ->where('u.active = true') // <--- HIER WAR DER FEHLER (active statt act)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->setMaxResults(51);
 
-            if (!empty($excludeIds)) {
-                $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
-            }
-
-            $results = $qb->getQuery()->getResult();
-            
-            if (count($results) > 50) {
-                $limitReached = true;
-                array_pop($results); // Den 51. Eintrag entfernen
-            }
-            
-            $missingUsers = $results;
+        if (!empty($excludeIds)) {
+            $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
         }
+
+        // Wenn gesucht wird: Filter anwenden
+        if (strlen($searchTerm) > 0) {
+            $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
+               ->setParameter('s', '%' . $searchTerm . '%');
+        } 
+        // OPTIONAL: Wenn NICHT gesucht wird, willst du wirklich ALLE laden? 
+        // Das kann langsam sein. Vielleicht nur laden, wenn gesucht wird?
+        // Wenn du immer eine Liste willst, lass den "else"-Block weg.
+        
+        // Führe Query nur aus, wenn Suche da ist ODER du alle sehen willst:
+        // Aktuell: Zeigt die ersten 50 alphabetisch an, wenn Suche leer ist.
+        $results = $qb->getQuery()->getResult();
+        
+        if (count($results) > 50) {
+            $limitReached = true;
+            array_pop($results);
+        }
+        $missingUsers = $results;
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
             'missingUsers' => $missingUsers,

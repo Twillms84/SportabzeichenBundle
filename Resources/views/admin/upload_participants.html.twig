@@ -9,7 +9,7 @@
     <h2>
         {{ 'Sportabzeichen – Teilnehmerdaten hochladen'|trans }}
     </h2>
-
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': activeTab} %}
     {% if message %}
         <div class="alert alert-success">{{ message }}</div>
     {% endif %}
