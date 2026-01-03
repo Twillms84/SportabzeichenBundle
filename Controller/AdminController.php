@@ -141,7 +141,7 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         $conn = $em->getConnection();
 
-        // 1. User-Daten per SQL holen (Sicherheits-Check wie vorher)
+        // 1. User-Daten holen
         $sqlUser = 'SELECT id, firstname, lastname, importid FROM users WHERE act = :name';
         $userData = $conn->fetchAssociative($sqlUser, ['name' => $username]);
 
@@ -150,28 +150,27 @@ final class AdminController extends AbstractPageController
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Import-ID Fallback (für Timo & Co)
         $importId = $userData['importid'] ?: 'MANUAL_' . $username;
         $realId = $userData['id'];
 
-        // 2. Das Formular erstellen
+        // 2. Formular: Werte auf MALE/FEMALE/DIVERSE angepasst
         $form = $this->createFormBuilder()
             ->add('birthdate', \Symfony\Component\Form\Extension\Core\Type\DateType::class, [
                 'label' => 'Geburtsdatum',
-                'widget' => 'single_text', // HTML5 Datepicker
+                'widget' => 'single_text',
                 'required' => false,
-                'data' => new \DateTime('2010-01-01'), // Standardwert
+                'data' => new \DateTime('2010-01-01'),
             ])
             ->add('gender', \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
                 'label' => 'Geschlecht',
                 'choices' => [
-                    'Männlich' => 'm',
-                    'Weiblich' => 'w',
-                    'Divers' => 'd',
+                    'Männlich' => 'MALE',    // <-- KORRIGIERT
+                    'Weiblich' => 'FEMALE',  // <-- KORRIGIERT
+                    'Divers'   => 'DIVERSE', // <-- KORRIGIERT
                 ],
-                'expanded' => true, // Radio-Buttons
+                'expanded' => true,
                 'multiple' => false,
-                'data' => 'm',
+                'data' => 'MALE', 
             ])
             ->add('save', \Symfony\Component\Form\Extension\Core\Type\SubmitType::class, [
                 'label' => 'Teilnehmer hinzufügen',
@@ -181,35 +180,33 @@ final class AdminController extends AbstractPageController
 
         $form->handleRequest($request);
 
-        // 3. Wenn Formular abgeschickt wurde -> Speichern
+        // 3. Speichern
         if ($form->isSubmitted() && $form->isValid()) {
             $data = $form->getData();
             
             try {
-                // Check auf Duplikate
                 $exists = $conn->fetchOne('SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid', ['uid' => $realId]);
                 
                 if ($exists) {
                     $this->addFlash('warning', 'Bereits vorhanden!');
                 } else {
-                    // SQL INSERT mit den neuen Feldern
                     $conn->insert('sportabzeichen_participants', [
                         'user_id' => $realId,
                         'import_id' => $importId,
                         'geburtsdatum' => $data['birthdate'] ? $data['birthdate']->format('Y-m-d') : null,
-                        'geschlecht' => $data['gender']
+                        'geschlecht' => $data['gender'] // Ist jetzt 'MALE' etc.
                     ]);
                     $this->addFlash('success', 'Gespeichert: ' . $userData['firstname']);
                 }
                 return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
 
             } catch (\Exception $e) {
+                // Falls immer noch Fehler auftreten, zeigen wir die genaue SQL-Meldung
                 $this->addFlash('error', 'Fehler: ' . $e->getMessage());
             }
         }
 
-        // 4. Formular anzeigen
-        return $this->render('@PulsRSportabzeichen/admin/participants/add.html.twig', [
+        return $this->render('@PulsRSportabzeichen/admin/add.html.twig', [
             'form' => $form->createView(),
             'user' => $userData
         ]);
