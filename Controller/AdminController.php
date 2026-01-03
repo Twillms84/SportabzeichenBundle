@@ -130,37 +130,42 @@ final class AdminController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Wir holen das Repository für IServ-Benutzer (nicht Participants!)
         $userRepo = $em->getRepository(User::class);
+        $participantRepo = $em->getRepository(Participant::class);
+
+        // --- HIER WAR DAS PROBLEM ---
+        // Falsch: $userRepo->findOneBy(['id' => $username]);  <-- Das verursacht den Fehler (ID ist Zahl)
+        // Falsch: $userRepo->find($username);                 <-- Das verursacht den Fehler
         
-        // 2. Wir suchen den User anhand des Namens (test.dulli)
-        // In der IServ-Datenbank heißt die Spalte 'act', in Symfony meist 'username'
+        // Richtig: Wir suchen in der Spalte 'username' (Datenbankfeld 'act')
         $user = $userRepo->findOneBy(['username' => $username]);
 
-        // Falls nicht gefunden, Sicherheitshalber auch nach Import-ID suchen?
+        // Fallback: Falls du doch nach Import-ID suchst (falls username nicht klappt)
         if (!$user) {
-             $user = $userRepo->findOneBy(['importId' => $username]);
+            // Import-ID ist meist Text, das würde also funktionieren
+            $user = $userRepo->findOneBy(['importId' => $username]);
         }
 
-        // Wenn immer noch keiner gefunden wurde -> Abbruch
+        // Wenn User gar nicht gefunden wurde
         if (!$user) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" konnte nicht gefunden werden.');
+            $this->addFlash('error', 'Benutzer mit Kennung "' . $username . '" nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // 3. Jetzt prüfen wir, ob dieser User schon in der Participant-Tabelle ist
-        $participantRepo = $em->getRepository(Participant::class);
+        // Prüfen, ob schon Teilnehmer
+        // Hier übergeben wir das OBJEKT $user, nicht den String "test.dulli"
         $existing = $participantRepo->findOneBy(['user' => $user]);
 
         if ($existing) {
-             $this->addFlash('warning', $user->getFirstname() . ' ist bereits erfasst.');
+             $this->addFlash('warning', $user->getFirstname() . ' ' . $user->getLastname() . ' ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // 4. Anlegen
+        // Anlegen
         $participant = new Participant();
         $participant->setUser($user);
-        
+        // $participant->setYear((int)date('Y')); // Optional
+
         $em->persist($participant);
         $em->flush();
 
