@@ -345,7 +345,7 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         }
     }
 
-    return $this->render('@Sportabzeichen/exams/print_groupcard.html.twig', [
+    return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
         'batches' => $batches,
         'exam' => $exam,
         'exam_year' => $examYear,
