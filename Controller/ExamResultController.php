@@ -342,7 +342,7 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         while (count($batches[$lastIndex]) < 10) { $batches[$lastIndex][] = null; }
     }
 
-    return $this->render('@Sportabzeichen/exams/print_groupcard.html.twig', [
+    return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
         'batches' => $batches,
         'exam' => $exam,
         'exam_year' => $exam['exam_year'],
