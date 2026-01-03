@@ -133,48 +133,56 @@ final class AdminController extends AbstractPageController
         $conn = $em->getConnection();
 
         // ---------------------------------------------------------
-        // SCHRITT 1: Import-ID anhand des Benutzernamens (act) ermitteln
+        // SCHRITT 1: Import-ID aus der 'users' Tabelle holen
         // ---------------------------------------------------------
+        // Spalte in IServ 'users' Tabelle heißt meist 'importid' (ohne Unterstrich)
         $sqlGetImportId = 'SELECT importid FROM users WHERE act = :username';
         $importId = $conn->fetchOne($sqlGetImportId, ['username' => $username]);
 
+        // FALLBACK FÜR TIMO WILLMS & CO:
+        // Wenn der User keine Import-ID hat, die Datenbank aber zwingend eine will (NOT NULL),
+        // generieren wir eine künstliche ID, damit es nicht knallt.
         if (!$importId) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" hat keine Import-ID und kann nicht hinzugefügt werden.');
-            return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+            $importId = 'MANUAL_' . $username;
         }
 
         // ---------------------------------------------------------
-        // SCHRITT 2: Die numerische ID anhand der Import-ID holen
+        // SCHRITT 2: Die numerische ID (user_id) holen
         // ---------------------------------------------------------
-        // Wir suchen jetzt den User, der diese Import-ID hat, und holen seine echte ID (Zahl).
-        $sqlGetId = 'SELECT id FROM users WHERE importid = :iid LIMIT 1';
-        $realId = $conn->fetchOne($sqlGetId, ['iid' => $importId]);
+        $sqlGetId = 'SELECT id FROM users WHERE act = :username';
+        $realId = $conn->fetchOne($sqlGetId, ['username' => $username]);
 
         if (!$realId) {
-            // Das sollte theoretisch nie passieren, wenn Schritt 1 erfolgreich war,
-            // außer die Datenbank ist inkonsistent.
-            $this->addFlash('error', 'Konnte keine User-ID zur Import-ID "' . $importId . '" finden.');
+             // Fallback Versuch über ImportID, falls wir oben eine echte gefunden haben
+             if (strpos($importId, 'MANUAL_') === false) {
+                 $sqlGetIdByImport = 'SELECT id FROM users WHERE importid = :iid LIMIT 1';
+                 $realId = $conn->fetchOne($sqlGetIdByImport, ['iid' => $importId]);
+             }
+        }
+
+        if (!$realId) {
+            $this->addFlash('error', 'Benutzer "' . $username . '" konnte in der Datenbank nicht gefunden werden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
         // ---------------------------------------------------------
-        // SCHRITT 3: Prüfen, ob dieser User schon Teilnehmer ist
+        // SCHRITT 3: Check auf Duplikate
         // ---------------------------------------------------------
         $sqlCheck = 'SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid LIMIT 1';
         $exists = $conn->fetchOne($sqlCheck, ['uid' => $realId]);
 
         if ($exists) {
-             $this->addFlash('warning', 'Benutzer ' . $username . ' (ImportID: ' . $importId . ') ist bereits Teilnehmer.');
+             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
         // ---------------------------------------------------------
-        // SCHRITT 4: Speichern (Raw SQL Insert)
+        // SCHRITT 4: Speichern (MIT IMPORT_ID)
         // ---------------------------------------------------------
         try {
             $conn->insert('sportabzeichen_participants', [
-                'user_id' => $realId,
-                // Optional weitere Felder hier initialisieren
+                'user_id'   => $realId,    // Die Zahl (z.B. 10131)
+                'import_id' => $importId   // <--- DAS HAT GEFEHLT! (z.B. "12345" oder "MANUAL_timo")
             ]);
 
             $this->addFlash('success', 'Teilnehmer hinzugefügt: ' . $username);
