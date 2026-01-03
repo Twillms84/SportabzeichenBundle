@@ -284,13 +284,15 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
 
     // 2. Basis-Teilnehmerdaten (nur die mit Medaille)
     $sql = "
-        SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
-               (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
-                WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
-        FROM sportabzeichen_exam_participants ep
-        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-        JOIN users u ON u.importid = p.import_id
-        WHERE ep.exam_id = ? AND ep.final_medal <> 'none' AND ep.final_medal IS NOT NULL
+    SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
+           (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
+            WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
+    FROM sportabzeichen_exam_participants ep
+    JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+    JOIN users u ON u.importid = p.import_id
+    WHERE ep.exam_id = ? 
+      AND ep.final_medal IN ('bronze', 'silber', 'gold') -- Nur echte Medaillen
+      AND ep.total_points > 0                            -- Sicherheitshalber Punkte-Check
     ";
     
     $params = [$examId];
