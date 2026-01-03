@@ -92,7 +92,7 @@ body {
 .table-container {
     background: transparent !important;
     position: absolute;
-    top: 98.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
+    top: 99.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
     left: 12.9mm;
 }
 
@@ -137,8 +137,8 @@ td {
 /* --- Footer (Prüfer & Datum) --- */
 .footer-verifier {
     position: absolute;
-    top: 161mm; /* Kalkuliert aus margin-top static-content footer */
-    left: 5.8mm;
+    top: 171mm; /* Kalkuliert aus margin-top static-content footer */
+    left: 12.3mm;
     width: 90mm;
     font-size: 10pt;
     z-index: 3;
@@ -146,8 +146,8 @@ td {
 
 .footer-date {
     position: absolute;
-    top: 177.4mm; /* Angepasst an das Formular */
-    left: 51mm;
+    top: 187.4mm; /* Angepasst an das Formular */
+    left: 95mm;
     font-size: 10pt;
     z-index: 3;
 }
