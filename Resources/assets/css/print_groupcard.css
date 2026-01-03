@@ -52,7 +52,6 @@ body {
 
 /* --- Layering --- */
 .bg-svg {
-    display: block; /* Verhindert "Geister-Abstände" unter dem Bild */
     position: absolute;
     top: 0;
     left: 0;
