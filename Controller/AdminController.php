@@ -131,53 +131,48 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
         $conn = $em->getConnection();
-        $userRepo = $em->getRepository(User::class);
 
-        // SCHRITT 1: Die ECHTE NUMERISCHE ID herausfinden
-        // Wir fragen die Datenbank direkt: "Gib mir die Zahl (id) für den Namen (act) '...'"
-        // Hinweis: In IServ heißt die Benutzertabelle meistens 'users' und die Namensspalte 'act'.
-        
+        // SCHRITT 1: Die ECHTE NUMERISCHE ID herausfinden (Raw SQL)
         $sqlUserId = 'SELECT id FROM users WHERE act = :name';
         $realId = $conn->fetchOne($sqlUserId, ['name' => $username]);
 
-        // Falls nicht gefunden, checken wir die import_id
+        // Fallback: Import-ID
         if (!$realId) {
              $sqlImport = 'SELECT id FROM users WHERE import_id = :name';
              $realId = $conn->fetchOne($sqlImport, ['name' => $username]);
         }
 
         if (!$realId) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden (Keine ID ermittelbar).');
+            $this->addFlash('error', 'Benutzer "' . $username . '" nicht in der Datenbank gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // $realId ist jetzt garantiert eine Zahl (z.B. 505) oder ein String, der eine Zahl ist "505".
-        
-        // SCHRITT 2: Prüfen, ob Teilnehmer existiert (Mit der Nummer!)
-        // Tabelle: sportabzeichen_participants, Spalte: user_id
-        
+        // SCHRITT 2: Prüfen, ob Teilnehmer existiert (Raw SQL)
         $sqlCheck = 'SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid LIMIT 1';
         $exists = $conn->fetchOne($sqlCheck, ['uid' => $realId]);
 
         if ($exists) {
-             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
+             $this->addFlash('warning', 'Benutzer ' . $username . ' ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 3: Objekt laden und speichern
-        // Wir laden den User jetzt sauber über die ID, die wir gefunden haben.
-        $user = $userRepo->find($realId);
+        // SCHRITT 3: Speichern per Referenz (Bypassing Loading Issues)
+        try {
+            // Wir holen uns eine Referenz auf den User (kein DB-Select nötig)
+            // Stelle sicher, dass oben "use IServ\CoreBundle\Entity\User;" steht!
+            $userRef = $em->getReference(User::class, $realId);
 
-        if ($user) {
             $participant = new Participant();
-            $participant->setUser($user);
+            $participant->setUser($userRef);
             
             $em->persist($participant);
-            $em->flush(); // Hoffen wir, dass das Mapping beim Speichern mitspielt
+            $em->flush();
 
-            $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname());
-        } else {
-             $this->addFlash('error', 'Fehler beim Laden des Benutzer-Objekts.');
+            $this->addFlash('success', 'Teilnehmer hinzugefügt: ' . $username);
+
+        } catch (\Exception $e) {
+            // Sollte eigentlich nicht passieren, da wir alles vorher geprüft haben
+            $this->addFlash('error', 'Fehler beim Speichern: ' . $e->getMessage());
         }
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
