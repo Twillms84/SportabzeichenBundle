@@ -61,17 +61,18 @@ body {
 .header-year {
     position: absolute;
     top: 31mm;
-    left: 58.4mm;
+    left: 61mm;
     font-weight: bold;
-    letter-spacing: 4.2mm; /* Abstand passend zu den SVG-Kästchen */
+    letter-spacing: 1.2mm; /* Abstand passend zu den SVG-Kästchen */
     z-index: 3;
 }
 
 .header-info {
     position: absolute;
-    top: 42.5mm; /* Exakter Wert aus XSLT static-content */
+    top: 42.5mm;
     left: 51mm;
-    display: flex;
+    width: 100%; /* Wichtig, damit die absoluten Kinder Platz haben */
+    height: 10mm;
 }
 
 .header-item {
@@ -84,9 +85,41 @@ body {
 
 /* Spezifische Breiten für Header */
 .w-club   { width: 18.5mm; }
-.w-school { width: 29.4mm; }
 .w-org    { width: 28mm; }
-.w-city   { width: 150mm; }
+
+/* Optional: Falls "Schule:" auch festgenagelt werden muss */
+.w-school {
+    position: absolute;
+    top: 0;
+    left: 20mm; /* Wert anpassen, falls "Schule:" verschoben werden muss */
+}
+
+/* Die Institution / Stadt an die richtige Stelle zwingen */
+.w-city {
+    position: absolute;
+    top: 2.7mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
+    left: 169mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
+    
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.mark-institution-type {
+    position: absolute;
+    /* Vertikal: Je nach Kästchenhöhe anpassen */
+    top: 2.7mm; 
+    
+    /* Horizontal: Abstand vom Start der Zeile (linkes Kästchen) */
+    /* 5mm  = ca. 1. Kästchen (Verein) */
+    /* 23mm = ca. 2. Kästchen (Schule) <-- Startwert */
+    /* 45mm = ca. 3. Kästchen (Org) */
+    left: 131mm; 
+    
+    font-weight: bold;
+    font-size: 11pt; /* Etwas größer, damit es wie ein Stift-Kreuz wirkt */
+    font-family: Arial, sans-serif;
+    z-index: 5;
+}
 
 /* --- Tabellen-Layout --- */
 .table-container {
@@ -137,7 +170,7 @@ td {
 /* --- Footer (Prüfer & Datum) --- */
 .footer-verifier {
     position: absolute;
-    top: 171mm; /* Kalkuliert aus margin-top static-content footer */
+    top: 169mm; /* Kalkuliert aus margin-top static-content footer */
     left: 12.3mm;
     width: 90mm;
     font-size: 10pt;
@@ -146,7 +179,7 @@ td {
 
 .footer-date {
     position: absolute;
-    top: 187.4mm; /* Angepasst an das Formular */
+    top: 180mm; /* Angepasst an das Formular */
     left: 95mm;
     font-size: 10pt;
     z-index: 3;

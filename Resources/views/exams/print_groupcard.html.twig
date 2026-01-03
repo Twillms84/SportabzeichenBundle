@@ -18,10 +18,19 @@
                 
                 {# 1. HEADER-INFOS (Stadt, Schule, etc.) #}
                 <div class="header-info">
-                    <div class="header-item w-club"></div> {# Platzhalter Verein #}
-                    <div class="header-item w-school">{% if selectedClass %}Schule: {{ selectedClass }}{% endif %}</div>
-                    <div class="header-item w-org"></div> {# Platzhalter Org #}
-                    <div class="header-item w-city">{{ institutionCity|default('Musterstadt') }}</div>
+                    {# Das X für "Schule" #}
+                    <div class="mark-institution-type">X</div>
+
+                    <div class="header-item w-club"></div>
+                    <div class="header-item w-school">
+                        {% if selectedClass %}Schule: {{ selectedClass }}{% endif %}
+                    </div>
+                    <div class="header-item w-org"></div>
+                    
+                    {# Stadt / Institution #}
+                    <div class="header-item w-city">
+                        {{ institutionCity|default('Barßel') }}
+                    </div>
                 </div>
 
                 {# 2. JAHR (Oben links, einzeln in Kästchen) #}
