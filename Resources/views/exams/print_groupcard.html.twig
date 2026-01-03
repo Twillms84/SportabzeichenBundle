@@ -26,7 +26,7 @@
 
                 {# 2. JAHR (Oben links, einzeln in Kästchen) #}
                 <div class="header-year">
-                    {% set yearArr = exam_year|split('') %}
+                    {% set yearArr = exam_year_short|split('') %}
                     {% for digit in yearArr %}
                         <span>{{ digit }}</span>
                     {% endfor %}
@@ -64,7 +64,7 @@
                                         
                                         {# Geburtsjahr #}
                                         <td class="col-birth">
-                                            {{ p.age_year }}
+                                            {{ p.birthday_fmt }}
                                         </td>
 
                                         {# Die 4 Disziplin-Slots #}
@@ -76,7 +76,9 @@
 
                                         {# Schwimmnachweis #}
                                         <td class="col-swim">
-                                            {% if p.has_swimming %}X{% endif %}
+                                            {% if p.has_swimming %}
+                                                {{ p.swimming_year }}    
+                                            {% endif %}
                                         </td>
                                         
                                         {# Gesamtpunkte #}
