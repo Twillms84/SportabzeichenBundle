@@ -80,7 +80,7 @@ final class AdminController extends AbstractPageController
         $missingUsers = [];
         $limitReached = false;
 
-        // IDs der existierenden Teilnehmer holen (immer nötig)
+        // 1. IDs der existierenden Teilnehmer holen
         $existingIdsResult = $participantRepo->createQueryBuilder('p')
             ->select('IDENTITY(p.user)')
             ->where('p.user IS NOT NULL')
@@ -89,29 +89,26 @@ final class AdminController extends AbstractPageController
         
         $excludeIds = array_column($existingIdsResult, 1);
 
-        // QueryBuilder für User
+        // 2. QueryBuilder für User
         $qb = $userRepo->createQueryBuilder('u')
             ->select('u')
-            ->where('u.active = true') // <--- HIER WAR DER FEHLER (active statt act)
+            // FIX: Wir prüfen auf "nicht gelöscht" (deleted ist NULL), statt auf "active"
+            ->where('u.deleted IS NULL') 
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
             ->setMaxResults(51);
 
+        // Bereits vorhandene Teilnehmer ausschließen
         if (!empty($excludeIds)) {
             $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
         }
 
-        // Wenn gesucht wird: Filter anwenden
+        // Suche: Wir suchen in Name, Vorname, Benutzername (act) ODER Import-ID
         if (strlen($searchTerm) > 0) {
-            $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s')
+            $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s OR u.importId LIKE :s')
                ->setParameter('s', '%' . $searchTerm . '%');
-        } 
-        // OPTIONAL: Wenn NICHT gesucht wird, willst du wirklich ALLE laden? 
-        // Das kann langsam sein. Vielleicht nur laden, wenn gesucht wird?
-        // Wenn du immer eine Liste willst, lass den "else"-Block weg.
-        
-        // Führe Query nur aus, wenn Suche da ist ODER du alle sehen willst:
-        // Aktuell: Zeigt die ersten 50 alphabetisch an, wenn Suche leer ist.
+        }
+
         $results = $qb->getQuery()->getResult();
         
         if (count($results) > 50) {
