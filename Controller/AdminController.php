@@ -133,55 +133,60 @@ final class AdminController extends AbstractPageController
         $userRepo = $em->getRepository(User::class);
         $participantRepo = $em->getRepository(Participant::class);
 
-        // --- FIX: WIR NUTZEN JETZT DEN QUERYBUILDER ---
-        // Das verhindert, dass Doctrine "aus Versehen" nach der ID sucht.
-        // Wir suchen explizit in der Spalte 'username' (die in der DB 'act' heißt).
-        
-        $user = $userRepo->createQueryBuilder('u')
-            ->where('u.username = :name') // Falls Fehler kommt: ersetze 'u.username' durch 'u.act'
-            ->setParameter('name', $username)
-            ->getQuery()
-            ->getOneOrNullResult();
+        // SCHRITT 1: User über Username suchen (String "timo.willms")
+        $tempUser = $userRepo->findOneBy(['username' => $username]);
 
-        // Falls über username nicht gefunden, versuche Import-ID (nur zur Sicherheit)
-        if (!$user) {
-             $user = $userRepo->createQueryBuilder('u')
-                ->where('u.importId = :name')
-                ->setParameter('name', $username)
-                ->getQuery()
-                ->getOneOrNullResult();
+        if (!$tempUser) {
+            // Fallback: Vielleicht war es schon die ImportID?
+            $tempUser = $userRepo->findOneBy(['importId' => $username]);
         }
 
-        // --- AB HIER IST ALLES WIE VORHER ---
-
-        if (!$user) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" konnte in der Datenbank nicht gefunden werden.');
+        if (!$tempUser) {
+            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Prüfen, ob schon Teilnehmer
-        // WICHTIG: Hier übergeben wir das gefundene User-OBJEKT ($user), keinen String!
+        // SCHRITT 2: Die ImportID holen
+        $importId = $tempUser->getImportId();
+
+        if (!$importId) {
+            // Falls User keine ImportID hat, nehmen wir den User direkt
+            $finalUser = $tempUser;
+        } else {
+            // SCHRITT 3: Den User explizit über die ImportID identifizieren
+            $finalUser = $userRepo->findOneBy(['importId' => $importId]);
+        }
+        
+        // Sollte eigentlich nicht passieren, aber sicher ist sicher
+        if (!$finalUser) {
+             $finalUser = $tempUser;
+        }
+
+        // SCHRITT 4: EXISTENZ-CHECK (Hier passierte der Fehler)
+        // Wir nutzen jetzt explizit die ID (Zahl) des Users.
+        // Das verhindert, dass "timo.willms" an die DB gesendet wird.
+        
+        $userIdAsInt = $finalUser->getId(); // Das ist z.B. 105 (Integer)
+
         $existing = $participantRepo->createQueryBuilder('p')
-            // Wir schauen direkt auf die ID der Verknüpfung (Foreign Key)
-            ->where('IDENTITY(p.user) = :userId')
-            // Und wir übergeben explizit die Zahl (Int), kein Objekt!
-            ->setParameter('userId', $user->getId()) 
+            ->where('IDENTITY(p.user) = :uid') // Wir prüfen direkt auf die ID-Spalte
+            ->setParameter('uid', $userIdAsInt) // Wir übergeben ZWINGEND den Integer
             ->getQuery()
             ->getOneOrNullResult();
 
         if ($existing) {
-             $this->addFlash('warning', $user->getFirstname() . ' ist bereits Teilnehmer.');
+             $this->addFlash('warning', $finalUser->getFirstname() . ' ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Anlegen
+        // SCHRITT 5: Speichern
         $participant = new Participant();
-        $participant->setUser($user);
+        $participant->setUser($finalUser); // Hier übergeben wir das Objekt, Doctrine löst das beim Speichern selbst
         
         $em->persist($participant);
         $em->flush();
 
-        $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname());
+        $this->addFlash('success', 'Hinzugefügt: ' . $finalUser->getFirstname());
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
