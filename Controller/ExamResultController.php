@@ -266,9 +266,18 @@ final class ExamResultController extends AbstractPageController
     }
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
+    Das ist der letzte Puzzlestein. Da wir die SQL-Abfrage geändert haben, um das konkrete Datum (confirmed_at) zu holen, fehlte dem Template plötzlich das Feld has_swimming, das es für die Entscheidung "Anzeigen oder nicht" erwartete.
+
+Wir müssen die SQL-Abfrage nicht ändern, sondern können has_swimming einfach im PHP berechnen (wenn ein Datum da ist, ist der Nachweis da).
+
+Hier ist die finale, vollständige und korrigierte Funktion für deinen ExamResultController.php.
+
+Die korrigierte Funktion (ExamResultController.php)
+PHP
+
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
-public function printGroupcard(int $examId, Request $request, Connection $conn): Response
-{
+    public function printGroupcard(int $examId, Request $request, Connection $conn): Response
+    {
     $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
     $selectedClass = $request->query->get('class');
 
@@ -278,8 +287,8 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         throw $this->createNotFoundException('Prüfung nicht gefunden.');
     }
 
-    // 2. Teilnehmer laden - NUR fertige (Medaille bronze/silber/gold)
-    // Nutzt p.geburtsdatum und holt das Jahr des Schwimmprüfungs-Datums (confirmed_at)
+    // 2. Teilnehmer laden
+    // Wir holen sp.confirmed_at als 'swimming_date'
     $sql = "
         SELECT 
             ep.id as ep_id, 
@@ -308,7 +317,7 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     }
     $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
 
-    // Mappings für die Druckausgabe
+    // Mappings
     $unitMap = [
         'UNIT_MINUTES' => 'min', 
         'UNIT_SECONDS' => 's', 
@@ -320,13 +329,19 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
     $enrichedParticipants = [];
+    
+    // 3. Daten aufbereiten
     foreach ($participants as $p) {
-        // Mapping: Geschlecht (w/m), Geburtsdatum (DD.MM.YYYY) und Schwimmjahr (YY)
+        // A. Basis-Mappings
         $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
         $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
+        
+        // B. Schwimm-Logik (Hier lag der Fehler)
+        // Wir berechnen has_swimming einfach daraus, ob ein Datum gefunden wurde
+        $p['has_swimming'] = !empty($p['swimming_date']);
         $p['swimming_year'] = $p['swimming_date'] ? (new \DateTime($p['swimming_date']))->format('y') : '';
 
-        // Ergebnisse für diesen Teilnehmer laden
+        // C. Disziplin-Ergebnisse laden
         $resultsRaw = $conn->fetchAllAssociative("
             SELECT r.auswahlnummer, res.leistung, res.points, d.kategorie, d.einheit
             FROM sportabzeichen_exam_results res
@@ -344,12 +359,14 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
                 WHEN 'Schnelligkeit' THEN 3 WHEN 'Koordination' THEN 4 ELSE 5 END
         ", [$p['ep_id']]);
 
-        // Raster für die 4 Kategorien befüllen
+        // Raster befüllen
         $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
         foreach ($resultsRaw as $res) {
             if (isset($catMap[$res['kategorie']])) {
                 $idx = $catMap[$res['kategorie']];
                 $einheit = $unitMap[$res['einheit']] ?? '';
+                
+                // Deutsche Zahlenformatierung
                 $p['disciplines'][$idx] = [
                     'nr'  => $res['auswahlnummer'],
                     'res' => str_replace('.', ',', (string)$res['leistung']) . ' ' . $einheit,
@@ -360,10 +377,9 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         $enrichedParticipants[] = $p;
     }
 
-    // Teilnehmer in 10er Gruppen für die Seiten aufteilen
+    // 4. Batches bilden (10 pro Seite)
     $batches = array_chunk($enrichedParticipants, 10);
     
-    // Letzte Seite mit Leerzeilen auffüllen für stabiles Layout
     if (count($batches) > 0) {
         $lastIndex = count($batches) - 1;
         while (count($batches[$lastIndex]) < 10) {
@@ -371,13 +387,14 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         }
     }
 
+    // 5. Rendern
     return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
         'batches' => $batches,
         'exam' => $exam,
-        'exam_year_short' => substr((string)$exam['exam_year'], -2), // z.B. "26"
+        'exam_year_short' => substr((string)$exam['exam_year'], -2), // "26"
         'selectedClass' => $selectedClass,
         'today' => new \DateTime(),
-        'userNumber' => '', // Platzhalter für Prüfernummer
+        'userNumber' => '', 
     ]);
 }
 
