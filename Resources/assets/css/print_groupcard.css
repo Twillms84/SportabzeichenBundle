@@ -92,7 +92,7 @@ body {
 .table-container {
     background: transparent !important;
     position: absolute;
-    top: 96.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
+    top: 98.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
     left: 7.1mm;
 }
 
