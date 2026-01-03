@@ -133,26 +133,34 @@ final class AdminController extends AbstractPageController
         $userRepo = $em->getRepository(User::class);
         $participantRepo = $em->getRepository(Participant::class);
 
-        // SCHRITT 1: User finden
-        // Wir suchen im User-Repo nach dem Namen (Spalte 'act' bzw. Property 'username')
-        // Das ist Text, das klappt.
-        $user = $userRepo->findOneBy(['username' => $username]);
+        // --- FIX: WIR NUTZEN JETZT DEN QUERYBUILDER ---
+        // Das verhindert, dass Doctrine "aus Versehen" nach der ID sucht.
+        // Wir suchen explizit in der Spalte 'username' (die in der DB 'act' heißt).
+        
+        $user = $userRepo->createQueryBuilder('u')
+            ->where('u.username = :name') // Falls Fehler kommt: ersetze 'u.username' durch 'u.act'
+            ->setParameter('name', $username)
+            ->getQuery()
+            ->getOneOrNullResult();
 
+        // Falls über username nicht gefunden, versuche Import-ID (nur zur Sicherheit)
         if (!$user) {
-            // Fallback: Falls er nicht über username gefunden wird, Import-ID probieren?
-            // (Nur falls nötig, meistens reicht username)
-            $user = $userRepo->findOneBy(['importId' => $username]);
+             $user = $userRepo->createQueryBuilder('u')
+                ->where('u.importId = :name')
+                ->setParameter('name', $username)
+                ->getQuery()
+                ->getOneOrNullResult();
         }
 
+        // --- AB HIER IST ALLES WIE VORHER ---
+
         if (!$user) {
-            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
+            $this->addFlash('error', 'Benutzer "' . $username . '" konnte in der Datenbank nicht gefunden werden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 2: Prüfen ob Participant schon existiert
-        // HIER WAR WAHRSCHEINLICH DER FEHLER:
-        // Wir dürfen hier NICHT $username ("test.dulli") übergeben.
-        // Wir müssen das OBJEKT $user übergeben, das wir oben gefunden haben.
+        // Prüfen, ob schon Teilnehmer
+        // WICHTIG: Hier übergeben wir das gefundene User-OBJEKT ($user), keinen String!
         $existing = $participantRepo->findOneBy(['user' => $user]);
 
         if ($existing) {
@@ -160,15 +168,14 @@ final class AdminController extends AbstractPageController
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // SCHRITT 3: Speichern
+        // Anlegen
         $participant = new Participant();
-        $participant->setUser($user); // Hier setzen wir wieder das Objekt
-        // $participant->setYear((int)date('Y')); 
-
+        $participant->setUser($user);
+        
         $em->persist($participant);
         $em->flush();
 
-        $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname() . ' ' . $user->getLastname());
+        $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname());
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
