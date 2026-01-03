@@ -133,43 +133,42 @@ final class AdminController extends AbstractPageController
         $userRepo = $em->getRepository(User::class);
         $participantRepo = $em->getRepository(Participant::class);
 
-        // --- HIER WAR DAS PROBLEM ---
-        // Falsch: $userRepo->findOneBy(['id' => $username]);  <-- Das verursacht den Fehler (ID ist Zahl)
-        // Falsch: $userRepo->find($username);                 <-- Das verursacht den Fehler
-        
-        // Richtig: Wir suchen in der Spalte 'username' (Datenbankfeld 'act')
+        // SCHRITT 1: User finden
+        // Wir suchen im User-Repo nach dem Namen (Spalte 'act' bzw. Property 'username')
+        // Das ist Text, das klappt.
         $user = $userRepo->findOneBy(['username' => $username]);
 
-        // Fallback: Falls du doch nach Import-ID suchst (falls username nicht klappt)
         if (!$user) {
-            // Import-ID ist meist Text, das würde also funktionieren
+            // Fallback: Falls er nicht über username gefunden wird, Import-ID probieren?
+            // (Nur falls nötig, meistens reicht username)
             $user = $userRepo->findOneBy(['importId' => $username]);
         }
 
-        // Wenn User gar nicht gefunden wurde
         if (!$user) {
-            $this->addFlash('error', 'Benutzer mit Kennung "' . $username . '" nicht gefunden.');
+            $this->addFlash('error', 'Benutzer "' . $username . '" nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Prüfen, ob schon Teilnehmer
-        // Hier übergeben wir das OBJEKT $user, nicht den String "test.dulli"
+        // SCHRITT 2: Prüfen ob Participant schon existiert
+        // HIER WAR WAHRSCHEINLICH DER FEHLER:
+        // Wir dürfen hier NICHT $username ("test.dulli") übergeben.
+        // Wir müssen das OBJEKT $user übergeben, das wir oben gefunden haben.
         $existing = $participantRepo->findOneBy(['user' => $user]);
 
         if ($existing) {
-             $this->addFlash('warning', $user->getFirstname() . ' ' . $user->getLastname() . ' ist bereits Teilnehmer.');
+             $this->addFlash('warning', $user->getFirstname() . ' ist bereits Teilnehmer.');
              return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        // Anlegen
+        // SCHRITT 3: Speichern
         $participant = new Participant();
-        $participant->setUser($user);
-        // $participant->setYear((int)date('Y')); // Optional
+        $participant->setUser($user); // Hier setzen wir wieder das Objekt
+        // $participant->setYear((int)date('Y')); 
 
         $em->persist($participant);
         $em->flush();
 
-        $this->addFlash('success', $user->getFirstname() . ' wurde hinzugefügt.');
+        $this->addFlash('success', 'Hinzugefügt: ' . $user->getFirstname() . ' ' . $user->getLastname());
 
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
