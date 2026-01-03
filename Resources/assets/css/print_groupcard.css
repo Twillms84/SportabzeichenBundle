@@ -17,12 +17,6 @@
     }
 }
 
-/* Nach dem allerletzten .sheet keinen Umbruch mehr machen */
-.sheet:last-child {
-    page-break-after: avoid !important;
-    break-after: avoid !important;
-}
-
 body {
     margin: 0;
     padding: 0;
@@ -38,7 +32,7 @@ body {
     width: 297mm; 
     
     /* TRICK: Ein Hauch weniger als 210mm, um Überlauf zu verhindern */
-    height: 209.5mm; 
+    height: 210mm; 
     
     position: relative;
     
