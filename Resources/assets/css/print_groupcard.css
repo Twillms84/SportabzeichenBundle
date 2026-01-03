@@ -60,8 +60,8 @@ body {
 /* --- Header & Jahr --- */
 .header-year {
     position: absolute;
-    top: 10.5mm;
-    left: 31mm;
+    top: 31mm;
+    left: 58.4mm;
     font-weight: bold;
     letter-spacing: 4.2mm; /* Abstand passend zu den SVG-Kästchen */
     z-index: 3;
