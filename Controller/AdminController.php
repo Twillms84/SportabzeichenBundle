@@ -141,7 +141,7 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         $conn = $em->getConnection();
 
-        // 1. User-Daten holen
+        // User-Daten laden
         $sqlUser = 'SELECT id, firstname, lastname, importid FROM users WHERE act = :name';
         $userData = $conn->fetchAssociative($sqlUser, ['name' => $username]);
 
@@ -153,7 +153,7 @@ final class AdminController extends AbstractPageController
         $importId = $userData['importid'] ?: 'MANUAL_' . $username;
         $realId = $userData['id'];
 
-        // 2. Formular: Werte auf MALE/FEMALE/DIVERSE angepasst
+        // Formular erstellen
         $form = $this->createFormBuilder()
             ->add('birthdate', \Symfony\Component\Form\Extension\Core\Type\DateType::class, [
                 'label' => 'Geburtsdatum',
@@ -163,14 +163,15 @@ final class AdminController extends AbstractPageController
             ])
             ->add('gender', \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
                 'label' => 'Geschlecht',
+                // WICHTIG: Rechts stehen die Werte für die Datenbank (MALE, FEMALE)!
                 'choices' => [
-                    'Männlich' => 'MALE',    // <-- KORRIGIERT
-                    'Weiblich' => 'FEMALE',  // <-- KORRIGIERT
-                    'Divers'   => 'DIVERSE', // <-- KORRIGIERT
+                    'Männlich' => 'MALE',
+                    'Weiblich' => 'FEMALE',
+                    'Divers'   => 'DIVERSE',
                 ],
                 'expanded' => true,
                 'multiple' => false,
-                'data' => 'MALE', 
+                'data' => 'MALE', // Standardwert muss auch 'MALE' sein, nicht 'm'
             ])
             ->add('save', \Symfony\Component\Form\Extension\Core\Type\SubmitType::class, [
                 'label' => 'Teilnehmer hinzufügen',
@@ -180,28 +181,28 @@ final class AdminController extends AbstractPageController
 
         $form->handleRequest($request);
 
-        // 3. Speichern
         if ($form->isSubmitted() && $form->isValid()) {
             $data = $form->getData();
             
             try {
+                // Check ob schon existiert
                 $exists = $conn->fetchOne('SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid', ['uid' => $realId]);
                 
                 if ($exists) {
                     $this->addFlash('warning', 'Bereits vorhanden!');
                 } else {
+                    // SQL Insert mit korrekten Werten
                     $conn->insert('sportabzeichen_participants', [
                         'user_id' => $realId,
                         'import_id' => $importId,
                         'geburtsdatum' => $data['birthdate'] ? $data['birthdate']->format('Y-m-d') : null,
-                        'geschlecht' => $data['gender'] // Ist jetzt 'MALE' etc.
+                        'geschlecht' => $data['gender'] // Sendet jetzt 'MALE', 'FEMALE' oder 'DIVERSE'
                     ]);
                     $this->addFlash('success', 'Gespeichert: ' . $userData['firstname']);
                 }
                 return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
 
             } catch (\Exception $e) {
-                // Falls immer noch Fehler auftreten, zeigen wir die genaue SQL-Meldung
                 $this->addFlash('error', 'Fehler: ' . $e->getMessage());
             }
         }
@@ -253,8 +254,7 @@ final class AdminController extends AbstractPageController
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
         $conn = $em->getConnection();
 
-        // 1. Aktuelle Daten laden (Raw SQL)
-        // Wir brauchen auch den Namen aus der Users Tabelle für die Anzeige
+        // Teilnehmer laden
         $sql = '
             SELECT p.*, u.firstname, u.lastname 
             FROM sportabzeichen_participants p
@@ -268,10 +268,9 @@ final class AdminController extends AbstractPageController
             return $this->redirectToRoute('sportabzeichen_admin_participants_index');
         }
 
-        // Daten für Formular vorbereiten
         $currentDate = $participant['geburtsdatum'] ? new \DateTime($participant['geburtsdatum']) : null;
 
-        // 2. Formular bauen
+        // Formular erstellen
         $form = $this->createFormBuilder()
             ->add('birthdate', \Symfony\Component\Form\Extension\Core\Type\DateType::class, [
                 'label' => 'Geburtsdatum',
@@ -281,9 +280,14 @@ final class AdminController extends AbstractPageController
             ])
             ->add('gender', \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
                 'label' => 'Geschlecht',
-                'choices' => ['Männlich' => 'm', 'Weiblich' => 'w', 'Divers' => 'd'],
+                // WICHTIG: Auch hier müssen die Werte exakt stimmen
+                'choices' => [
+                    'Männlich' => 'MALE',
+                    'Weiblich' => 'FEMALE',
+                    'Divers'   => 'DIVERSE',
+                ],
                 'expanded' => true,
-                'data' => $participant['geschlecht'],
+                'data' => $participant['geschlecht'], // Lädt 'MALE'/'FEMALE' aus der DB
             ])
             ->add('save', \Symfony\Component\Form\Extension\Core\Type\SubmitType::class, [
                 'label' => 'Änderungen speichern',
@@ -293,15 +297,14 @@ final class AdminController extends AbstractPageController
 
         $form->handleRequest($request);
 
-        // 3. Update durchführen
         if ($form->isSubmitted() && $form->isValid()) {
             $data = $form->getData();
 
             try {
                 $conn->update('sportabzeichen_participants', [
                     'geburtsdatum' => $data['birthdate'] ? $data['birthdate']->format('Y-m-d') : null,
-                    'geschlecht' => $data['gender']
-                ], ['id' => $id]); // WHERE id = $id
+                    'geschlecht' => $data['gender'] // Sendet 'MALE', 'FEMALE' etc.
+                ], ['id' => $id]);
 
                 $this->addFlash('success', 'Daten aktualisiert.');
                 return $this->redirectToRoute('sportabzeichen_admin_participants_index');
