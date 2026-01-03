@@ -32,7 +32,7 @@ body {
     width: 297mm; 
     
     /* TRICK: Ein Hauch weniger als 210mm, um Überlauf zu verhindern */
-    height: 210mm; 
+    height: 209.5mm; 
     
     position: relative;
     
