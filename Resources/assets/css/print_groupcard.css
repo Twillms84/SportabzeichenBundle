@@ -38,7 +38,7 @@ body {
     
     /* Schneidet unsichtbare Ränder oder herausragende Pixel ab */
     overflow: hidden; 
-    
+    background-color: white;
     /* Umbruch erzwingen */
     page-break-after: always; 
     break-after: page;
