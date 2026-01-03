@@ -17,6 +17,12 @@
     }
 }
 
+/* Nach dem allerletzten .sheet keinen Umbruch mehr machen */
+.sheet:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -28,16 +34,25 @@ body {
 
 /* --- Grundgerüst Blatt --- */
 .sheet {
-    width: 297mm;
-    height: 210mm;
+    /* Breite exakt A4 Landscape */
+    width: 297mm; 
+    
+    /* TRICK: Ein Hauch weniger als 210mm, um Überlauf zu verhindern */
+    height: 209.5mm; 
+    
     position: relative;
-    overflow: hidden;
-    page-break-after: always;
-    background-color: white;
+    
+    /* Schneidet unsichtbare Ränder oder herausragende Pixel ab */
+    overflow: hidden; 
+    
+    /* Umbruch erzwingen */
+    page-break-after: always; 
+    break-after: page;
 }
 
 /* --- Layering --- */
 .bg-svg {
+    display: block; /* Verhindert "Geister-Abstände" unter dem Bild */
     position: absolute;
     top: 0;
     left: 0;
