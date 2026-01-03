@@ -306,8 +306,7 @@ final class ExamResultController extends AbstractPageController
             }
         }
 
-        // Pfad zur View angepasst: Liegt vermutlich unter 'print', nicht 'exams'
-        return $this->render('@PulsRSportabzeichen/print/groupcard.html.twig', [
+        return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
             'batches' => $batches,
             'today' => new \DateTime(),
         ]);
