@@ -164,27 +164,6 @@ final class AdminController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
     }
 
-        // Prüfen, ob schon existiert (doppelt hält besser)
-        $existing = $em->getRepository(Participant::class)->findOneBy(['user' => $user]);
-        if ($existing) {
-             $this->addFlash('warning', 'Benutzer ist bereits Teilnehmer.');
-             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
-        }
-
-        // Neuen Teilnehmer anlegen
-        $participant = new Participant();
-        $participant->setUser($user);
-        // Standardwerte setzen, falls nötig
-        // $participant->setYear(date('Y')); 
-
-        $em->persist($participant);
-        $em->flush();
-
-        $this->addFlash('success', $user->getFirstname() . ' ' . $user->getLastname() . ' wurde hinzugefügt.');
-
-        return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
-    }
-
     #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
     public function participantsUpdate(Request $request, int $id): Response
     {
