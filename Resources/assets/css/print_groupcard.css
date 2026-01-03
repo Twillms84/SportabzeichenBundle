@@ -93,7 +93,7 @@ body {
     background: transparent !important;
     position: absolute;
     top: 98.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
-    left: 7.1mm;
+    left: 12.9mm;
 }
 
 table {
