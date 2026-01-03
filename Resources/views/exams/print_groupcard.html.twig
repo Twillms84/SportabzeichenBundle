@@ -19,7 +19,6 @@
             
             {# HEADER #}
             <div class="header-info">
-                {# CSS Klassen statt style="..." #}
                 <div class="header-item w-club"></div>
                 <div class="header-item w-school">Schule</div>
                 <div class="header-item w-org"></div>
@@ -42,24 +41,30 @@
                         <col class="col-sum">
                     </colgroup>
                     
-                    {% for participant in batch %}
+                    {% for row in batch %}
                         <tr>
                             <td>
-                                {% if participant %}
-                                    {{ participant.user.lastname }}, {{ participant.user.firstname }}
+                                {% if row is not null %}
+                                    {# ÄNDERUNG: Direktzugriff ohne .user #}
+                                    {{ row.lastname }}, {{ row.firstname }}
+                                {% else %}
+                                    &nbsp;
                                 {% endif %}
                             </td>
                             <td class="col-gender">
-                                {% if participant %}
-                                    {% if participant.geschlecht == 'MALE' %}m
-                                    {% elseif participant.geschlecht == 'FEMALE' %}w
-                                    {% elseif participant.geschlecht == 'DIVERSE' %}d
-                                    {% endif %}
+                                {% if row is not null %}
+                                    {# ÄNDERUNG: Geschlecht wird oft als 'MALE'/'FEMALE' gespeichert. 
+                                       Wir nehmen den ersten Buchstaben und machen ihn klein (m/w/d). #}
+                                    {% set g = row.geschlecht|first|lower %}
+                                    {% if g == 'm' %}m
+                                    {% elseif g == 'f' or g == 'w' %}w
+                                    {% else %}d{% endif %}
                                 {% endif %}
                             </td>
                             <td class="col-birth">
-                                {% if participant and participant.geburtsdatum %}
-                                    {{ participant.geburtsdatum|date('d.m.Y') }}
+                                {% if row is not null %}
+                                    {# ÄNDERUNG: Wir haben im SQL "age_year" abgerufen. #}
+                                    {{ row.age_year }}
                                 {% endif %}
                             </td>
                             
