@@ -1,4 +1,26 @@
 /* public/css/print_groupcard.css */
+/* Am Anfang der Datei ergänzen */
+@media print {
+    body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* Tabellenzellen-Inhalt zentrieren, wo nötig */
+.col-dis-nr, .col-dis-pts, .col-swim, .col-sum {
+    text-align: center;
+    padding-left: 0;
+}
+
+/* Falls das Jahr (2024) oben rechts noch fehlt: */
+.header-year {
+    position: absolute;
+    top: 10.5mm;
+    left: 31mm;
+    font-weight: bold;
+    letter-spacing: 4mm; /* Damit die Ziffern in die Kästchen passen */
+}
 
 @page {
     size: A4 landscape;

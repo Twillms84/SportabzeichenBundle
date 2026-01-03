@@ -1,69 +1,110 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <title>Gruppenprüfkarte Sportabzeichen</title>
-    
-    {# Einbindung des externen CSS Files #}
-    <link rel="stylesheet" href="{{ absolute_url(asset('img/dsa_groupcard.svg')) }}">
-</head>
-<body>
+{% extends '@IServCore/page.html.twig' %}
 
-{% for batch in batches %}
-    <div class="sheet">
-        <img src="{{ asset('img/dsa_groupcard.svg') }}" class="bg-svg">
+{% block title %}Drucken: Gruppenprüfkarte – {{ exam.exam_name }}{% endblock %}
 
-        <div class="data-layer">
-            {# Header-Info mit Jahr aus der XSLT Logik #}
-            <div class="header-year" style="position: absolute; left: 31mm; top: 14.7mm; font-weight: bold;">
-                {{ exam_year|slice(0,1) }} &nbsp; {{ exam_year|slice(1,1) }} &nbsp; {{ exam_year|slice(2,1) }} &nbsp; {{ exam_year|slice(3,1) }}
-            </div>
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/print_groupcard.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
 
-            <div class="table-container" style="margin-top: 89mm; margin-left: 7.1mm;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    {% for p in batch %}
-                        <tr style="height: 5.7mm; vertical-align: middle; font-size: 10pt;">
-                            {# Name/Vorname (64mm laut XSLT) #}
-                            <td style="width: 64mm;">
-                                {% if p %}{{ p.lastname }}, {{ p.firstname }}{% endif %}
-                            </td>
-                            {# Geschlecht (5.2mm) #}
-                            <td style="width: 5.2mm; text-align: center;">
-                                {% if p %}{{ p.geschlecht|first|lower }}{% endif %}
-                            </td>
-                            {# Geburtsdatum / Jahr (19mm) #}
-                            <td style="width: 19mm; text-align: center;">
-                                {% if p %}{{ p.age_year }}{% endif %}
-                            </td>
+{% block content %}
+<div class="print-container">
+    {% for batch in batches %}
+        <div class="sheet">
+            {# Hintergrundbild über das Asset-System von IServ #}
+            <img src="{{ asset('img/dsa_groupcard.svg', 'pulsr-sportabzeichen') }}" class="bg-svg" alt="Hintergrund">
 
-                            {# Die 4 Disziplin-Blöcke (jeweils Nr, Ergebnis, Punkte) #}
-                            {% if p %}
-                                {% for i in 1..4 %}
-                                    <td style="width: 8mm; text-align: center;">{{ p.disciplines[i].nr }}</td>
-                                    <td style="width: 19mm; text-align: center;">{{ p.disciplines[i].res }}</td>
-                                    <td style="width: 8mm; text-align: center;">{{ p.disciplines[i].pts }}</td>
-                                {% endfor %}
-                            {% else %}
-                                {# Leere Zellen für 4 Disziplinen #}
-                                {% for i in 1..12 %}<td></td>{% endfor %}
-                            {% endif %}
+            <div class="data-layer">
+                
+                {# 1. HEADER-INFOS (Stadt, Schule, etc.) #}
+                <div class="header-info">
+                    <div class="header-item w-club"></div> {# Platzhalter Verein #}
+                    <div class="header-item w-school">{% if selectedClass %}Schule: {{ selectedClass }}{% endif %}</div>
+                    <div class="header-item w-org"></div> {# Platzhalter Org #}
+                    <div class="header-item w-city">{{ institutionCity|default('Musterstadt') }}</div>
+                </div>
 
-                            {# Schwimmnachweis (8mm) #}
-                            <td style="width: 8mm; text-align: center;">
-                                {% if p and p.has_swimming %}ja{% endif %}
-                            </td>
-                            {# Summe (8mm) #}
-                            <td style="width: 8mm; text-align: center;">
-                                {% if p %}{{ p.total_points }}{% endif %}
-                            </td>
-                        </tr>
+                {# 2. JAHR (Oben links, einzeln in Kästchen) #}
+                <div class="header-year">
+                    {% set yearArr = exam_year|split('') %}
+                    {% for digit in yearArr %}
+                        <span>{{ digit }}</span>
                     {% endfor %}
-                </table>
-            </div>
-            {# ... Footer wie zuvor ... #}
-        </div>
-    </div>
-{% endfor %}
+                </div>
 
-</body>
-</html>
+                {# 3. HAUPTTABELLE DER TEILNEHMER #}
+                <div class="table-container">
+                    <table class="participant-table">
+                        <colgroup>
+                            <col class="col-name">
+                            <col class="col-gender">
+                            <col class="col-birth">
+                            {# 4 Kategorien à 3 Spalten (Nr, Ergebnis, Pkt) #}
+                            {% for i in 1..4 %}
+                                <col class="col-dis-nr">
+                                <col class="col-dis-res">
+                                <col class="col-dis-pts">
+                            {% endfor %}
+                            <col class="col-swim">
+                            <col class="col-sum">
+                        </colgroup>
+                        <tbody>
+                            {% for p in batch %}
+                                <tr class="participant-row">
+                                    {% if p %}
+                                        {# Name #}
+                                        <td class="col-name text-nowrap">
+                                            {{ p.lastname }}, {{ p.firstname }}
+                                        </td>
+                                        
+                                        {# Geschlecht (m/w) #}
+                                        <td class="col-gender">
+                                            {{ p.geschlecht|slice(0,1)|lower }}
+                                        </td>
+                                        
+                                        {# Geburtsjahr #}
+                                        <td class="col-birth">
+                                            {{ p.age_year }}
+                                        </td>
+
+                                        {# Die 4 Disziplin-Slots #}
+                                        {% for i in 1..4 %}
+                                            <td class="col-dis-nr">{{ p.disciplines[i].nr }}</td>
+                                            <td class="col-dis-res">{{ p.disciplines[i].res }}</td>
+                                            <td class="col-dis-pts">{{ p.disciplines[i].pts }}</td>
+                                        {% endfor %}
+
+                                        {# Schwimmnachweis #}
+                                        <td class="col-swim">
+                                            {% if p.has_swimming %}X{% endif %}
+                                        </td>
+                                        
+                                        {# Gesamtpunkte #}
+                                        <td class="col-sum fw-bold">
+                                            {{ p.total_points }}
+                                        </td>
+                                    {% else %}
+                                        {# Leere Zeile zum Auffüllen auf 10 Zeilen #}
+                                        {% for i in 1..17 %}<td>&nbsp;</td>{% endfor %}
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {# 4. FOOTER (Prüfer & Datum) #}
+                <div class="footer-verifier">
+                    {{ app.user.firstname }} {{ app.user.lastname }} 
+                    {% if userNumber %}({{ userNumber }}){% endif %}
+                </div>
+
+                <div class="footer-date">
+                    {{ today|date('d.m.Y') }}
+                </div>
+
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}
