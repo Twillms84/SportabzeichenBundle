@@ -90,12 +90,14 @@ body {
 
 /* --- Tabellen-Layout --- */
 .table-container {
+    background: transparent !important;
     position: absolute;
     top: 96.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
     left: 7.1mm;
 }
 
 table {
+    background-color: transparent !important; /* Erzwingt Transparenz */
     border-collapse: collapse;
     table-layout: fixed;
     border-spacing: 0;
@@ -103,10 +105,12 @@ table {
 }
 
 tr {
+    background-color: transparent !important; /* Erzwingt Transparenz */
     height: 5.75mm; /* Exakt das Maß der Formularzeilen */
 }
 
 td {
+    background-color: transparent !important; /* Erzwingt Transparenz */
     height: 5.75mm;
     border: none;
     color: #000000;
