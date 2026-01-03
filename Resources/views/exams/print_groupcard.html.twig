@@ -96,7 +96,10 @@
                 {# 4. FOOTER (Prüfer & Datum) #}
                 <div class="footer-verifier">
                     {{ app.user.firstname }} {{ app.user.lastname }} 
-                    {% if userNumber %}({{ userNumber }}){% endif %}
+                    {# Prüft, ob die Variable existiert und nicht leer ist #}
+                    {% if userNumber is defined and userNumber is not empty %}
+                        ({{ userNumber }})
+                    {% endif %}
                 </div>
 
                 <div class="footer-date">
