@@ -22,7 +22,8 @@ body {
     padding: 0;
     font-family: Arial, sans-serif;
     font-size: 11pt;
-    background-color: white;
+    background-color: transparent; /* Hintergrund der Seite transparent */
+    color: #000000; /* Schrift explizit schwarz */
 }
 
 /* --- Grundgerüst Blatt --- */
@@ -52,7 +53,8 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: transparent;
+    background: transparent; /* Sicherstellen, dass Layer nicht weiß ist */
+    color: #000000;
 }
 
 /* --- Header & Jahr --- */
@@ -67,10 +69,9 @@ body {
 
 .header-info {
     position: absolute;
-    top: 4.2mm; /* Laut XSLT margin-top */
-    left: 51.1mm;
+    top: 42.5mm; /* Exakter Wert aus XSLT static-content */
+    left: 51mm;
     display: flex;
-    z-index: 3;
 }
 
 .header-item {
@@ -90,9 +91,8 @@ body {
 /* --- Tabellen-Layout --- */
 .table-container {
     position: absolute;
-    top: 89mm; /* margin-top region-body */
+    top: 96.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
     left: 7.1mm;
-    z-index: 3;
 }
 
 table {
@@ -103,18 +103,19 @@ table {
 }
 
 tr {
-    height: 5.7mm;
+    height: 5.75mm; /* Exakt das Maß der Formularzeilen */
 }
 
 td {
-    height: 5.7mm;
+    height: 5.75mm;
     border: none;
+    color: #000000;
     padding: 0;
     padding-left: 1mm;
     white-space: nowrap;
     overflow: hidden;
     vertical-align: middle;
-    font-size: 10pt;
+    font-size: 9pt;
 }
 
 /* --- Spaltenbreiten & Ausrichtung --- */
