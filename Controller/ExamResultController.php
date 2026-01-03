@@ -278,14 +278,15 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
 
     // 2. Teilnehmer laden - NUR fertige (Medaille bronze/silber/gold)
     $sql = "
-        SELECT ep.id as ep_id, u.lastname, u.firstname, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
-               (SELECT 1 FROM sportabzeichen_swimming_proofs sp 
-                WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE LIMIT 1) as has_swimming
-        FROM sportabzeichen_exam_participants ep
-        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-        JOIN users u ON u.importid = p.import_id
-        WHERE ep.exam_id = ? 
-          AND ep.final_medal IN ('bronze', 'silber', 'gold')
+    SELECT ep.id as ep_id, u.lastname, u.firstname, u.birthday, p.geschlecht, ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
+           (SELECT sp.date FROM sportabzeichen_swimming_proofs sp 
+            WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
+            ORDER BY sp.date DESC LIMIT 1) as swimming_date
+    FROM sportabzeichen_exam_participants ep
+    JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+    JOIN users u ON u.importid = p.import_id
+    WHERE ep.exam_id = ? 
+      AND ep.final_medal IN ('bronze', 'silber', 'gold')
     ";
     
     $params = [$examId];
@@ -302,9 +303,18 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
     $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
     $enrichedParticipants = [];
-    foreach ($participants as $p) { // Wir bauen ein neues Array auf, das ist sicherer als Referenzen
-        // Geschlecht mapping
+    foreach ($participants as $p) {
+        // Geschlecht kurz
         $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
+        
+        // 1. Geburtsdatum formatieren (DD.MM.YYYY)
+        $p['birthday_fmt'] = $p['birthday'] ? (new \DateTime($p['birthday']))->format('d.m.Y') : '';
+
+        // 2. Schwimmnachweis-Jahr (nur letzte zwei Stellen, z.B. 25)
+        $p['swimming_year'] = '';
+        if ($p['swimming_date']) {
+            $p['swimming_year'] = (new \DateTime($p['swimming_date']))->format('y');
+        }
 
         // Ergebnisse laden
         $resultsRaw = $conn->fetchAllAssociative("
@@ -342,14 +352,16 @@ public function printGroupcard(int $examId, Request $request, Connection $conn):
         while (count($batches[$lastIndex]) < 10) { $batches[$lastIndex][] = null; }
     }
 
-    return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
-        'batches' => $batches,
-        'exam' => $exam,
-        'exam_year' => $exam['exam_year'],
-        'selectedClass' => $selectedClass,
-        'today' => new \DateTime(),
-        'userNumber' => ''
+    $shortExamYear = substr((string)$exam['exam_year'], -2);
+
+return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
+    'batches' => $batches,
+    'exam' => $exam,
+    'exam_year_short' => $shortExamYear, // Neue Variable für Header
+    'selectedClass' => $selectedClass,
+    'today' => new \DateTime(),
+    'userNumber' => ''
     ]);
-}
+    }
 
 }
