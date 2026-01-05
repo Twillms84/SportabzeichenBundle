@@ -24,7 +24,19 @@ class Discipline
     #[ORM\Column(type: 'boolean')]
     private bool $schwimmnachweis = false; // Das Flag, das wir oft prüfen!
 
-    // Getter ...
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $einheit = null; // 's', 'm', 'min'
+
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $berechnungsart = 'BIGGER'; // 'BIGGER' (Weite/Anzahl) oder 'SMALLER' (Laufzeit)
+
+    // Getter & Setter
+    public function getEinheit(): ?string { return $this->einheit; }
+    public function setEinheit(?sstring $art): self { $this->berechnungsart = $art; rtring $einheit): self { $this->einheit = $einheit; return $this; }
+
+    public function getBerechnungsart(): ?string { return $this->berechnungsart; }
+    public function setBerechnungsart(?eturn $this; }
+
     public function getId(): ?int { return $this->id; }
     public function getName(): ?string { return $this->name; }
     public function getKategorie(): ?string { return $this->kategorie; }
