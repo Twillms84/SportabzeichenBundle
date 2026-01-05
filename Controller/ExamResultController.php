@@ -4,311 +4,361 @@ declare(strict_types=1);
 
 namespace PulsR\SportabzeichenBundle\Controller;
 
-use Doctrine\DBAL\Connection;
-use IServ\CoreBundle\Controller\AbstractPageController;
 use Doctrine\ORM\EntityManagerInterface;
-use PulsR\SportabzeichenBundle\Entity\Participant;
+use IServ\CoreBundle\Controller\AbstractPageController;
+use PulsR\SportabzeichenBundle\Entity\Discipline;
+use PulsR\SportabzeichenBundle\Entity\Exam;
+use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
+use PulsR\SportabzeichenBundle\Entity\ExamResult;
+use PulsR\SportabzeichenBundle\Entity\Requirement;
+use PulsR\SportabzeichenBundle\Entity\SwimmingProof;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
+#[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
 final class ExamResultController extends AbstractPageController
 {
-    private function loadClasses(Connection $conn): array
-    {
-        return $conn->fetchAllAssociative("
-            SELECT DISTINCT auxinfo AS klasse
-            FROM users
-            WHERE auxinfo IS NOT NULL AND auxinfo <> ''
-            ORDER BY auxinfo
-        ");
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {
     }
 
     #[Route('/', name: 'exams', methods: ['GET'])]
-    public function examSelection(Connection $conn): Response
+    public function examSelection(): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-        $exams = $conn->fetchAllAssociative("SELECT id, exam_name, exam_year, exam_date FROM sportabzeichen_exams ORDER BY exam_year DESC");
+        $exams = $this->em->getRepository(Exam::class)->findBy([], ['examYear' => 'DESC']);
         return $this->render('@PulsRSportabzeichen/results/index.html.twig', ['exams' => $exams]);
     }
 
-    #[Route('/exam/{examId}', name: 'index', methods: ['GET'])]
-    public function index(int $examId, Request $request, Connection $conn): Response
+    #[Route('/exam/{id}', name: 'index', methods: ['GET'])]
+    public function index(Exam $exam, Request $request): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
-        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
-        if (!$exam) throw $this->createNotFoundException();
-
         $selectedClass = $request->query->get('class');
-        $classes = $this->loadClasses($conn);
 
-        $sql = "
-            SELECT ep.id AS ep_id, ep.participant_id, ep.age_year, ep.total_points, ep.final_medal,
-                   p.geschlecht, u.firstname AS vorname, u.lastname AS nachname, u.auxinfo AS klasse,
-                   
-                   -- Prüft, ob gültig (Existenz)
-                   EXISTS(SELECT 1 FROM sportabzeichen_swimming_proofs sp 
-                          WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE) as has_swimming,
+        // 1. Teilnehmer laden (DQL)
+        // Wir holen nur Teilnehmer, die zu DIESEM Exam gehören
+        $qb = $this->em->createQueryBuilder();
+        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd') // Alles vorladen ("Eager Loading")
+           ->from(ExamParticipant::class, 'ep')
+           ->join('ep.participant', 'p')
+           ->join('p.user', 'u')
+           ->leftJoin('p.swimmingProofs', 'sp')
+           ->leftJoin('ep.results', 'res')
+           ->leftJoin('res.discipline', 'd')
+           ->where('ep.examYear = :year') // Falls du die Relation in ExamParticipant noch nicht hast, nutzen wir das Jahr
+           // ODER WENN DU DIE RELATION HAST: ->where('ep.exam = :exam') ->setParameter('exam', $exam)
+           ->setParameter('year', $exam->getExamYear())
+           ->orderBy('u.lastname', 'ASC')
+           ->addOrderBy('u.firstname', 'ASC');
 
-                   -- NEU: Holt das konkrete Ablaufdatum für den Tooltip
-                   (SELECT sp.valid_until FROM sportabzeichen_swimming_proofs sp 
-                          WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
-                          ORDER BY sp.valid_until DESC LIMIT 1) as swimming_expiry
-
-            FROM sportabzeichen_exam_participants ep
-            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-            JOIN users u ON u.importid = p.import_id
-            WHERE ep.exam_id = ?
-        ";
-        
-        $params = [$examId];
-        if ($selectedClass) { $sql .= " AND u.auxinfo = ?"; $params[] = $selectedClass; }
-        $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
-
-        $rows = $conn->fetchAllAssociative("
-            SELECT d.id, d.name, d.kategorie, d.einheit, r.geschlecht, r.age_min, r.age_max, r.gold, r.silber, r.bronze, r.schwimmnachweis
-            FROM sportabzeichen_disciplines d
-            JOIN sportabzeichen_requirements r ON r.discipline_id = d.id
-            WHERE r.jahr = ? ORDER BY d.kategorie, r.auswahlnummer
-        ", [$exam['exam_year']]);
-
-        $disciplines = [];
-        foreach ($rows as $row) { $disciplines[$row['kategorie']][] = $row; }
-
-        $epIds = array_column($participants, 'ep_id');
-        $results = [];
-        if (!empty($epIds)) {
-            $resRaw = $conn->fetchAllAssociative("
-                SELECT res.*, d.kategorie FROM sportabzeichen_exam_results res 
-                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id 
-                WHERE res.ep_id IN (?)", [$epIds], [Connection::PARAM_INT_ARRAY]);
-            foreach ($resRaw as $r) { $results[$r['ep_id']][$r['discipline_id']] = $r; }
+        if ($selectedClass) {
+            $qb->andWhere('u.auxinfo = :class')->setParameter('class', $selectedClass);
         }
 
+        /** @var ExamParticipant[] $examParticipants */
+        $examParticipants = $qb->getQuery()->getResult();
+
+        // 2. Damit das Twig-Template nicht explodiert, bauen wir die Struktur leicht um
+        // oder wir passen Twig an. Hier bereiten wir die Daten so auf, wie Twig sie erwartet.
+        $participantsData = [];
+        $resultsData = [];
+
+        foreach ($examParticipants as $ep) {
+            // Check Swimming Validity
+            $hasSwimming = false;
+            $swimmingExpiry = null;
+            $today = new \DateTime();
+            
+            foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
+                if ($proof->getValidUntil() >= $today) {
+                    $hasSwimming = true;
+                    // Finde das längste Datum
+                    if ($swimmingExpiry === null || $proof->getValidUntil() > $swimmingExpiry) {
+                        $swimmingExpiry = $proof->getValidUntil();
+                    }
+                }
+            }
+
+            // Results mappen für JS/Twig Matrix
+            foreach ($ep->getResults() as $res) {
+                $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
+                    'leistung' => $res->getLeistung(),
+                    'points' => $res->getPoints(),
+                    'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'), // Quick hack
+                    'kategorie' => $res->getDiscipline()->getKategorie()
+                ];
+            }
+            
+            // Wir packen das Objekt UND berechnete Werte rein
+            $participantsData[] = [
+                'entity' => $ep, // Zugriff im Twig: p.entity.participant.user.lastname
+                'ep_id' => $ep->getId(),
+                'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
+                'nachname' => $ep->getParticipant()->getUser()->getLastname(),
+                'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
+                'geschlecht' => $ep->getParticipant()->getGeschlecht(),
+                'age_year' => $ep->getAgeYear(),
+                'total_points' => $ep->getTotalPoints(), // Stelle sicher, dass Getter existiert
+                'final_medal' => $ep->getFinalMedal(),   // Stelle sicher, dass Getter existiert
+                'has_swimming' => $hasSwimming,
+                'swimming_expiry' => $swimmingExpiry
+            ];
+        }
+
+        // 3. Anforderungen/Disziplinen laden
+        // Hier nutzen wir Requirements um zu wissen, welche Disziplinen aktiv sind
+        $requirements = $this->em->createQueryBuilder()
+            ->select('r', 'd')
+            ->from(Requirement::class, 'r')
+            ->join('r.discipline', 'd')
+            ->where('r.jahr = :year')
+            ->setParameter('year', $exam->getExamYear())
+            ->orderBy('d.kategorie', 'ASC')
+            ->addOrderBy('r.auswahlnummer', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $disciplines = [];
+        foreach ($requirements as $req) {
+            /** @var Requirement $req */
+            $d = $req->getDiscipline();
+            // Bauen wir das Array so, wie es das Template erwartet (grouped by Kategorie)
+            if (!isset($disciplines[$d->getKategorie()][$d->getId()])) {
+                $disciplines[$d->getKategorie()][] = [
+                    'id' => $d->getId(),
+                    'name' => $d->getName(),
+                    'einheit' => $d->getEinheit(),
+                    'kategorie' => $d->getKategorie()
+                ];
+                // Markieren um Duplikate zu vermeiden (Reqs sind ja pro Alter/Geschlecht mehrfach da)
+                $disciplines[$d->getKategorie()][$d->getId()] = true; 
+            }
+        }
+        
+        // Array Keys bereinigen (wegen der ID-Prüfung oben)
+        foreach($disciplines as $kat => $vals) {
+            $disciplines[$kat] = array_values(array_filter($vals, 'is_array'));
+        }
+
+        // Klassenliste für Filter
+        $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
+
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
-            'exam' => $exam, 'participants' => $participants, 'disciplines' => $disciplines, 
-            'results' => $results, 'classes' => $classes, 'selectedClass' => $selectedClass
+            'exam' => $exam,
+            'participants' => $participantsData, // Angepasstes Array
+            'disciplines' => $disciplines,
+            'results' => $resultsData,
+            'classes' => $classes,
+            'selectedClass' => $selectedClass
         ]);
     }
 
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
-    public function saveExamResult(Request $request, Connection $conn): JsonResponse
+    public function saveExamResult(Request $request): JsonResponse
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+        $data = json_decode($request->getContent(), true);
         
-        $content = json_decode($request->getContent(), true);
-        $epId = (int)($content['ep_id'] ?? 0);
-        $disciplineId = (int)($content['discipline_id'] ?? 0);
-        $leistungInput = trim((string)($content['leistung'] ?? ''));
-        $leistung = ($leistungInput === '') ? null : (float)str_replace(',', '.', $leistungInput);
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+        $leistung = isset($data['leistung']) && $data['leistung'] !== '' 
+            ? (float)str_replace(',', '.', (string)$data['leistung']) 
+            : null;
 
-        try {
-            // 1. Teilnehmer-Stammdaten
-            $pData = $conn->fetchAssociative("
-                SELECT ep.participant_id, ep.age_year, ex.exam_year, p.geschlecht 
-                FROM sportabzeichen_exam_participants ep
-                JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-                JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-                WHERE ep.id = ?
-            ", [$epId]);
+        if (!$ep || !$discipline) return new JsonResponse(['error' => 'Not found'], 404);
 
-            if (!$pData) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+        // 1. Requirement suchen
+        // Mapping IServ Geschlecht -> DB Geschlecht
+        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGeschlecht() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+        
+        $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
+            ->where('r.discipline = :disc')
+            ->andWhere('r.jahr = :year')
+            ->andWhere('r.geschlecht = :gender')
+            ->andWhere(':age BETWEEN r.ageMin AND r.ageMax')
+            ->setParameters([
+                'disc' => $discipline,
+                'year' => $ep->getExamYear(), // Oder $ep->getExam()->getExamYear() wenn Relation da ist
+                'gender' => $gender,
+                'age' => $ep->getAgeYear()
+            ])
+            ->getQuery()
+            ->getOneOrNullResult();
 
-            $gender = (str_starts_with(strtoupper($pData['geschlecht'] ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+        // 2. Punkte berechnen
+        $points = 0;
+        $stufe = 'none';
+
+        if ($req && $leistung !== null && $leistung > 0) {
+            $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
             
-            // 2. Anforderung & Berechnungsart
-            $req = $conn->fetchAssociative("
-                SELECT r.*, d.einheit, d.kategorie, d.berechnungsart
-                FROM sportabzeichen_requirements r
-                JOIN sportabzeichen_disciplines d ON d.id = r.discipline_id
-                WHERE r.discipline_id = ? AND r.jahr = ? AND r.geschlecht = ? 
-                  AND ? BETWEEN r.age_min AND r.age_max
-            ", [$disciplineId, (int)$pData['exam_year'], $gender, (int)$pData['age_year']]);
+            // Helper convert string "1:30" or "1,5" to float logic could go here, 
+            // but for now we assume simple floats in DB string fields
+            $gold = (float)str_replace(',', '.', $req->getGold() ?? '0');
+            $silber = (float)str_replace(',', '.', $req->getSilber() ?? '0');
+            $bronze = (float)str_replace(',', '.', $req->getBronze() ?? '0');
 
-            $points = 0;
-            $stufe = 'none';
+            if ($calc === 'SMALLER') {
+                if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
+                elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
+                elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
+            } else {
+                if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
+                elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
+                elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
+            }
+        }
 
-            // 3. Punkte berechnen (SMALLER / BIGGER Logik)
-            if ($req && $leistung !== null && $leistung > 0) {
-                $direction = strtoupper($req['berechnungsart'] ?? 'BIGGER'); 
-                $vGold = (float)str_replace(',', '.', (string)$req['gold']);
-                $vSilber = (float)str_replace(',', '.', (string)$req['silber']);
-                $vBronze = (float)str_replace(',', '.', (string)$req['bronze']);
-
-                if ($direction === 'SMALLER') {
-                    if ($leistung <= $vGold) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung <= $vSilber) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung <= $vBronze) { $points = 1; $stufe = 'bronze'; }
-                } else {
-                    if ($leistung >= $vGold) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung >= $vSilber) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung >= $vBronze) { $points = 1; $stufe = 'bronze'; }
+        // 3. Konflikte bereinigen (gleiche Kategorie löschen)
+        if ($req) {
+            $cat = $discipline->getKategorie();
+            foreach ($ep->getResults() as $res) {
+                if ($res->getDiscipline()->getId() !== $discipline->getId() 
+                    && $res->getDiscipline()->getKategorie() === $cat) {
+                    $this->em->remove($res);
                 }
             }
+        }
 
-            // 4. Alte Ergebnisse dieser Kategorie löschen
-            // (Damit löschen wir auch das Ergebnis einer Schwimm-Disziplin, falls man auf Laufen wechselt)
-            if ($req) {
-                $conn->executeStatement("
-                    DELETE FROM sportabzeichen_exam_results 
-                    WHERE ep_id = ? AND discipline_id != ? 
-                    AND discipline_id IN (SELECT id FROM sportabzeichen_disciplines WHERE kategorie = ?)
-                ", [$epId, $disciplineId, $req['kategorie']]);
+        // 4. Speichern
+        $result = $this->em->getRepository(ExamResult::class)->findOneBy(['examParticipant' => $ep, 'discipline' => $discipline]);
+        
+        if ($leistung === null || $leistung <= 0) {
+            if ($result) {
+                $this->em->remove($result);
+                $ep->getResults()->removeElement($result);
             }
-
-            // 5. Neues Ergebnis speichern
-            if ($leistung === null || $leistung <= 0) {
-                $conn->executeStatement("DELETE FROM sportabzeichen_exam_results WHERE ep_id = ? AND discipline_id = ?", [$epId, $disciplineId]);
-            } else {
-                $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_results (ep_id, discipline_id, leistung, points, stufe) 
-                    VALUES (?, ?, ?, ?, ?) 
-                    ON CONFLICT (ep_id, discipline_id) DO UPDATE SET leistung = EXCLUDED.leistung, points = EXCLUDED.points, stufe = EXCLUDED.stufe
-                ", [$epId, $disciplineId, $leistung, $points, $stufe]);
+        } else {
+            if (!$result) {
+                $result = new ExamResult();
+                $result->setExamParticipant($ep);
+                $result->setDiscipline($discipline);
+                $this->em->persist($result);
+                $ep->getResults()->add($result);
             }
+            $result->setLeistung($leistung);
+            $result->setPoints($points);
+            // Wenn Entity Feld 'stufe' nicht hat, ignorieren wir es hier im Objekt, aber im JSON geben wir es zurück
+        }
 
-            // 6. SCHWIMMNACHWEIS LOGIK (Setzen UND Aufräumen)
+        // 5. Schwimmnachweis
+        $this->updateSwimmingProof($ep, $discipline, $points);
+
+        $this->em->flush();
+        
+        // 6. Summary berechnen
+        $summary = $this->calculateSummary($ep);
+
+        return new JsonResponse([
+            'status' => 'ok',
+            'points' => $points,
+            'stufe' => $stufe,
+            'kategorie' => $discipline->getKategorie(),
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal'],
+            'has_swimming' => $summary['has_swimming']
+        ]);
+    }
+
+    /**
+     * Zentralisierte Schwimm-Logik
+     */
+    private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
+    {
+        $year = $ep->getExamYear(); // Oder aus $ep->getExam() holen
+        $p = $ep->getParticipant();
+
+        // A) Setzen
+        if ($points > 0 && $disc->isSwimmingCategory()) {
+            $proof = null;
+            foreach ($p->getSwimmingProofs() as $sp) {
+                if ($sp->getExamYear() === $year) {
+                    $proof = $sp; break;
+                }
+            }
+            if (!$proof) {
+                $proof = new SwimmingProof();
+                $proof->setParticipant($p);
+                $proof->setExamYear($year);
+                $this->em->persist($proof);
+            }
             
-            // A) Setzen: Wenn Punkte > 0 und es eine Schwimm-Disziplin ist
-            if ($req && (($req['schwimmnachweis'] ?? false) || str_contains(strtoupper($req['kategorie']), 'SCHWIMM')) && $points > 0) {
-                
-                $validUntil = ($pData['age_year'] <= 17) ? ($pData['exam_year'] + (18 - $pData['age_year'])) : ($pData['exam_year'] + 4);
-                
-                $conn->executeStatement("
-                    INSERT INTO sportabzeichen_swimming_proofs 
-                        (participant_id, confirmed_at, valid_until, requirement_met_via, exam_year) 
-                    VALUES 
-                        (?, CURRENT_DATE, ?, ?, ?) 
-                    ON CONFLICT (participant_id) DO UPDATE SET 
-                        valid_until = EXCLUDED.valid_until, 
-                        requirement_met_via = EXCLUDED.requirement_met_via,
-                        exam_year = EXCLUDED.exam_year, -- WICHTIG: Auch bei Update das Jahr neu setzen
-                        confirmed_at = CURRENT_DATE     -- Datum aktualisieren
-                ", [
-                    (int)$pData['participant_id'], 
-                    $validUntil . "-12-31", 
-                    'DISCIPLINE:' . $disciplineId,
-                    (int)$pData['exam_year'] // <--- Hier fehlte vorher der Parameter für das Jahr!
-                ]);
+            $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
+            $proof->setConfirmedAt(new \DateTime());
+            $proof->setValidUntil(new \DateTime("$validYear-12-31"));
+            $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
+        }
+
+        // B) Löschen (Wenn Schwimmdisziplin gelöscht wurde oder Punkte 0)
+        // Wir prüfen, ob es NOCH gültige Schwimm-Ergebnisse gibt
+        $hasValidSwim = false;
+        foreach ($ep->getResults() as $res) {
+            // Achtung: Wenn wir oben remove() aufgerufen haben, müssen wir prüfen ob das Objekt noch verwaltet wird
+            // Da wir aber oben removeElement gemacht haben, iteriert die Schleife nur über die "bleibenden".
+            if ($res->getPoints() > 0 && $res->getDiscipline()->isSwimmingCategory()) {
+                $hasValidSwim = true;
+                break;
             }
-            
-            // B) Aufräumen: Lösche Schwimmnachweise, die auf einer Disziplin basieren ("DISCIPLINE:ID"),
-            //    für die es kein gültiges Ergebnis mit Punkten > 0 mehr gibt.
-            //    Das passiert, wenn man von Schwimmen auf Laufen wechselt (Schritt 4 löscht das Ergebnis) 
-            //    oder wenn die Leistung auf 0 gesetzt wird (Schritt 5).
-            $currentExamYear = (int)$pData['exam_year'];
+        }
 
-            $conn->executeStatement("
-                DELETE FROM sportabzeichen_swimming_proofs
-                WHERE participant_id = ? 
-                AND requirement_met_via LIKE 'DISCIPLINE:%'
-                
-                -- NEU & SAUBER:
-                -- Wir löschen nur, wenn der Nachweis explizit zu DIESEM Exam-Year gehört.
-                AND exam_year = ?
-                
-                -- Prüfen, ob die zugehörige Disziplin noch Punkte bringt
-                AND split_part(requirement_met_via, ':', 2)::int NOT IN (
-                    SELECT discipline_id FROM sportabzeichen_exam_results 
-                    WHERE ep_id = ? AND points > 0
-                )
-            ", [
-                (int)$pData['participant_id'], 
-                $currentExamYear, // Hier vergleichen wir INT mit INT. Sicherer geht's nicht.
-                $epId
-            ]);
-
-            // 7. Zusammenfassung berechnen
-            $summary = $this->updateParticipantSummary($epId, (int)$pData['participant_id'], $conn);
-
-            return new JsonResponse([
-                'status' => 'ok',
-                'points' => $points,
-                'stufe' => $stufe, // 'none', 'bronze', 'silber', 'gold'
-                'kategorie' => $req['kategorie'] ?? '',
-                'total_points' => $summary['total_points'],
-                'final_medal' => $summary['final_medal'],
-                'has_swimming' => $summary['has_swimming']
-            ]);
-
-        } catch (\Throwable $e) {
-            return new JsonResponse(['error' => $e->getMessage()], 500);
+        if (!$hasValidSwim) {
+            // Lösche proofs, die DISCIPLINE basiert sind UND aus diesem Jahr
+            foreach ($p->getSwimmingProofs() as $sp) {
+                if ($sp->getExamYear() === $year && str_starts_with($sp->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
+                    $this->em->remove($sp);
+                }
+            }
         }
     }
 
-    private function updateParticipantSummary(int $epId, int $participantId, Connection $conn): array 
+    private function calculateSummary(ExamParticipant $ep): array
     {
-        $totalPoints = (int)$conn->fetchOne("
-            SELECT SUM(max_p) FROM (
-                SELECT MAX(res.points) as max_p 
-                FROM sportabzeichen_exam_results res
-                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
-                WHERE res.ep_id = ? AND d.kategorie IN ('Ausdauer','Kraft','Schnelligkeit','Koordination')
-                GROUP BY d.kategorie
-            ) as sub
-        ", [$epId]);
-
-        $hasSwimming = (bool)$conn->fetchOne("SELECT 1 FROM sportabzeichen_swimming_proofs WHERE participant_id = ? AND valid_until >= CURRENT_DATE", [$participantId]);
+        $cats = ['Ausdauer' => 0, 'Kraft' => 0, 'Schnelligkeit' => 0, 'Koordination' => 0];
+        
+        foreach ($ep->getResults() as $res) {
+            $k = $res->getDiscipline()->getKategorie();
+            if (isset($cats[$k]) && $res->getPoints() > $cats[$k]) {
+                $cats[$k] = $res->getPoints();
+            }
+        }
+        
+        $total = array_sum($cats);
+        
+        // Check Swimming
+        $hasSwimming = false;
+        $today = new \DateTime();
+        foreach ($ep->getParticipant()->getSwimmingProofs() as $sp) {
+            if ($sp->getValidUntil() >= $today) {
+                $hasSwimming = true;
+                break;
+            }
+        }
 
         $medal = 'none';
         if ($hasSwimming) {
-            if ($totalPoints >= 11) $medal = 'gold';
-            elseif ($totalPoints >= 8) $medal = 'silber';
-            elseif ($totalPoints >= 4) $medal = 'bronze';
+            if ($total >= 11) $medal = 'gold';
+            elseif ($total >= 8) $medal = 'silber';
+            elseif ($total >= 4) $medal = 'bronze';
         }
 
-        $conn->executeStatement("UPDATE sportabzeichen_exam_participants SET total_points = ?, final_medal = ? WHERE id = ?", [$totalPoints, $medal, $epId]);
+        // Entity update
+        // Falls du in ExamParticipant Setter für totalPoints/finalMedal hast:
+        // $ep->setTotalPoints($total);
+        // $ep->setFinalMedal($medal);
+        // $this->em->flush(); // hier nicht flushen, macht der Caller
 
-        return ['total_points' => $totalPoints, 'final_medal' => $medal, 'has_swimming' => $hasSwimming];
+        // Wir führen ein direktes Update aus, falls Setter fehlen oder um sicher zu sein
+        $this->em->getConnection()->update('sportabzeichen_exam_participants', 
+            ['total_points' => $total, 'final_medal' => $medal], 
+            ['id' => $ep->getId()]
+        );
+
+        return ['total' => $total, 'medal' => $medal, 'has_swimming' => $hasSwimming];
     }
-
-    #[Route('/exam/result/delete', name: 'exam_result_delete', methods: ['POST'])]
-    public function deleteResult(Request $request, Connection $conn): JsonResponse
-    {
-        $content = json_decode($request->getContent(), true);
-        $epId = (int)$content['ep_id'];
-        $disciplineId = (int)$content['discipline_id'];
-
-        // Wir brauchen das exam_year, um zu entscheiden, ob wir den Schwimmnachweis löschen dürfen!
-        $examData = $conn->fetchAssociative("
-            SELECT ep.participant_id, ex.exam_year 
-            FROM sportabzeichen_exam_participants ep
-            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-            WHERE ep.id = ?
-        ", [$epId]);
-
-        if (!$examData) {
-            return new JsonResponse(['error' => 'Not found'], 404);
-        }
-
-        $participantId = (int)$examData['participant_id'];
-        $examYear = (int)$examData['exam_year'];
-
-        // 1. Ergebnis löschen
-        $conn->executeStatement("DELETE FROM sportabzeichen_exam_results WHERE ep_id = ? AND discipline_id = ?", [$epId, $disciplineId]);
-
-        // 2. Schwimmnachweis löschen
-        // Hier gilt die gleiche Logik: Nur löschen, wenn er aus DIESEM Jahr stammt.
-        $conn->executeStatement("
-            DELETE FROM sportabzeichen_swimming_proofs 
-            WHERE participant_id = ? 
-            AND requirement_met_via = ?
-            AND exam_year = ?  -- <--- Hier der neue Check
-        ", [
-            $participantId, 
-            'DISCIPLINE:' . $disciplineId,
-            $examYear
-        ]);
-
-        // 3. Gesamtstatus neu berechnen (mit der vereinfachten Methode)
-        $this->updateParticipantSummary($epId, $participantId, $conn);
-
-        return new JsonResponse(['status' => 'ok']);
-    }
-
+    
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
