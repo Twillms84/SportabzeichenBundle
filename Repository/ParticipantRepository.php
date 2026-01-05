@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace PulsR\SportabzeichenBundle\Repository;
 
-use Doctrine\ORM\EntityRepository; // <--- WICHTIG: Das normale Repository nutzen
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
 use PulsR\SportabzeichenBundle\Entity\Participant;
 
 /**
- * @extends EntityRepository<Participant>
+ * @extends ServiceEntityRepository<Participant>
  */
-class ParticipantRepository extends EntityRepository
+class ParticipantRepository extends ServiceEntityRepository
 {
-    // Wir brauchen hier keinen Konstruktor mehr!
-    // Doctrine kümmert sich automatisch um alles.
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, Participant::class);
+    }
 }
