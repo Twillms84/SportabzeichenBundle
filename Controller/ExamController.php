@@ -30,7 +30,7 @@ final class ExamController extends AbstractPageController
 
         // Holt echte Exam-Objekte, sortiert nach Jahr absteigend
         // Voraussetzungen: In der Entity Exam existieren die Felder 'year' und 'date'
-        $exams = $examRepository->findBy([], ['examYear' => 'DESC', 'date' => 'DESC']);
+        $exams = $examRepository->findBy([], ['examYear' => 'DESC', 'examDate' => 'DESC']);
 
         return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
             'exams' => $exams,
