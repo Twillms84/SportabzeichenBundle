@@ -7,6 +7,8 @@ namespace PulsR\SportabzeichenBundle\Entity;
 use Doctrine\ORM\Mapping as ORM;
 use IServ\CoreBundle\Entity\User;
 use IServ\CrudBundle\Entity\CrudInterface;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 
 #[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\ParticipantRepository')]
 #[ORM\Table(name: 'sportabzeichen_participants')]
@@ -27,7 +29,21 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'string', length: 10, nullable: true)]
     private ?string $geschlecht = null; 
 
-    // KEINE Spalten für Vorname, Nachname, Klasse!
+    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: SwimmingProof::class, cascade: ['remove'])]
+    private Collection $swimmingProofs;
+
+    public function __construct()
+    {
+        $this->swimmingProofs = new ArrayCollection();
+    }
+
+    /**
+     * @return Collection<int, SwimmingProof>
+     */
+    public function getSwimmingProofs(): Collection
+    {
+        return $this->swimmingProofs;
+    }
 
     // ------------------------------------
     // GETTER & SETTER
