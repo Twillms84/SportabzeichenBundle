@@ -186,27 +186,27 @@ final class ExamResultController extends AbstractPageController
             //    für die es kein gültiges Ergebnis mit Punkten > 0 mehr gibt.
             //    Das passiert, wenn man von Schwimmen auf Laufen wechselt (Schritt 4 löscht das Ergebnis) 
             //    oder wenn die Leistung auf 0 gesetzt wird (Schritt 5).
-            $currentExamYear = (int)$pData['exam_year']; // Das Jahr der aktuellen Prüfung (z.B. 2026)
+            $currentExamYear = (int)$pData['exam_year'];
 
             $conn->executeStatement("
                 DELETE FROM sportabzeichen_swimming_proofs
                 WHERE participant_id = ? 
                 AND requirement_met_via LIKE 'DISCIPLINE:%'
                 
-                -- WICHTIGSTE ZEILE:
-                -- Vergleiche das Jahr des Nachweises (confirmed_at) mit dem Jahr des Sportfestes.
-                -- Ist der Nachweis von 2025, aber wir sind im Exam 2026 -> Bedingung FALSE -> NICHT löschen!
-                -- Ist der Nachweis von 2026 und wir sind im Exam 2026 -> Bedingung TRUE -> Aufräumen erlaubt.
+                -- SICHERHEITSSCHALTER:
+                -- Nur löschen, wenn der Nachweis auch wirklich in DIESEM Jahr erstellt wurde.
+                -- Nachweise aus Vorjahren (z.B. 2025) werden hier ignoriert (= behalten).
                 AND EXTRACT(YEAR FROM confirmed_at) = ?
                 
-                -- Prüfen, ob die zugehörige Disziplin noch Punkte bringt
+                -- Prüfen, ob die Disziplin, die den Nachweis erzeugt hat, 
+                -- aktuell noch gültige Punkte liefert.
                 AND split_part(requirement_met_via, ':', 2)::int NOT IN (
                     SELECT discipline_id FROM sportabzeichen_exam_results 
                     WHERE ep_id = ? AND points > 0
                 )
             ", [
                 (int)$pData['participant_id'], 
-                $currentExamYear, // Hier übergeben wir strikt das Jahr des Sportfestes (2026)
+                $currentExamYear, 
                 $epId
             ]);
 
@@ -261,22 +261,43 @@ final class ExamResultController extends AbstractPageController
         $epId = (int)$content['ep_id'];
         $disciplineId = (int)$content['discipline_id'];
 
-        $participantId = $conn->fetchOne("SELECT participant_id FROM sportabzeichen_exam_participants WHERE id = ?", [$epId]);
+        // Wir brauchen das exam_year, um zu entscheiden, ob wir den Schwimmnachweis löschen dürfen!
+        $examData = $conn->fetchAssociative("
+            SELECT ep.participant_id, ex.exam_year 
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
+            WHERE ep.id = ?
+        ", [$epId]);
+
+        if (!$examData) {
+            return new JsonResponse(['error' => 'Not found'], 404);
+        }
+
+        $participantId = (int)$examData['participant_id'];
+        $examYear = (int)$examData['exam_year'];
 
         // 1. Ergebnis löschen
         $conn->executeStatement("DELETE FROM sportabzeichen_exam_results WHERE ep_id = ? AND discipline_id = ?", [$epId, $disciplineId]);
 
-        // 2. Schwimmnachweis löschen, FALLS er von genau dieser Disziplin stammte
+        // 2. Schwimmnachweis löschen
+        // Hier gilt die gleiche Logik: Nur löschen, wenn er aus DIESEM Jahr stammt.
         $conn->executeStatement("
             DELETE FROM sportabzeichen_swimming_proofs 
-            WHERE participant_id = ? AND requirement_met_via = ?
-        ", [$participantId, 'DISCIPLINE:' . $disciplineId]);
+            WHERE participant_id = ? 
+            AND requirement_met_via = ?
+            AND EXTRACT(YEAR FROM confirmed_at) = ?
+        ", [
+            $participantId, 
+            'DISCIPLINE:' . $disciplineId,
+            $examYear // <--- Das schützt den Nachweis von 2025!
+        ]);
 
-        // 3. Gesamtstatus neu berechnen
-        $this->updateParticipantSummary($epId, (int)$participantId, $conn);
+        // 3. Gesamtstatus neu berechnen (mit der vereinfachten Methode)
+        $this->updateParticipantSummary($epId, $participantId, $conn);
 
         return new JsonResponse(['status' => 'ok']);
     }
+    
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
