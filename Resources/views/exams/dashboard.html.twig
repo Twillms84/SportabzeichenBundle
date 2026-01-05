@@ -9,7 +9,6 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{{ 'Verwaltung & Ergebnisse'|trans }}</h2>
-        {# HINWEIS: Diese Route muss in deinem ExamController existieren #}
         <a class="btn btn-primary" href="{{ path('sportabzeichen_exams_new') }}">
             {{ icon('plus') }} {{ 'Neue Prüfung anlegen'|trans }}
         </a>
@@ -34,30 +33,33 @@
                 <tbody>
                     {% for exam in exams %}
                         <tr>
-                            <td class="fw-bold">{{ exam.exam_year }}</td>
-                            <td>{{ exam.exam_name|default('Ohne Namen') }}</td>
-                            <td>{{ exam.exam_date ? exam.exam_date|date('d.m.Y') : '-' }}</td>
+                            {# ANPASSUNG: exam.year statt exam.exam_year #}
+                            <td class="fw-bold">{{ exam.year }}</td>
+                            
+                            {# ANPASSUNG: exam.name statt exam.exam_name #}
+                            <td>{{ exam.name|default('Ohne Namen') }}</td>
+                            
+                            {# ANPASSUNG: exam.date statt exam.exam_date #}
+                            <td>{{ exam.date ? exam.date|date('d.m.Y') : '-' }}</td>
+                            
                             <td class="text-end">
                                 <div class="btn-group">
                                     
-                                    {# --- KORRIGIERT: Link zur Matrix --- #}
-                                    {# Basiert auf ExamResultController::index -> name="index" #}
+                                    {# Ergebnisse erfassen #}
                                     <a href="{{ path('sportabzeichen_results_index', { 'examId': exam.id }) }}" 
                                        class="btn btn-sm btn-success"
                                        title="{{ 'Ergebnisse erfassen'|trans }}">
                                         {{ icon('table') }} Ergebnisse
                                     </a>
 
-                                    {# --- HINWEIS: Link zum Bearbeiten --- #}
-                                    {# Diese Route muss im ExamController sein #}
+                                    {# Bearbeiten #}
                                     <a href="{{ path('sportabzeichen_exams_edit', { 'id': exam.id }) }}" 
                                        class="btn btn-sm btn-secondary"
                                        title="{{ 'Stammdaten bearbeiten'|trans }}">
                                         {{ icon('pencil') }}
                                     </a>
 
-                                    {# --- HINWEIS: Link zum Löschen --- #}
-                                    {# Diese Route muss im ExamController sein #}
+                                    {# Löschen #}
                                     <form method="post" 
                                           action="{{ path('sportabzeichen_exams_delete', {'id': exam.id}) }}" 
                                           style="display: inline-block;"
