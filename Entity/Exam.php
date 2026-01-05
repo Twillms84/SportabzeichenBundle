@@ -6,7 +6,6 @@ namespace PulsR\SportabzeichenBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
 #[ORM\Table(name: 'sportabzeichen_exams')]
 #[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\ExamRepository')]
 class Exam
