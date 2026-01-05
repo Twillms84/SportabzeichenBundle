@@ -174,12 +174,26 @@ final class ExamResultController extends AbstractPageController
             
             // A) Setzen: Wenn Punkte > 0 und es eine Schwimm-Disziplin ist
             if ($req && (($req['schwimmnachweis'] ?? false) || str_contains(strtoupper($req['kategorie']), 'SCHWIMM')) && $points > 0) {
+                
                 $validUntil = ($pData['age_year'] <= 17) ? ($pData['exam_year'] + (18 - $pData['age_year'])) : ($pData['exam_year'] + 4);
+                
+                // NEU: exam_year wird mit gespeichert!
                 $conn->executeStatement("
-                    INSERT INTO sportabzeichen_swimming_proofs (participant_id, confirmed_at, valid_until, requirement_met_via) 
-                    VALUES (?, CURRENT_DATE, ?, ?) 
-                    ON CONFLICT (participant_id) DO UPDATE SET valid_until = EXCLUDED.valid_until, requirement_met_via = EXCLUDED.requirement_met_via
-                ", [(int)$pData['participant_id'], $validUntil . "-12-31", 'DISCIPLINE:' . $disciplineId]);
+                    INSERT INTO sportabzeichen_swimming_proofs 
+                        (participant_id, confirmed_at, valid_until, requirement_met_via, exam_year) 
+                    VALUES 
+                        (?, CURRENT_DATE, ?, ?, ?) 
+                    ON CONFLICT (participant_id) DO UPDATE SET 
+                        valid_until = EXCLUDED.valid_until, 
+                        requirement_met_via = EXCLUDED.requirement_met_via,
+                        exam_year = EXCLUDED.exam_year, -- Auch beim Update das Jahr aktualisieren
+                        confirmed_at = CURRENT_DATE     -- Datum aktualisieren, da neuer Nachweis
+                ", [
+                    (int)$pData['participant_id'], 
+                    $validUntil . "-12-31", 
+                    'DISCIPLINE:' . $disciplineId,
+                    (int)$pData['exam_year'] // <--- Das Neue Feld
+                ]);
             }
             
             // B) Aufräumen: Lösche Schwimmnachweise, die auf einer Disziplin basieren ("DISCIPLINE:ID"),
@@ -193,20 +207,18 @@ final class ExamResultController extends AbstractPageController
                 WHERE participant_id = ? 
                 AND requirement_met_via LIKE 'DISCIPLINE:%'
                 
-                -- SICHERHEITSSCHALTER:
-                -- Nur löschen, wenn der Nachweis auch wirklich in DIESEM Jahr erstellt wurde.
-                -- Nachweise aus Vorjahren (z.B. 2025) werden hier ignoriert (= behalten).
-                AND EXTRACT(YEAR FROM confirmed_at) = ?
+                -- NEU & SAUBER:
+                -- Wir löschen nur, wenn der Nachweis explizit zu DIESEM Exam-Year gehört.
+                AND exam_year = ?
                 
-                -- Prüfen, ob die Disziplin, die den Nachweis erzeugt hat, 
-                -- aktuell noch gültige Punkte liefert.
+                -- Prüfen, ob die zugehörige Disziplin noch Punkte bringt
                 AND split_part(requirement_met_via, ':', 2)::int NOT IN (
                     SELECT discipline_id FROM sportabzeichen_exam_results 
                     WHERE ep_id = ? AND points > 0
                 )
             ", [
                 (int)$pData['participant_id'], 
-                $currentExamYear, 
+                $currentExamYear, // Hier vergleichen wir INT mit INT. Sicherer geht's nicht.
                 $epId
             ]);
 
@@ -285,11 +297,11 @@ final class ExamResultController extends AbstractPageController
             DELETE FROM sportabzeichen_swimming_proofs 
             WHERE participant_id = ? 
             AND requirement_met_via = ?
-            AND EXTRACT(YEAR FROM confirmed_at) = ?
+            AND exam_year = ?  -- <--- Hier der neue Check
         ", [
             $participantId, 
             'DISCIPLINE:' . $disciplineId,
-            $examYear // <--- Das schützt den Nachweis von 2025!
+            $examYear
         ]);
 
         // 3. Gesamtstatus neu berechnen (mit der vereinfachten Methode)
@@ -297,7 +309,7 @@ final class ExamResultController extends AbstractPageController
 
         return new JsonResponse(['status' => 'ok']);
     }
-    
+
     // --- NEUE DRUCKFUNKTION ---
     // Route angepasst: Enthält jetzt {examId}, damit wir wissen, WELCHES Sportfest gedruckt wird.
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
