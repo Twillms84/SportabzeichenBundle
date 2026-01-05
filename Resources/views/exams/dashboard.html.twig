@@ -34,13 +34,13 @@
                     {% for exam in exams %}
                         <tr>
                             {# ANPASSUNG: exam.year statt exam.exam_year #}
-                            <td class="fw-bold">{{ exam.year }}</td>
+                            <td class="fw-bold">{{ exam.examYear }}</td>
                             
                             {# ANPASSUNG: exam.name statt exam.exam_name #}
-                            <td>{{ exam.name|default('Ohne Namen') }}</td>
+                            <td>{{ exam.examName|default('Ohne Namen') }}</td>
                             
                             {# ANPASSUNG: exam.date statt exam.exam_date #}
-                            <td>{{ exam.date ? exam.date|date('d.m.Y') : '-' }}</td>
+                            <td>{{ exam.date ? exam.examDate|date('d.m.Y') : '-' }}</td>
                             
                             <td class="text-end">
                                 <div class="btn-group">
