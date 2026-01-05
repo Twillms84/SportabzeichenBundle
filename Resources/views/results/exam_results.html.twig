@@ -1,0 +1,35 @@
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
+    {# Kleines Inline-Script, um das Label beim Umschalten visuell sofort anzupassen (für bessere UX) #}
+    <script>
+        document.addEventListener('change', function(e) {
+            if (e.target.matches('[data-type="swimming"]')) {
+                const epId = e.target.getAttribute('data-ep-id');
+                const label = document.getElementById('swimming-label-' + epId);
+                if (label) {
+                    if (e.target.checked) {
+                        label.textContent = 'Schwimmen: OK';
+                        label.classList.remove('text-danger');
+                        label.classList.add('text-success');
+                    } else {
+                        label.textContent = 'Schwimmen: Fehlt';
+                        label.classList.remove('text-success');
+                        label.classList.add('text-danger');
+                    }
+                }
+            }
+        });
+    </script>
+{% endblock %}
