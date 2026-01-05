@@ -2,8 +2,7 @@
 
 namespace PulsR\SportabzeichenBundle\Repository;
 
-use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
-use Doctrine\Persistence\ManagerRegistry;
+use Doctrine\ORM\EntityRepository; // <--- WICHTIG: Das normale Repository nutzen
 use PulsR\SportabzeichenBundle\Entity\Discipline;
 
 /**
