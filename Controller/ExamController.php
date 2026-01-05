@@ -5,30 +5,32 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
+use PulsR\SportabzeichenBundle\Entity\Exam;
+use PulsR\SportabzeichenBundle\Repository\ExamRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
- * Zentrale Verwaltung der Prüfungen (CRUD: Create, Read, Update, Delete)
+ * Zentrale Verwaltung der Prüfungen
  */
 #[Route('/sportabzeichen/exams', name: 'sportabzeichen_exams_')]
 final class ExamController extends AbstractPageController
 {
     /**
      * DASHBOARD: Liste aller Prüfungen
+     * Hier nutzen wir jetzt das Repository, damit wir Objekte zurückbekommen!
      */
     #[Route('/', name: 'dashboard')]
-    public function index(Connection $conn): Response
+    public function index(ExamRepository $examRepository): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        $exams = $conn->fetchAllAssociative(
-            'SELECT e.id, e.exam_name, e.exam_year, e.exam_date
-             FROM public.sportabzeichen_exams e
-             ORDER BY e.exam_year DESC'
-        );
+        // Holt echte Exam-Objekte, sortiert nach Jahr absteigend
+        // Voraussetzungen: In der Entity Exam existieren die Felder 'year' und 'date'
+        $exams = $examRepository->findBy([], ['year' => 'DESC', 'date' => 'DESC']);
 
         return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
             'exams' => $exams,
@@ -37,17 +39,13 @@ final class ExamController extends AbstractPageController
 
     /**
      * CREATE: Neue Prüfung erstellen
-     * (Integriert die Logik aus deinem ExamCreateController)
-     */
-    /**
-     * CREATE: Neue Prüfung erstellen
      */
     #[Route('/new', name: 'new')]
-    public function new(Request $request, Connection $conn): Response
+    public function new(Request $request, EntityManagerInterface $em, Connection $conn): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN'); // Oder dein Recht
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // Klassen laden
+        // Klassen laden (weiterhin per SQL, da Zugriff auf IServ 'users' Tabelle)
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
@@ -55,7 +53,6 @@ final class ExamController extends AbstractPageController
         ");
 
         if ($request->isMethod('POST')) {
-            $conn->beginTransaction();
             try {
                 $name = trim($request->request->get('exam_name'));
                 $year = (int)$request->request->get('exam_year');
@@ -63,26 +60,27 @@ final class ExamController extends AbstractPageController
                 // Jahr normalisieren
                 if ($year < 100) $year += 2000;
                 
-                $date = $request->request->get('exam_date') ?: null;
+                $dateStr = $request->request->get('exam_date');
+                $date = $dateStr ? new \DateTime($dateStr) : null;
                 
-                // HIER IST DIE ÄNDERUNG: Wir holen ein Array ('classes')
-                // Wir nutzen $request->request->all(), um sicher auf das Array zuzugreifen
                 $postData = $request->request->all();
                 $selectedClasses = $postData['classes'] ?? []; 
 
-                // 1. Prüfung anlegen
-                $conn->insert('sportabzeichen_exams', [
-                    'exam_name' => $name,
-                    'exam_year' => $year,
-                    'exam_date' => $date,
-                ]);
-                $examId = (int)$conn->lastInsertId();
+                // 1. Prüfung als Entity anlegen
+                $exam = new Exam();
+                $exam->setName($name);
+                $exam->setYear($year);
+                $exam->setDate($date);
 
-                // 2. Schleife über alle gewählten Klassen
+                $em->persist($exam);
+                $em->flush(); // Jetzt hat $exam eine ID
+
+                // 2. Teilnehmer importieren (Hybrid-Lösung: SQL Helper nutzen für Performance)
                 $count = 0;
                 if (!empty($selectedClasses) && is_array($selectedClasses)) {
                     foreach ($selectedClasses as $singleClass) {
-                        $this->importParticipantsFromClass($conn, $examId, $year, $singleClass);
+                        // Wir übergeben die ID des gerade erstellten Objekts
+                        $this->importParticipantsFromClass($conn, $exam->getId(), $year, $singleClass);
                         $count++;
                     }
                     $this->addFlash('success', sprintf('Prüfung angelegt und Teilnehmer aus %d Klassen/Gruppen importiert.', $count));
@@ -90,11 +88,9 @@ final class ExamController extends AbstractPageController
                     $this->addFlash('success', 'Prüfung erfolgreich angelegt (ohne Teilnehmer).');
                 }
 
-                $conn->commit();
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
-                $conn->rollBack();
                 $this->addFlash('error', 'Fehler beim Anlegen: ' . $e->getMessage());
             }
         }
@@ -106,26 +102,27 @@ final class ExamController extends AbstractPageController
 
     /**
      * EDIT: Prüfung bearbeiten
+     * Symfony lädt das Exam-Objekt automatisch anhand der {id} in der URL
      */
     #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
-    public function edit(int $id, Request $request, Connection $conn): Response
+    public function edit(Exam $exam, Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
-        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
-        if (!$exam) throw $this->createNotFoundException();
 
         if ($request->isMethod('POST')) {
             $name = trim($request->request->get('exam_name'));
             $year = (int)$request->request->get('exam_year');
             if ($year < 100) $year += 2000;
-            $date = $request->request->get('exam_date') ?: null;
+            
+            $dateStr = $request->request->get('exam_date');
+            $date = $dateStr ? new \DateTime($dateStr) : null;
 
-            $conn->update('sportabzeichen_exams', [
-                'exam_name' => $name,
-                'exam_year' => $year,
-                'exam_date' => $date
-            ], ['id' => $id]);
+            // Setter nutzen
+            $exam->setName($name);
+            $exam->setYear($year);
+            $exam->setDate($date);
+
+            $em->flush(); // Speichert die Änderungen
 
             $this->addFlash('success', 'Änderungen gespeichert.');
             return $this->redirectToRoute('sportabzeichen_exams_dashboard');
@@ -140,52 +137,44 @@ final class ExamController extends AbstractPageController
      * DELETE: Prüfung löschen
      */
     #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]
-    public function delete(int $id, Request $request, Connection $conn): Response
+    public function delete(Exam $exam, Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // CSRF Token Check (Sicherheit)
+        // CSRF Token Check
         $token = $request->request->get('_token');
-        if (!$this->isCsrfTokenValid('delete' . $id, $token)) {
+        if (!$this->isCsrfTokenValid('delete' . $exam->getId(), $token)) {
             $this->addFlash('error', 'Ungültiger Sicherheits-Token.');
             return $this->redirectToRoute('sportabzeichen_exams_dashboard');
         }
 
-        $conn->beginTransaction();
         try {
-            // 1. Ergebnisse löschen
-            $conn->executeStatement("
-                DELETE FROM sportabzeichen_exam_results 
-                WHERE ep_id IN (SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?)
-            ", [$id]);
+            // Löschen über den EntityManager.
+            // Hinweis: Falls Datenbank-Foreign-Keys auf CASCADE stehen oder
+            // die Entity cascade={"remove"} hat, werden Ergebnisse automatisch gelöscht.
+            $em->remove($exam);
+            $em->flush();
 
-            // 2. Teilnehmer-Verknüpfungen löschen
-            $conn->executeStatement("DELETE FROM sportabzeichen_exam_participants WHERE exam_id = ?", [$id]);
-
-            // 3. Prüfung selbst löschen
-            $conn->executeStatement("DELETE FROM sportabzeichen_exams WHERE id = ?", [$id]);
-
-            $conn->commit();
-            $this->addFlash('success', 'Prüfung und alle zugehörigen Ergebnisse wurden gelöscht.');
-
+            $this->addFlash('success', 'Prüfung wurde gelöscht.');
         } catch (\Exception $e) {
-            $conn->rollBack();
             $this->addFlash('error', 'Fehler beim Löschen: ' . $e->getMessage());
         }
 
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    // --- HILFSMETHODE ---
+    // --- HILFSMETHODE (Bleibt vorerst SQL für Performance beim User-Import) ---
 
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
+        // 1. IServ User holen
         $users = $conn->fetchAllAssociative("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL
         ", [$class]);
 
         foreach ($users as $u) {
+            // 2. Entsprechenden Sportabzeichen-Participant suchen
             $participant = $conn->fetchAssociative("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$u['importid']]);
@@ -194,6 +183,7 @@ final class ExamController extends AbstractPageController
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
+            // 3. Verknüpfung anlegen
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
