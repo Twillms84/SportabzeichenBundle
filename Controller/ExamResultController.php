@@ -177,7 +177,6 @@ final class ExamResultController extends AbstractPageController
                 
                 $validUntil = ($pData['age_year'] <= 17) ? ($pData['exam_year'] + (18 - $pData['age_year'])) : ($pData['exam_year'] + 4);
                 
-                // NEU: exam_year wird mit gespeichert!
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_swimming_proofs 
                         (participant_id, confirmed_at, valid_until, requirement_met_via, exam_year) 
@@ -186,13 +185,13 @@ final class ExamResultController extends AbstractPageController
                     ON CONFLICT (participant_id) DO UPDATE SET 
                         valid_until = EXCLUDED.valid_until, 
                         requirement_met_via = EXCLUDED.requirement_met_via,
-                        exam_year = EXCLUDED.exam_year, -- Auch beim Update das Jahr aktualisieren
-                        confirmed_at = CURRENT_DATE     -- Datum aktualisieren, da neuer Nachweis
+                        exam_year = EXCLUDED.exam_year, -- WICHTIG: Auch bei Update das Jahr neu setzen
+                        confirmed_at = CURRENT_DATE     -- Datum aktualisieren
                 ", [
                     (int)$pData['participant_id'], 
                     $validUntil . "-12-31", 
                     'DISCIPLINE:' . $disciplineId,
-                    (int)$pData['exam_year'] // <--- Das Neue Feld
+                    (int)$pData['exam_year'] // <--- Hier fehlte vorher der Parameter für das Jahr!
                 ]);
             }
             
