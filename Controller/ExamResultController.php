@@ -190,12 +190,14 @@ final class ExamResultController extends AbstractPageController
                 DELETE FROM sportabzeichen_swimming_proofs
                 WHERE participant_id = ? 
                 AND requirement_met_via LIKE 'DISCIPLINE:%'
+                -- WICHTIG: Nur löschen, wenn der Nachweis auch in diesem Jahr erstellt wurde:
+                AND EXTRACT(YEAR FROM confirmed_at) = ?
+                
                 AND split_part(requirement_met_via, ':', 2)::int NOT IN (
                     SELECT discipline_id FROM sportabzeichen_exam_results 
                     WHERE ep_id = ? AND points > 0
                 )
-            ", [(int)$pData['participant_id'], $epId]);
-
+            ", [(int)$pData['participant_id'], (int)$pData['exam_year'], $epId]);
 
             // 7. Zusammenfassung berechnen
             $summary = $this->updateParticipantSummary($epId, (int)$pData['participant_id'], $conn);
