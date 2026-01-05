@@ -45,8 +45,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var id = $button.data('id');
             var name = $button.data('name');
             var dob = $button.data('dob');
-            var gender = $button.data('gender'); // MALE, FEMALE, DIVERSE
-
+            $modal.find('#modalGender').val(gender);
+            
             // URL anpassen
             var urlTemplate = $form.data('url-template');
             if (urlTemplate && id) {
