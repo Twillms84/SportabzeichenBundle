@@ -16,9 +16,9 @@ services:
         public: true
         tags: ['controller.service_arguments']
 
-    PulsR\SportabzeichenBundle\Crud\:
-        resource: '../../Crud/*'
-        public: true
-        tags: ['iserv.crud']
-        autowire: true
-        autoconfigure: true
+ #   PulsR\SportabzeichenBundle\Crud\:
+ #       resource: '../../Crud/*'
+ #       public: true
+ #       tags: ['iserv.crud']
+ #       autowire: true
+ #       autoconfigure: true
