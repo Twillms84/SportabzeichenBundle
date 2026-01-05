@@ -186,22 +186,27 @@ final class ExamResultController extends AbstractPageController
             //    für die es kein gültiges Ergebnis mit Punkten > 0 mehr gibt.
             //    Das passiert, wenn man von Schwimmen auf Laufen wechselt (Schritt 4 löscht das Ergebnis) 
             //    oder wenn die Leistung auf 0 gesetzt wird (Schritt 5).
+            $currentExamYear = (int)$pData['exam_year']; // Das Jahr der aktuellen Prüfung (z.B. 2026)
+
             $conn->executeStatement("
                 DELETE FROM sportabzeichen_swimming_proofs
                 WHERE participant_id = ? 
                 AND requirement_met_via LIKE 'DISCIPLINE:%'
                 
-                -- HIER IST DER SCHUTZ-MECHANISMUS:
-                -- Lösche nur, wenn das Bestätigungsdatum im selben Jahr liegt wie die aktuelle Prüfung.
+                -- WICHTIGSTE ZEILE:
+                -- Vergleiche das Jahr des Nachweises (confirmed_at) mit dem Jahr des Sportfestes.
+                -- Ist der Nachweis von 2025, aber wir sind im Exam 2026 -> Bedingung FALSE -> NICHT löschen!
+                -- Ist der Nachweis von 2026 und wir sind im Exam 2026 -> Bedingung TRUE -> Aufräumen erlaubt.
                 AND EXTRACT(YEAR FROM confirmed_at) = ?
                 
+                -- Prüfen, ob die zugehörige Disziplin noch Punkte bringt
                 AND split_part(requirement_met_via, ':', 2)::int NOT IN (
                     SELECT discipline_id FROM sportabzeichen_exam_results 
                     WHERE ep_id = ? AND points > 0
                 )
             ", [
                 (int)$pData['participant_id'], 
-                (int)$pData['exam_year'], // Das muss z.B. 2026 sein
+                $currentExamYear, // Hier übergeben wir strikt das Jahr des Sportfestes (2026)
                 $epId
             ]);
 
