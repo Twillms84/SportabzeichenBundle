@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace PulsR\SportabzeichenBundle\Repository;
 
-use Doctrine\ORM\EntityRepository; // <--- WICHTIG: Das normale Repository nutzen
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
 use PulsR\SportabzeichenBundle\Entity\Exam;
 
 /**
- * @extends EntityRepository<Exam>
+ * @extends ServiceEntityRepository<Exam>
  */
-class ExamRepository extends EntityRepository
+class ExamRepository extends ServiceEntityRepository
 {
-    // Hier könnten wir später spezielle Suchfunktionen einbauen, z.B.:
-    // public function findRecentExams(int $limit): array { ... }
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, Exam::class);
+    }
 }

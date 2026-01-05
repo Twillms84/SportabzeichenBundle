@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace PulsR\SportabzeichenBundle\Repository;
 
-use Doctrine\ORM\EntityRepository; // <--- WICHTIG: Das normale Repository nutzen
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
 use PulsR\SportabzeichenBundle\Entity\Discipline;
 
 /**
- * @extends EntityRepository<Discipline>
+ * @extends ServiceEntityRepository<Discipline>
  */
-class DisciplineRepository extends EntityRepository
+class DisciplineRepository extends ServiceEntityRepository
 {
-
-    // Hier können wir später spezielle Abfragen einbauen, z.B.:
-    // "Gib mir alle Disziplinen für Kategorie 'Kraft'"
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, Discipline::class);
+    }
 }
