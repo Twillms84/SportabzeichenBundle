@@ -16,10 +16,6 @@ services:
         public: true
         tags: ['controller.service_arguments']
 
-    PulsR\SportabzeichenBundle\Repository\:
-        resource: '../../Repository'
-        tags: ['doctrine.repository_service']
-
  #   PulsR\SportabzeichenBundle\Crud\:
  #       resource: '../../Crud/*'
  #       public: true
