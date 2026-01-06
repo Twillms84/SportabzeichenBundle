@@ -15,9 +15,6 @@ class ExamResult
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
-    #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
-    private string $importId = '';
-
     #[ORM\ManyToOne(targetEntity: ExamParticipant::class, inversedBy: 'results')]
     #[ORM\JoinColumn(name: 'ep_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private ?ExamParticipant $examParticipant = null;
@@ -28,6 +25,9 @@ class ExamResult
 
     #[ORM\Column(type: 'float')]
     private ?float $leistung = null; // Als Float speichern, z.B. 12.5 (Sekunden) oder 4.20 (Meter)
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $stufe = null;
 
     #[ORM\Column(type: 'integer')]
     private ?int $points = null; // 0, 1, 2, 3
