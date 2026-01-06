@@ -25,16 +25,16 @@ class RequirementRepository extends ServiceEntityRepository
     public function findMatchingRequirement(Discipline $discipline, int $year, string $gender, int $age): ?Requirement
     {
         return $this->createQueryBuilder('r')
-            ->where('r.discipline = :disc')
-            ->andWhere('r.year = :year')
-            ->andWhere('r.gender = :gender')
-            ->andWhere(':age BETWEEN r.minAge AND r.maxAge')
-            ->setParameters([
-                'disc'   => $discipline,
-                'year'   => $year,
-                'gender' => $gender,
-                'age'    => $age,
-            ])
+        ->where('r.discipline = :disc')
+        ->andWhere('r.jahr = :jahr') // DB-Spalte 'jahr'
+        ->andWhere('r.geschlecht = :gender') // DB-Spalte 'geschlecht'
+        ->andWhere(':age BETWEEN r.age_min AND r.age_max') // DB-Spalten 'age_min/max'
+        ->setParameters([
+            'disc'   => $discipline,
+            'jahr'   => $year,
+            'gender' => $gender,
+            'age'    => $age,
+        ])
             ->getQuery()
             ->getOneOrNullResult();
     }
