@@ -24,7 +24,7 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
     private string $importId = '';
 
-    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\ManyToOne(targetEntity: User::class, fetch: 'LAZY')] // Wichtig: LAZY
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $user = null;
 
