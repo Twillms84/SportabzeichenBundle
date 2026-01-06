@@ -163,11 +163,12 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
+        // 1. Participant laden (inklusive Exam für das Jahr)
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'e') // 'e' für das Exam hinzugefügt
+            ->select('ep', 'p', 'e')
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
-            ->join('ep.exam', 'e')   // Join zum Exam, um das Jahr zu bekommen
+            ->join('ep.exam', 'e')
             ->where('ep.id = :id')
             ->setParameter('id', (int)($data['ep_id'] ?? 0))
             ->getQuery()
@@ -176,14 +177,14 @@ final class ExamResultController extends AbstractPageController
 
         if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
-        // Jetzt sind diese Werte sicher verfügbar:
-        $year = $ep->getExam()->getYear(); // Greift auf das mitgeladene 'e' zu
-        $age  = $ep->getAgeYear();        // Kommt direkt aus 'ep' (siehe deine Tabellenstruktur)
+        // Werte sicherstellen
+        $year = $ep->getExam()->getYear();
+        $age  = $ep->getAgeYear();
+
+        // Leistung aus dem Request holen (löst den "Undefined variable"-Fehler)
+        $leistung = isset($data['value']) ? (float)str_replace(',', '.', (string)$data['value']) : null;
 
         $participant = $ep->getParticipant();
-
-        // 2. Geschlecht bestimmen (jetzt über dein neues redundantes Feld oder lokales Mapping)
-        // Nutze hier NICHT getParticipant()->getUser()!
         $rawGender = $participant->getGender() ?? 'W'; 
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
 
@@ -193,12 +194,13 @@ final class ExamResultController extends AbstractPageController
         if (!$discipline) {
             return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
         }
-        // 3. Erst jetzt kommt dein Requirement-Query (Zeile 173)
+
+        // Requirement-Abfrage (Nutzt jetzt die lokalen Variablen $year und $age)
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
             $discipline,
-            $ep->getExamYear(),
+            (int)$year,
             $gender,
-            $ep->getAgeYear()
+            (int)$age
         );
 
         // 2. Punkte berechnen
@@ -208,23 +210,23 @@ final class ExamResultController extends AbstractPageController
         if ($req && $leistung !== null && $leistung > 0) {
             $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
             
-            // ANPASSUNG: Getter in Englisch
-            $gold = (float)str_replace(',', '.', (string)$req->getGold());
-            $silber = (float)str_replace(',', '.', (string)$req->getSilver()); // getSilber -> getSilver
-            $bronze = (float)str_replace(',', '.', (string)$req->getBronze());
+            // Gold/Silber/Bronze Werte holen
+            $gold = (float)$req->getGold();
+            $silber = (float)$req->getSilver();
+            $bronze = (float)$req->getBronze();
 
-            if ($calc === 'SMALLER') {
+            if ($calc === 'SMALLER') { // z.B. Laufen (Zeit)
                 if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
                 elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
                 elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
-            } else {
+            } else { // z.B. Weitsprung (Weite)
                 if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
                 elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
                 elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
             }
         }
 
-        // 3. Konflikte bereinigen
+        // 3. Konflikte bereinigen (andere Disziplinen in derselben Kategorie löschen)
         if ($req) {
             $cat = $discipline->getCategory();
             foreach ($ep->getResults() as $res) {
@@ -236,12 +238,14 @@ final class ExamResultController extends AbstractPageController
         }
 
         // 4. Speichern
-        $result = $this->em->getRepository(ExamResult::class)->findOneBy(['examParticipant' => $ep, 'discipline' => $discipline]);
+        $result = $this->em->getRepository(ExamResult::class)->findOneBy([
+            'examParticipant' => $ep, 
+            'discipline' => $discipline
+        ]);
         
         if ($leistung === null || $leistung <= 0) {
             if ($result) {
                 $this->em->remove($result);
-                $ep->getResults()->removeElement($result);
             }
         } else {
             if (!$result) {
@@ -249,15 +253,14 @@ final class ExamResultController extends AbstractPageController
                 $result->setExamParticipant($ep);
                 $result->setDiscipline($discipline);
                 $this->em->persist($result);
-                $ep->getResults()->add($result);
             }
-            $result->setLeistung($leistung);
+            // Achte darauf, ob deine Methode setLeistung() oder setValue() heißt!
+            $result->setLeistung($leistung); 
             $result->setPoints($points);
         }
 
-        // 5. Schwimmnachweis
+        // 5. Schwimmnachweis & Datenbank-Update
         $this->updateSwimmingProof($ep, $discipline, $points);
-
         $this->em->flush();
         
         // 6. Summary berechnen
@@ -273,7 +276,6 @@ final class ExamResultController extends AbstractPageController
             'has_swimming' => $summary['has_swimming']
         ]);
     }
-
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
         $year = $ep->getExamYear(); 
