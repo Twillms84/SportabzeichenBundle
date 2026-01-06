@@ -162,21 +162,17 @@ final class ExamResultController extends AbstractPageController
     public function saveExamResult(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        
-        // 1. Participant laden (inklusive Exam für das Jahr)
-        $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'u') // 'u' ist der IServ-User
-            ->from(ExamParticipant::class, 'ep')
-            ->join('ep.participant', 'p')
-            ->leftJoin('p.user', 'u') // Wir laden den User direkt mit
-            ->where('ep.id = :id')
-            ->setParameter('id', (int)($data['ep_id'] ?? 0))
-            ->getQuery()
-            // WICHTIG: KEIN setHint für Partial Load!
-            ->getOneOrNullResult();
-
-        // Die Ergebnisse müssen wir einmal "berühren", damit sie geladen werden (Lazy Loading)
-        $ep->getResults()->count();
+    
+    // 1. Participant laden
+    $ep = $this->em->createQueryBuilder()
+        ->select('ep', 'p', 'u')
+        ->from(ExamParticipant::class, 'ep')
+        ->join('ep.participant', 'p')
+        ->leftJoin('p.user', 'u')
+        ->where('ep.id = :id')
+        ->setParameter('id', (int)($data['ep_id'] ?? 0))
+        ->getQuery()
+        ->getOneOrNullResult();
 
         if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
@@ -185,7 +181,10 @@ final class ExamResultController extends AbstractPageController
         $age  = $ep->getAgeYear();
 
         // Leistung aus dem Request holen (löst den "Undefined variable"-Fehler)
-        $leistung = isset($data['value']) ? (float)str_replace(',', '.', (string)$data['value']) : null;
+        $leistungInput = $data['leistung'] ?? null;
+        $leistung = ($leistungInput !== null && $leistungInput !== '') 
+            ? (float)str_replace(',', '.', (string)$leistungInput) 
+            : null;
 
         $participant = $ep->getParticipant();
         $rawGender = $participant->getGender() ?? 'W'; 
@@ -242,10 +241,10 @@ final class ExamResultController extends AbstractPageController
 
         // 4. Speichern
         $result = $this->em->getRepository(ExamResult::class)->findOneBy([
-            'examParticipant' => $ep, 
-            'discipline' => $discipline
-        ]);
-        
+        'examParticipant' => $ep, 
+        'discipline' => $discipline
+    ]);
+    
         if ($leistung === null || $leistung <= 0) {
             if ($result) {
                 $this->em->remove($result);
@@ -257,12 +256,13 @@ final class ExamResultController extends AbstractPageController
                 $result->setDiscipline($discipline);
                 $this->em->persist($result);
             }
-            // Achte darauf, ob deine Methode setLeistung() oder setValue() heißt!
+            
+            // Nutze die Namen aus deiner ExamResult Entity
             $result->setLeistung($leistung); 
             $result->setPoints($points);
+            $result->setStufe($stufe); // Gold/Silber/Bronze Text
         }
 
-        // 5. Schwimmnachweis & Datenbank-Update
         $this->updateSwimmingProof($ep, $discipline, $points);
         $this->em->flush();
         
