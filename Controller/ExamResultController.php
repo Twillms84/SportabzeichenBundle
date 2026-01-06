@@ -163,7 +163,16 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p') // Wir laden ep und p direkt zusammen!
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->where('ep.id = :id')
+            ->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()
+            ->getOneOrNullResult();
+
+
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         $leistung = isset($data['leistung']) && $data['leistung'] !== '' 
             ? (float)str_replace(',', '.', (string)$data['leistung']) 
