@@ -93,7 +93,7 @@ final class ExamResultController extends AbstractPageController
                     'points' => $res->getPoints(),
                     // Kleiner Tipp: Statt Strings 'gold' lieber Konstanten nutzen, aber so gehts erstmal:
                     'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'),
-                    'kategorie' => $res->getDiscipline()->getCategory()
+                    'category' => $res->getDiscipline()->getCategory()
                 ];
             }
             
@@ -122,7 +122,7 @@ final class ExamResultController extends AbstractPageController
             ->join('r.discipline', 'd')
             ->where('r.jahr = :year') // In der Anforderungs-Tabelle heißt es meistens 'jahr'
             ->setParameter('year', $exam->getExamYear())
-            ->orderBy('d.kategorie', 'ASC')
+            ->orderBy('d.category', 'ASC')
             ->addOrderBy('r.auswahlnummer', 'ASC')
             ->getQuery()
             ->getResult();
@@ -143,8 +143,8 @@ final class ExamResultController extends AbstractPageController
                 $disciplines[$d->getCategory()][$d->getId()] = [
                     'id' => $d->getId(),
                     'name' => $d->getName(),
-                    'einheit' => $d->getUnit(),
-                    'kategorie' => $d->getCategory()
+                    'unit' => $d->getUnit(),
+                    'category' => $d->getCategory()
                 ];
             }
         }
@@ -266,7 +266,7 @@ final class ExamResultController extends AbstractPageController
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'kategorie' => $discipline->getCategory(),
+            'category' => $discipline->getCategory(),
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming']
