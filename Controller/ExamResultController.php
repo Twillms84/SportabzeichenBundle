@@ -173,7 +173,7 @@ final class ExamResultController extends AbstractPageController
 
         // 1. Requirement suchen
         // ANPASSUNG: getGeschlecht() -> getGender()
-        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGender() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGeschlecht() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
         
         // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
         $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
