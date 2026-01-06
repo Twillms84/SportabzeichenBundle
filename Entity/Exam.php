@@ -35,6 +35,11 @@ class Exam
     public function getExamDate(): ?\DateTimeInterface { return $this->examDate; }
     public function setExamDate(?\DateTimeInterface $date): self { $this->examDate = $date; return $this; }
     
+    public function getName(): string
+    {
+        return 'Sportabzeichen ' . $this->getExamYear();
+    }
     // Kleiner Helfer für das Entity
     public function __toString(): string { return $this->examName ?? (string)$this->examYear; }
+
 }
