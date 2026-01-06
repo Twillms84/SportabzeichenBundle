@@ -26,10 +26,9 @@ class RequirementRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('r')
         ->where('r.discipline = :disc')
-        // Nutze hier die Namen der Variablen aus der Requirement-Entity!
-        ->andWhere('r.year = :jahr')      // Falls die Variable in der Entity $year heißt
-        ->andWhere('r.gender = :gender')  // Falls die Variable in der Entity $gender heißt
-        ->andWhere(':age BETWEEN r.ageMin AND r.ageMax') // Meistens camelCase in Entities
+        ->andWhere('r.jahr = :jahr')         // Versuche 'jahr' (oder 'year')
+        ->andWhere('r.geschlecht = :gender') // Versuche 'geschlecht' (oder 'gender')
+        ->andWhere(':age BETWEEN r.age_min AND r.age_max') // Hier mit Unterstrichen!
         ->setParameters([
             'disc'   => $discipline,
             'jahr'   => $year,
