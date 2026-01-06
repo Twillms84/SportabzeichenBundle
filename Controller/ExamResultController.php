@@ -185,19 +185,12 @@ final class ExamResultController extends AbstractPageController
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
 
         // 3. Erst jetzt kommt dein Requirement-Query (Zeile 173)
-        $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
-            ->where('r.discipline = :disc')
-            ->andWhere('r.year = :year')
-            ->andWhere('r.gender = :gender')
-            ->andWhere(':age BETWEEN r.minAge AND r.maxAge') // ageMin -> minAge
-            ->setParameters([
-                'disc' => $discipline,
-                'year' => $ep->getExamYear(), 
-                'gender' => $gender,
-                'age' => $ep->getAgeYear()
-            ])
-            ->getQuery()
-            ->getOneOrNullResult();
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
+            $discipline,
+            $ep->getExamYear(),
+            $gender,
+            $ep->getAgeYear()
+        );
 
         // 2. Punkte berechnen
         $points = 0;
