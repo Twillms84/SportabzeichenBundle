@@ -93,7 +93,7 @@ final class ExamResultController extends AbstractPageController
                     'points' => $res->getPoints(),
                     // Kleiner Tipp: Statt Strings 'gold' lieber Konstanten nutzen, aber so gehts erstmal:
                     'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'),
-                    'kategorie' => $res->getDiscipline()->getKategorie()
+                    'kategorie' => $res->getDiscipline()->getCategory()
                 ];
             }
             
@@ -133,18 +133,18 @@ final class ExamResultController extends AbstractPageController
             $d = $req->getDiscipline();
             
             // Initialisieren, falls noch nicht vorhanden
-            if (!isset($disciplines[$d->getKategorie()])) {
-                 $disciplines[$d->getKategorie()] = [];
+            if (!isset($disciplines[$d->getCategory()])) {
+                 $disciplines[$d->getCategory()] = [];
             }
 
             // Um Duplikate zu vermeiden (da Requirements pro Alter/Geschlecht mehrfach vorkommen):
             // Wir nutzen die ID als Key für Eindeutigkeit
-            if (!isset($disciplines[$d->getKategorie()][$d->getId()])) {
-                $disciplines[$d->getKategorie()][$d->getId()] = [
+            if (!isset($disciplines[$d->getCategory()][$d->getId()])) {
+                $disciplines[$d->getCategory()][$d->getId()] = [
                     'id' => $d->getId(),
                     'name' => $d->getName(),
-                    'einheit' => $d->getEinheit(),
-                    'kategorie' => $d->getKategorie()
+                    'einheit' => $d->getUnit(),
+                    'kategorie' => $d->getCategory()
                 ];
             }
         }
@@ -224,10 +224,10 @@ final class ExamResultController extends AbstractPageController
 
         // 3. Konflikte bereinigen (gleiche Kategorie löschen)
         if ($req) {
-            $cat = $discipline->getKategorie();
+            $cat = $discipline->getCategory();
             foreach ($ep->getResults() as $res) {
                 if ($res->getDiscipline()->getId() !== $discipline->getId() 
-                    && $res->getDiscipline()->getKategorie() === $cat) {
+                    && $res->getDiscipline()->getCategory() === $cat) {
                     $this->em->remove($res);
                 }
             }
@@ -266,7 +266,7 @@ final class ExamResultController extends AbstractPageController
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'kategorie' => $discipline->getKategorie(),
+            'kategorie' => $discipline->getCategory(),
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming']
@@ -329,7 +329,7 @@ final class ExamResultController extends AbstractPageController
         $cats = ['Ausdauer' => 0, 'Kraft' => 0, 'Schnelligkeit' => 0, 'Koordination' => 0];
         
         foreach ($ep->getResults() as $res) {
-            $k = $res->getDiscipline()->getKategorie();
+            $k = $res->getDiscipline()->getCatgory();
             if (isset($cats[$k]) && $res->getPoints() > $cats[$k]) {
                 $cats[$k] = $res->getPoints();
             }
