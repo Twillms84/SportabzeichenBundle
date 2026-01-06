@@ -27,8 +27,13 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
     private string $importId = '';
 
-    #[ORM\ManyToOne(targetEntity: User::class, fetch: 'LAZY')] // Wichtig: LAZY
-    #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    #[ORM\ManyToOne(targetEntity: User::class, fetch: 'EAGER')] // EAGER lädt den User sofort mit
+    #[ORM\JoinColumn(
+        name: 'username',           // Die Spalte in DEINER Tabelle
+        referencedColumnName: 'username', // Die Spalte in der ISERV-User Tabelle
+        nullable: true, 
+        onDelete: 'SET NULL'
+    )]
     private ?User $user = null;
 
     #[ORM\Column(type: 'date', nullable: true, name: 'geburtsdatum')]
