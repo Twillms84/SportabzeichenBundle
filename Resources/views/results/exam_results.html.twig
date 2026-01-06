@@ -307,37 +307,4 @@
 {% block javascripts %}
     {{ parent() }}
     <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
-    <script>
-        // Kleiner Inline-Script für die visuelle Schwimm-Anzeige (das Speichern macht autosave.js)
-        document.addEventListener('change', function(e) {
-            if (e.target.matches('[data-type="swimming"]')) {
-                const epId = e.target.getAttribute('data-ep-id');
-                const label = document.getElementById('swimming-label-' + epId);
-                if (label) {
-                    if (e.target.checked) {
-                        label.textContent = 'Schwimmen: OK';
-                        label.classList.remove('text-danger');
-                        label.classList.add('text-success');
-                    } else {
-                        label.textContent = 'Fehlt';
-                        label.classList.remove('text-success');
-                        label.classList.add('text-danger');
-                    }
-                }
-            }
-            // Disziplin-Wechsel Update der Hints (B/S/G)
-            if (e.target.matches('.js-discipline-select')) {
-                const opt = e.target.options[e.target.selectedIndex];
-                const container = e.target.closest('td');
-                if(container) {
-                    container.querySelector('.js-val-b').textContent = opt.getAttribute('data-bronze');
-                    container.querySelector('.js-val-s').textContent = opt.getAttribute('data-silber'); // auf 'silber' achten
-                    container.querySelector('.js-val-g').textContent = opt.getAttribute('data-gold');
-                    // Einheit im Input-Group-Text updaten
-                    const unitSpan = container.querySelector('.input-group-text');
-                    if(unitSpan) unitSpan.textContent = opt.getAttribute('data-unit');
-                }
-            }
-        });
-    </script>
 {% endblock %}
