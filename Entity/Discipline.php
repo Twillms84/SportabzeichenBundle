@@ -20,7 +20,7 @@ class Discipline
 
     // Wir nennen es jetzt 'unit' statt 'einheit' für Konsistenz
     #[ORM\Column(length: 50, name: 'einheit')]
-    private ?string unit = null;
+    private ?string $unit = null;
 
     // Die Kategorie (z.B. 'AUSDAUER', 'KRAFT')
     #[ORM\Column(type: 'string', length: 50, name: kategorie)]
