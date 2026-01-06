@@ -258,7 +258,7 @@
                                         <td class="p-1 col-discipline col-cat-{{ category }}">
                                             <div class="d-flex flex-column">
                                                 <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
-                                                        data-save data-ep-id="{{ p.id }}" data-type="discipline" data-kategorie="{{ category }}">
+                                                        data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}">
                                                     
                                                     {% for req in options %}
                                                         {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
