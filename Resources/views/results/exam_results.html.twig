@@ -207,38 +207,120 @@
 
                             {# 2. DISZIPLIN SPALTEN #}
                             {# 'items' enthält die Requirements für die Kategorie #}
-                                {% for discipline in items %}
-                                            {# Prüfen, ob Requirements existieren #}
-                                            {% if discipline.requirements is defined %}
-                                                {% for req in discipline.requirements %}
+                            {# 2. DISZIPLIN SPALTEN #}
+                            {% for category, items in disciplines %}
+                                {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                                    
+                                    {# --- LOGIK START: Welche Übungen darf der Schüler machen? --- #}
+                                    {% set options = [] %}
+                                    {% set pGender = p.geschlecht %} 
+                                    
+                                    {# NEUE LOGIK: Wir iterieren durch die Disziplinen (items) und darin durch die Requirements #}
+                                    {% for discipline in items %}
+                                        {% if discipline.requirements is defined %}
+                                            {% for req in discipline.requirements %}
+                                                
+                                                {# Prüfen: Passt das Requirement zu Geschlecht und Alter? #}
+                                                {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
                                                     
-                                                    {# Check: Passt das Requirement zu Alter & Geschlecht? #}
-                                                    {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                                        
-                                                        {# WICHTIG: Wir müssen die Disziplin-Info an das Requirement "kleben", #}
-                                                        {# damit wir unten im Select darauf zugreifen können (req.discipline.name) #}
-                                                        {# Da wir Arrays nutzen, verwenden wir den 'merge' Filter #}
-                                                        
-                                                        {% set combo = req|merge({'discipline': discipline}) %}
-                                                        {% set options = options|merge([combo]) %}
-                                                        
-                                                    {% endif %}
-                                                {% endfor %}
-                                            {% endif %}
-                                        {% endfor %}
+                                                    {# WICHTIG: Wir packen die Disziplin-Daten mit in das Requirement-Objekt #}
+                                                    {# So können wir unten auf 'req.discipline.name' zugreifen #}
+                                                    {% set combo = req|merge({'discipline': discipline}) %}
+                                                    {% set options = options|merge([combo]) %}
+                                                    
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
 
-                                        {# --- LOGIK: Welches Ergebnis anzeigen? --- #}
-                                        {% set selectedReq = null %}
-                                        {% set resObj = null %}
+                                    {# --- LOGIK: Welches Ergebnis anzeigen? --- #}
+                                    {% set selectedReq = null %}
+                                    {% set resObj = null %}
 
-                                        {# Prüfen ob für eine der gefundenen Optionen schon ein Ergebnis existiert #}
-                                        {# 'req' ist jetzt unser kombiniertes Array (Requirement + Discipline key) #}
-                                        {% for req in options %}
-                                            {% if epResults[req.discipline.id] is defined %}
-                                                {% set selectedReq = req %}
-                                                {% set resObj = epResults[req.discipline.id] %}
+                                    {# Prüfen ob für eine der Optionen schon ein Ergebnis existiert #}
+                                    {% for req in options %}
+                                        {% if epResults[req.discipline.id] is defined %}
+                                            {% set selectedReq = req %}
+                                            {% set resObj = epResults[req.discipline.id] %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# Fallback: Erste Option wählen, falls noch kein Ergebnis #}
+                                    {% if selectedReq is null and options|length > 0 %}
+                                        {% set selectedReq = options[0] %}
+                                    {% endif %}
+                                    
+                                    {# --- RENDERING --- #}
+                                    {% if options is not empty and selectedReq is not null %}
+                                        
+                                        {# Farbe bestimmen #}
+                                        {% set mClass = '' %}
+                                        {% if resObj %}
+                                            {% if resObj.points == 3 %}{% set mClass = 'bg-warning-subtle border-warning' %}
+                                            {% elseif resObj.points == 2 %}{% set mClass = 'bg-secondary-subtle border-secondary' %}
+                                            {% elseif resObj.points == 1 %}{% set mClass = 'bg-danger-subtle border-danger' %}
                                             {% endif %}
-                                        {% endfor %}
+                                        {% endif %}
+
+                                        <td class="p-1 col-discipline col-cat-{{ category }}">
+                                            <div class="d-flex flex-column gap-1">
+                                                
+                                                {# SELECT BOX #}
+                                                <select class="form-select form-select-sm js-discipline-select" 
+                                                        style="font-size: 0.75rem; padding: 0.1rem 1.2rem 0.1rem 0.3rem;"
+                                                        data-save 
+                                                        data-ep-id="{{ p.ep_id }}" 
+                                                        data-type="discipline" 
+                                                        data-kategorie="{{ category }}">
+                                                    
+                                                    {% for req in options %}
+                                                        {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
+                                                        <option value="{{ req.discipline.id }}" 
+                                                                {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
+                                                                data-unit="{{ cleanUnit }}"
+                                                                data-bronze="{{ req.bronze }}"
+                                                                data-silber="{{ req.silver }}"
+                                                                data-gold="{{ req.gold }}">
+                                                            {{ req.discipline.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+
+                                                {# INPUT FELD #}
+                                                <div class="input-group input-group-sm">
+                                                    {# Hier 'leistung' statt 'score' #}
+                                                    <input type="text" 
+                                                           class="form-control form-control-custom text-center {{ mClass }}"
+                                                           value="{{ resObj ? resObj.leistung : '' }}"
+                                                           placeholder="-"
+                                                           data-save 
+                                                           data-ep-id="{{ p.ep_id }}" 
+                                                           data-type="leistung" 
+                                                           data-kategorie="{{ category }}">
+                                                           
+                                                    {# Einheit anzeigen (klein daneben) #}
+                                                    <span class="input-group-text px-1 text-muted" style="font-size: 0.7rem;">
+                                                        {{ unitMap[selectedReq.discipline.unit] ?? '' }}
+                                                    </span>
+                                                </div>
+
+                                                {# HINTS (B/S/G) #}
+                                                <div class="req-hint d-flex justify-content-between px-1">
+                                                    <span title="Bronze (1 Pkt)">B:<span class="js-val-b fw-bold">{{ selectedReq.bronze }}</span></span>
+                                                    <span title="Silber (2 Pkt)">S:<span class="js-val-s fw-bold">{{ selectedReq.silver }}</span></span>
+                                                    <span title="Gold (3 Pkt)">G:<span class="js-val-g fw-bold">{{ selectedReq.gold }}</span></span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    {% else %}
+                                        {# Keine Option für dieses Alter/Geschlecht #}
+                                        <td class="bg-light text-center text-muted small col-discipline col-cat-{{ category }}">
+                                            -
+                                        </td>
+                                    {% endif %}
+                                    
+                                {% endif %}
+                            {% endfor %}
                         </tr>
                     {% endfor %}
                 </tbody>
