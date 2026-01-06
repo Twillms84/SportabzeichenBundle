@@ -164,18 +164,21 @@ final class ExamResultController extends AbstractPageController
         $data = json_decode($request->getContent(), true);
         
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p') 
+            ->select('ep', 'p', 'e') // 'e' für das Exam hinzugefügt
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
-            // Wichtig: Wir laden NUR ep und p. 
-            // Wir rühren die 'user'-Relation nicht an!
+            ->join('ep.exam', 'e')   // Join zum Exam, um das Jahr zu bekommen
             ->where('ep.id = :id')
             ->setParameter('id', (int)($data['ep_id'] ?? 0))
             ->getQuery()
-            ->setHint(\Doctrine\ORM\Query::HINT_FORCE_PARTIAL_LOAD, true) // Der "Magic" Fix
+            ->setHint(\Doctrine\ORM\Query::HINT_FORCE_PARTIAL_LOAD, true)
             ->getOneOrNullResult();
 
         if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
+
+        // Jetzt sind diese Werte sicher verfügbar:
+        $year = $ep->getExam()->getYear(); // Greift auf das mitgeladene 'e' zu
+        $age  = $ep->getAgeYear();        // Kommt direkt aus 'ep' (siehe deine Tabellenstruktur)
 
         $participant = $ep->getParticipant();
 
