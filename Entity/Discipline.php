@@ -19,11 +19,11 @@ class Discipline
     private ?string $name = null;
 
     // Wir nennen es jetzt 'unit' statt 'einheit' für Konsistenz
-    #[ORM\Column(type: 'string', length: 50)]
-    private ?string $unit = null;
+    #[ORM\Column(length: 50, name: 'einheit')]
+    private ?string unit = null;
 
     // Die Kategorie (z.B. 'AUSDAUER', 'KRAFT')
-    #[ORM\Column(type: 'string', length: 50)]
+    #[ORM\Column(type: 'string', length: 50, name: kategorie)]
     private ?string $category = null;
 
     // Rückbeziehung zu den Requirements (Anforderungen)
@@ -59,23 +59,23 @@ class Discipline
 
     public function getUnit(): ?string
     {
-        return $this->einheit;
+        return $this->unit;
     }
 
     public function setUnit(string $unit): self
     {
-        $this->einheit = $unit;
+        $this->unit = $unit;
         return $this;
     }
 
     public function getCategory(): ?string
     {
-        return $this->kategorie;
+        return $this->category;
     }
 
     public function setCategory(string $category): self
     {
-        $this->kategorie = $category;
+        $this->category = $category;
         return $this;
     }
 
