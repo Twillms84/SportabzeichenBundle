@@ -253,7 +253,7 @@
                                     {# Nur anzeigen, wenn wir überhaupt eine Option (passendes Requirement) gefunden haben #}
                                     {% if options is not empty %}
                                         {% set resObj = epResults[selectedId] ?? null %}
-                                        {% set mClass = (resObj and resObj.score|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.score|lower : 'medal-none' %}
+                                        {% set mClass = (resObj and resObj.leistung|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.leistung|lower : 'medal-none' %}
 
                                         <td class="p-1 col-discipline col-cat-{{ category }}">
                                             <div class="d-flex flex-column">
