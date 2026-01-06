@@ -164,11 +164,16 @@ final class ExamResultController extends AbstractPageController
         $data = json_decode($request->getContent(), true);
         
         // 1. Participant laden (inklusive Exam für das Jahr)
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
-
-        if (!$ep) {
-            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-        }
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p', 'u') // 'u' ist der IServ-User
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->leftJoin('p.user', 'u') // Wir laden den User direkt mit
+            ->where('ep.id = :id')
+            ->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()
+            // WICHTIG: KEIN setHint für Partial Load!
+            ->getOneOrNullResult();
 
         // Die Ergebnisse müssen wir einmal "berühren", damit sie geladen werden (Lazy Loading)
         $ep->getResults()->count();
