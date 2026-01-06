@@ -216,16 +216,28 @@
                                 {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                     
                                     {% set options = [] %}
-                                    {# Gender aus dem Array holen #}
+                                    
+                                    {# Gender aus dem Participant holen (Dank Alias getGeschlecht() in Entity klappt das) #}
                                     {% set pGender = p.geschlecht %} 
                                     
-                                    {% for req in items %}
-                                        {# Hier prüfen wir Alter und Geschlecht gegen die Requirement-Entity #}
-                                        {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                            {% set options = options|merge([req]) %}
-                                        {% endif %}
+                                    {# ÄNDERUNG 1: Wir iterieren über Disziplinen, nicht Requirements #}
+                                    {% for discipline in items %}
+                                    
+                                        {# ÄNDERUNG 2: Wir schauen uns die Requirements DIESER Disziplin an #}
+                                        {# Wir nehmen an, dass in Discipline.php eine Relation "requirements" existiert #}
+                                        {% for req in discipline.requirements %}
+                                        
+                                            {# Hier prüfen wir Alter und Geschlecht gegen die Requirement-Entity #}
+                                            {# p.age_year klappt, wenn getAgeYear() in ExamParticipant existiert #}
+                                            {% if req.gender == pGender and p.ageYear >= req.minAge and p.ageYear <= req.maxAge %}
+                                                {% set options = options|merge([req]) %}
+                                            {% endif %}
+                                            
+                                        {% endfor %}
+                                        
                                     {% endfor %}
 
+                                    {# Ab hier bleibt deine Logik fast gleich #}
                                     {% set selectedId = null %}
                                     
                                     {# Prüfen, ob wir Results haben #}
@@ -240,16 +252,16 @@
                                         {% set selectedId = options[0].discipline.id %}
                                     {% endif %}
                                     
-                                    {% set resObj = epResults[selectedId] ?? null %}
-                                    {% set mClass = (resObj and resObj.score|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.score|lower : 'medal-none' %}
+                                    {# Nur anzeigen, wenn wir überhaupt eine Option (passendes Requirement) gefunden haben #}
+                                    {% if options is not empty %}
+                                        {% set resObj = epResults[selectedId] ?? null %}
+                                        {% set mClass = (resObj and resObj.score|lower in ['gold','silber','bronze']) ? 'medal-' ~ resObj.score|lower : 'medal-none' %}
 
-                                    <td class="p-1 col-discipline col-cat-{{ category }}">
-                                        <div class="d-flex flex-column">
-                                            <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
-                                                    data-save data-ep-id="{{ p.ep_id }}" data-type="discipline" data-kategorie="{{ category }}">
-                                                {% if options is empty %}
-                                                    <option value="">--</option>
-                                                {% else %}
+                                        <td class="p-1 col-discipline col-cat-{{ category }}">
+                                            <div class="d-flex flex-column">
+                                                <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
+                                                        data-save data-ep-id="{{ p.id }}" data-type="discipline" data-kategorie="{{ category }}">
+                                                    
                                                     {% for req in options %}
                                                         {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
                                                         
@@ -262,22 +274,24 @@
                                                             {{ req.discipline.name }}
                                                         </option>
                                                     {% endfor %}
-                                                {% endif %}
-                                            </select>
+                                                    
+                                                </select>
 
-                                            <div class="input-group input-group-sm">
-                                                <input type="text" class="form-control form-control-custom {{ mClass }}"
-                                                    value="{{ resObj.value ?? '' }}"
-                                                    data-save data-ep-id="{{ p.ep_id }}" data-type="leistung" data-kategorie="{{ category }}">
-                                            </div>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" class="form-control form-control-custom {{ mClass }}"
+                                                        value="{{ resObj.value ?? '' }}"
+                                                        data-save data-ep-id="{{ p.id }}" data-type="leistung" data-kategorie="{{ category }}">
+                                                </div>
 
-                                            <div class="req-hint">
-                                                <span class="req-val-b" title="Bronze">B:<span class="js-val-b">-</span></span>
-                                                <span class="req-val-s" title="Silber">S:<span class="js-val-s">-</span></span>
-                                                <span class="req-val-g" title="Gold">G:<span class="js-val-g">-</span></span>
+                                                <div class="req-hint">
+                                                    <span class="req-val-b" title="Bronze">B:<span class="js-val-b">-</span></span>
+                                                    <span class="req-val-s" title="Silber">S:<span class="js-val-s">-</span></span>
+                                                    <span class="req-val-g" title="Gold">G:<span class="js-val-g">-</span></span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </td>
+                                        </td>
+                                    {% endif %} {# Ende if options not empty #}
+                                    
                                 {% endif %}
                             {% endfor %}
                         </tr>
