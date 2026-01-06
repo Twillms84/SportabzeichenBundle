@@ -40,7 +40,7 @@
                             <td>{{ exam.name|default('Ohne Namen') }}</td>
                             
                             {# ANPASSUNG: exam.date statt exam.exam_date #}
-                            <td>{{ exam.date ? exam.examDate|date('d.m.Y') : '-' }}</td>
+                            <td>{{ exam.date ? exam.date|date('d.m.Y') : '-' }}</td>
                             
                             <td class="text-end">
                                 <div class="btn-group">
