@@ -163,26 +163,28 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        // Wir joinen NUR p, nicht u!
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p')
+            ->select('ep', 'p') 
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
+            // Wichtig: Wir laden NUR ep und p. 
+            // Wir rühren die 'user'-Relation nicht an!
             ->where('ep.id = :id')
             ->setParameter('id', (int)($data['ep_id'] ?? 0))
             ->getQuery()
+            ->setHint(\Doctrine\ORM\Query::HINT_FORCE_PARTIAL_LOAD, true) // Der "Magic" Fix
             ->getOneOrNullResult();
 
         if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
         $participant = $ep->getParticipant();
-        
-        // Wir nutzen jetzt das lokale Feld 'gender' von Participant. 
-        // Das wurde beim Join oben mitgeladen und triggert KEINEN User-Proxy.
+
+        // 2. Geschlecht bestimmen (jetzt über dein neues redundantes Feld oder lokales Mapping)
+        // Nutze hier NICHT getParticipant()->getUser()!
         $rawGender = $participant->getGender() ?? 'W'; 
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
-        
-        // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
+
+        // 3. Erst jetzt kommt dein Requirement-Query (Zeile 173)
         $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
             ->where('r.discipline = :disc')
             ->andWhere('r.year = :year')
