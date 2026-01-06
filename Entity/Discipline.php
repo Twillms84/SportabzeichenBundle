@@ -30,6 +30,12 @@ class Discipline
     #[ORM\OneToMany(mappedBy: 'discipline', targetEntity: Requirement::class, orphanRemoval: true)]
     private Collection $requirements;
 
+    #[ORM\Column(type: 'text', options: ['default' => 'GREATER'])]
+    private ?string $berechnungsart = 'GREATER';
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $verband = null;
+
     public function __construct()
     {
         $this->requirements = new ArrayCollection();
@@ -70,6 +76,28 @@ class Discipline
     public function setCategory(string $category): self
     {
         $this->kategorie = $category;
+        return $this;
+    }
+
+    public function getBerechnungsart(): ?string
+    {
+        return $this->berechnungsart;
+    }
+
+    public function setBerechnungsart(string $berechnungsart): self
+    {
+        $this->berechnungsart = $berechnungsart;
+        return $this;
+    }
+
+    public function getVerband(): ?string
+    {
+        return $this->verband;
+    }
+
+    public function setVerband(?string $verband): self
+    {
+        $this->verband = $verband;
         return $this;
     }
 
