@@ -171,9 +171,11 @@ final class ExamResultController extends AbstractPageController
 
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Not found'], 404);
 
-        // 1. Requirement suchen
-        // ANPASSUNG: getGeschlecht() -> getGender()
-        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGeschlecht() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+        $participant = $ep->getParticipant();
+        // Wir nutzen direkt das Feld 'gender' der Participant-Entity, 
+        // das wir vorhin in der Entity definiert haben.
+        $genderStr = strtoupper($participant->getGender() ?? ''); 
+        $gender = (str_starts_with($genderStr, 'M')) ? 'MALE' : 'FEMALE';
         
         // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
         $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
