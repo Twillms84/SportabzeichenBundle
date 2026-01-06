@@ -1,12 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PulsR\SportabzeichenBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
+use PulsR\SportabzeichenBundle\Repository\DisciplineRepository;
 
-#[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\DisciplineRepository')]
+#[ORM\Entity(repositoryClass: DisciplineRepository::class)]
 #[ORM\Table(name: 'sportabzeichen_disciplines')]
 class Discipline
 {
@@ -18,20 +21,20 @@ class Discipline
     #[ORM\Column(type: 'string', length: 255)]
     private ?string $name = null;
 
-    // Wir nennen es jetzt 'unit' statt 'einheit' für Konsistenz
-    #[ORM\Column(length: 50, name: 'einheit')]
+    // Mapping auf DB-Spalte 'einheit'
+    #[ORM\Column(type: 'string', length: 50, name: 'einheit')]
     private ?string $unit = null;
 
-    // Die Kategorie (z.B. 'AUSDAUER', 'KRAFT')
+    // Mapping auf DB-Spalte 'kategorie'
     #[ORM\Column(type: 'string', length: 50, name: 'kategorie')]
     private ?string $category = null;
 
-    // Rückbeziehung zu den Requirements (Anforderungen)
-    #[ORM\OneToMany(mappedBy: 'discipline', targetEntity: Requirement::class, orphanRemoval: true)]
+    // Mapping auf Requirement (Stelle sicher, dass Requirement::discipline existiert!)
+    #[ORM\OneToMany(mappedBy: 'discipline', targetEntity: Requirement::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $requirements;
 
     #[ORM\Column(type: 'text', options: ['default' => 'GREATER'])]
-    private ?string $berechnungsart = 'GREATER';
+    private string $berechnungsart = 'GREATER'; // Typ direkt auf string gesetzt, da Default vorhanden
 
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $verband = null;
@@ -41,73 +44,36 @@ class Discipline
         $this->requirements = new ArrayCollection();
     }
 
-    public function getId(): ?int
+    // --- WICHTIG FÜR FORMULARE ---
+    public function __toString(): string
     {
-        return $this->id;
+        // Zeigt z.B. "3000m Lauf (Ausdauer)" an
+        return sprintf('%s (%s)', $this->name ?? 'Neue Disziplin', $this->category ?? '-');
     }
 
-    public function getName(): ?string
-    {
-        return $this->name;
-    }
+    public function getId(): ?int { return $this->id; }
 
-    public function setName(string $name): self
-    {
-        $this->name = $name;
-        return $this;
-    }
+    public function getName(): ?string { return $this->name; }
+    public function setName(string $name): self { $this->name = $name; return $this; }
 
-    public function getUnit(): ?string
-    {
-        return $this->unit;
-    }
+    public function getUnit(): ?string { return $this->unit; }
+    public function setUnit(string $unit): self { $this->unit = $unit; return $this; }
+    // Fallback für alte Templates
+    public function getEinheit(): ?string { return $this->unit; }
 
-    public function setUnit(string $unit): self
-    {
-        $this->unit = $unit;
-        return $this;
-    }
+    public function getCategory(): ?string { return $this->category; }
+    public function setCategory(string $category): self { $this->category = $category; return $this; }
 
-    public function getCategory(): ?string
-    {
-        return $this->category;
-    }
+    public function getBerechnungsart(): string { return $this->berechnungsart; }
+    public function setBerechnungsart(string $berechnungsart): self { $this->berechnungsart = $berechnungsart; return $this; }
 
-    public function setCategory(string $category): self
-    {
-        $this->category = $category;
-        return $this;
-    }
-
-    public function getBerechnungsart(): ?string
-    {
-        return $this->berechnungsart;
-    }
-
-    public function setBerechnungsart(string $berechnungsart): self
-    {
-        $this->berechnungsart = $berechnungsart;
-        return $this;
-    }
-
-    public function getVerband(): ?string
-    {
-        return $this->verband;
-    }
-
-    public function setVerband(?string $verband): self
-    {
-        $this->verband = $verband;
-        return $this;
-    }
+    public function getVerband(): ?string { return $this->verband; }
+    public function setVerband(?string $verband): self { $this->verband = $verband; return $this; }
 
     /**
      * @return Collection<int, Requirement>
      */
-    public function getRequirements(): Collection
-    {
-        return $this->requirements;
-    }
+    public function getRequirements(): Collection { return $this->requirements; }
 
     public function addRequirement(Requirement $requirement): self
     {
@@ -115,7 +81,6 @@ class Discipline
             $this->requirements[] = $requirement;
             $requirement->setDiscipline($this);
         }
-
         return $this;
     }
 
@@ -127,13 +92,6 @@ class Discipline
                 $requirement->setDiscipline(null);
             }
         }
-
         return $this;
-    }
-    
-    // Hilfsmethode für alte Templates, falls noch jemand getEinheit() aufruft
-    public function getEinheit(): ?string
-    {
-        return $this->getUnit();
     }
 }
