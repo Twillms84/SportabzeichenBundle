@@ -23,7 +23,7 @@ class Discipline
     private ?string $unit = null;
 
     // Die Kategorie (z.B. 'AUSDAUER', 'KRAFT')
-    #[ORM\Column(type: 'string', length: 50, name: kategorie)]
+    #[ORM\Column(type: 'string', length: 50, name: 'kategorie')]
     private ?string $category = null;
 
     // Rückbeziehung zu den Requirements (Anforderungen)
