@@ -93,7 +93,6 @@ final class ExamResultController extends AbstractPageController
                 'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
                 'nachname' => $ep->getParticipant()->getUser()->getLastname(),
                 'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
-                // ANPASSUNG: getGeschlecht() -> getGender() (vorausgesetzt Participant Entity wurde auch angepasst)
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(), 
                 'total_points' => $ep->getTotalPoints(),
@@ -104,44 +103,45 @@ final class ExamResultController extends AbstractPageController
         }
 
         // 3. Anforderungen/Disziplinen laden
-        // ANPASSUNG: DQL nutzt jetzt englische Property-Namen (r.year, r.selectionId)
-        $requirements = $this->em->createQueryBuilder()
+        // Wir laden Requirements UND Disziplinen flach als Array
+        $requirementsData = $this->em->createQueryBuilder()
             ->select('r', 'd')
             ->from(Requirement::class, 'r')
             ->join('r.discipline', 'd')
             ->where('r.year = :year') 
-            ->setParameter('year', $exam->getYear()) // getExamYear() -> getYear()
+            ->setParameter('year', $exam->getYear()) 
             ->orderBy('d.category', 'ASC')
-            ->addOrderBy('r.selectionId', 'ASC') // auswahlnummer -> selectionId
+            ->addOrderBy('r.selectionId', 'ASC') 
             ->getQuery()
-            ->getArrayResult(); // Wir bleiben bei ArrayResult für Performance/Template-Kompatibilität
+            ->getArrayResult(); 
 
         $disciplines = [];
         
-        // Da wir getArrayResult nutzen, sind die Keys hier Strings!
-        foreach ($requirements as $req) {
-            // $req ist hier ein Array!
-            $d = $req['discipline']; 
+        // HIER IST DER FIX: Struktur so bauen, wie Twig sie erwartet
+        foreach ($requirementsData as $reqRow) {
+            // $reqRow enthält die Requirement-Daten UND unter dem Key 'discipline' die Disziplin-Daten
+            $d = $reqRow['discipline'];
             
-            // Mapping DB/Array Keys -> Variablen
-            // Hinweis: Da wir getArrayResult() nutzen, greifen wir auf die gemappten Namen zu
-            // r.selectionId (DQL) -> 'selectionId' (Array Key)
-            
-            $cat = $d['category']; // oder 'kategorie', check deine Discipline Entity mapping
+            $cat = $d['category'];
+            $dId = $d['id'];
             
             if (!isset($disciplines[$cat])) {
                  $disciplines[$cat] = [];
             }
 
-            if (!isset($disciplines[$cat][$d['id']])) {
-                $disciplines[$cat][$d['id']] = $d;
+            // Wenn wir diese Disziplin in dieser Kategorie noch nicht haben -> anlegen
+            if (!isset($disciplines[$cat][$dId])) {
+                $disciplines[$cat][$dId] = $d;
+                // WICHTIG: Wir initialisieren ein leeres Array für die Requirements
+                $disciplines[$cat][$dId]['requirements'] = [];
             }
             
-            // requirement an die Disziplin hängen, falls nötig, oder Logik beibehalten
-            // In deinem Originalcode hast du nur die Disziplin gespeichert.
-            // Falls du Requirement-Details im Header brauchst, müsstest du sie hier mergen.
+            // Jetzt fügen wir das aktuelle Requirement zu dieser Disziplin hinzu
+            // Twig greift später darauf zu mit: discipline.requirements
+            $disciplines[$cat][$dId]['requirements'][] = $reqRow;
         }
         
+        // Indizes glätten (optional, aber sauberer für Twig loop)
         foreach($disciplines as $kat => $vals) {
             $disciplines[$kat] = array_values($vals);
         }
