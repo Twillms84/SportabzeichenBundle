@@ -136,84 +136,80 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {# HAUPTSCHLEIFE: Teilnehmer #}
-                    {% for p in participants %}
+                {% for p in participants %}
+                    {% set epResults = results[p.ep_id] ?? {} %}
+                    <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
-                        {# Ergebnisse für diesen Teilnehmer holen (Key ist p.ep_id) #}
-                        {% set epResults = results[p.ep_id] ?? {} %}
-                        
-                        <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
+                        {# 1. NAME, KLASSE & INFO #}
+                        <td class="col-name py-2">
+                            <div class="name-container">
+                                <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
+                                <span class="name-age text-muted">({{ p.age_year }})</span>
+                            </div>
                             
-                            {# 1. INFO SPALTE #}
-                            <td class="col-name py-2">
-                                <div class="name-container">
-                                    <span class="fw-bold d-block">{{ p.nachname }}, {{ p.vorname }}</span>
-                                    <div class="d-flex justify-content-between align-items-center mt-1">
-                                        <span class="small text-muted">Kl. {{ p.klasse|default('-') }} ({{ p.age_year }})</span>
-                                        
-                                        {# Punkte Anzeige #}
-                                        <span class="badge bg-light text-dark border badge-mini" id="total-points-{{ p.ep_id }}">
-                                            <span class="pts-val fw-bold">{{ p.total_points|default(0) }}</span> Pkt.
-                                        </span>
-                                    </div>
+                            <div class="small text-muted mb-2">
+                                Klasse: <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
+                            </div>
+                            
+                            <div class="d-flex flex-column gap-1">
+                                {# Punkte & Medaille #}
+                                <div class="d-flex gap-1 align-items-center">
+                                    <span class="badge bg-light text-dark border badge-mini" id="total-points-{{ p.ep_id }}">
+                                        <span class="pts-val fw-bold">{{ p.total_points|default(0) }}</span> Pkt.
+                                    </span>
                                     
-                                    {# Medaille Anzeige #}
-                                    <div class="mt-1" style="min-height: 20px;">
-                                        <span class="badge badge-mini js-medal-badge w-100" 
-                                              id="final-medal-{{ p.ep_id }}"
-                                              data-medal="{{ p.final_medal|default('') }}"
-                                              style="display: {{ p.final_medal ? 'block' : 'none' }}; 
-                                                     background-color: {{ p.final_medal == 'Gold' ? '#ffc107' : (p.final_medal == 'Silber' ? '#adb5bd' : (p.final_medal == 'Bronze' ? '#fd7e14' : 'transparent')) }};
-                                                     color: {{ p.final_medal ? '#fff' : 'inherit' }}">
-                                            {{ p.final_medal }}
-                                        </span>
-                                    </div>
+                                    <span class="badge badge-mini js-medal-badge" 
+                                          id="final-medal-{{ p.ep_id }}"
+                                          data-medal="{{ p.final_medal|default('') }}"
+                                          style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
+                                        {{ p.final_medal }}
+                                    </span>
                                 </div>
 
-                                {# SCHWIMMEN TOGGLE #}
+                                {# Manueller Schwimmnachweis #}
                                 {% if hasSwimmingCategory %}
-                                    <div class="mt-2 pt-2 border-top">
-                                        <div class="form-check form-switch p-0 m-0 d-flex align-items-center justify-content-between">
-                                            <label class="form-check-label small fw-semibold me-2 {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
-                                                   for="swim-switch-{{ p.ep_id }}"
-                                                   id="swimming-label-{{ p.ep_id }}">
-                                                {{ p.has_swimming ? 'Schwimmen: OK' : 'Fehlt' }}
-                                            </label>
-                                            <input class="form-check-input m-0" type="checkbox" role="switch"
+                                    <div class="mt-1">
+                                        <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
+                                            <input class="form-check-input ms-0" type="checkbox" role="switch"
                                                    id="swim-switch-{{ p.ep_id }}"
                                                    {{ p.has_swimming ? 'checked' : '' }}
                                                    data-save 
                                                    data-ep-id="{{ p.ep_id }}" 
                                                    data-type="swimming"
                                                    style="cursor: pointer;">
+                                                   
+                                            <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
+                                                   for="swim-switch-{{ p.ep_id }}"
+                                                   id="swimming-label-{{ p.ep_id }}">
+                                                {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
+                                            </label>
                                         </div>
+                                        
                                         {% if p.swimming_expiry and p.has_swimming %}
-                                            <div class="small text-muted fst-italic text-end" style="font-size: 0.7rem;">
-                                                bis {{ p.swimming_expiry|date('d.m.y') }}
+                                            <div class="small text-muted fst-italic ms-1" style="font-size: 0.75rem;">
+                                                Gültig bis: {{ p.swimming_expiry|date('d.m.Y') }}
                                             </div>
                                         {% endif %}
                                     </div>
                                 {% endif %}
-                            </td>
+                            </div>
+                        </td>
 
-                            {# 2. DISZIPLIN SPALTEN #}
-                            {# 'items' enthält die Requirements für die Kategorie #}
-                            {# 2. DISZIPLIN SPALTEN #}
-                            {# 3. DISZIPLINEN #}
+                        {# 3. DISZIPLINEN (Iteriert über Kategorien) #}
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                {# --- LOGIK START: Optionen sammeln --- #}
+                                {# --- LOGIK: Optionen sammeln (Fix für "Key does not exist") --- #}
                                 {% set options = [] %}
                                 {% set pGender = p.geschlecht %} 
                                 
-                                {# Wir iterieren durch Disziplinen UND deren Requirements #}
+                                {# Wir iterieren über Disziplinen -> Requirements #}
                                 {% for discipline in items %}
                                     {% if discipline.requirements is defined %}
                                         {% for req in discipline.requirements %}
-                                            {# Filterung nach Alter/Geschlecht #}
+                                            {# Prüfen: Passt das Requirement zu Geschlecht und Alter? #}
                                             {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                                {# Merge Disziplin-Daten in das Requirement #}
+                                                {# Merge: Discipline-Info in req speichern für Zugriff #}
                                                 {% set combo = req|merge({'discipline': discipline}) %}
                                                 {% set options = options|merge([combo]) %}
                                             {% endif %}
@@ -221,11 +217,11 @@
                                     {% endif %}
                                 {% endfor %}
 
-                                {# --- LOGIK: Welches Ergebnis ist ausgewählt? --- #}
+                                {# --- LOGIK: Welches Ergebnis anzeigen? --- #}
                                 {% set selectedReq = null %}
                                 {% set resObj = null %}
 
-                                {# Haben wir schon ein Ergebnis für eine der möglichen Disziplinen? #}
+                                {# Prüfen ob Ergebnis existiert #}
                                 {% for req in options %}
                                     {% if epResults[req.discipline.id] is defined %}
                                         {% set selectedReq = req %}
@@ -238,7 +234,7 @@
                                     {% set selectedReq = options[0] %}
                                 {% endif %}
                                 
-                                {# CSS Klasse für Medaille bestimmen #}
+                                {# CSS Klasse für Medaille #}
                                 {% set mClass = 'medal-none' %}
                                 {% if resObj %}
                                     {% if resObj.points == 3 %}{% set mClass = 'medal-gold' %}
@@ -250,7 +246,7 @@
                                 <td class="p-1 col-discipline col-cat-{{ category }}">
                                     <div class="d-flex flex-column">
                                         
-                                        {# --- DROPDOWN --- #}
+                                        {# SELECT BOX #}
                                         <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
                                                 data-save 
                                                 data-ep-id="{{ p.ep_id }}" 
@@ -261,7 +257,9 @@
                                                 <option value="">--</option>
                                             {% else %}
                                                 {% for req in options %}
-                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
+                                                    {# Key-Check: 'unit' (aus error log) oder 'einheit' (legacy) #}
+                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? unitMap[req.discipline.einheit] ?? req.discipline.unit %}
+                                                    
                                                     <option value="{{ req.discipline.id }}" 
                                                             {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
                                                             data-unit="{{ cleanUnit }}"
@@ -274,7 +272,7 @@
                                             {% endif %}
                                         </select>
 
-                                        {# --- INPUT FELD --- #}
+                                        {# INPUT FELD & EINHEIT #}
                                         <div class="input-group input-group-sm">
                                             <input type="text" 
                                                    class="form-control form-control-custom {{ mClass }}"
@@ -283,9 +281,15 @@
                                                    data-ep-id="{{ p.ep_id }}" 
                                                    data-type="leistung" 
                                                    data-kategorie="{{ category }}">
+
+                                            {# WICHTIG: Das Unit-Span muss da sein, sonst könnte JS abstürzen #}
+                                            <span class="input-group-text px-1 text-muted" style="font-size: 0.7rem;">
+                                                {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? unitMap[selectedReq.discipline.einheit] ?? '' %}
+                                                {{ currentUnit }}
+                                            </span>
                                         </div>
 
-                                        {# --- HINTS (Werte für B/S/G) --- #}
+                                        {# HINTS (B/S/G) #}
                                         <div class="req-hint">
                                             <span class="req-val-b" title="Bronze">B:<span class="js-val-b">{{ selectedReq ? selectedReq.bronze : '-' }}</span></span>
                                             <span class="req-val-s" title="Silber">S:<span class="js-val-s">{{ selectedReq ? selectedReq.silver : '-' }}</span></span>
