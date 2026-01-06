@@ -227,9 +227,7 @@
                                         {# Wir nehmen an, dass in Discipline.php eine Relation "requirements" existiert #}
                                         {% for req in discipline.requirements %}
                                         
-                                            {# Hier prüfen wir Alter und Geschlecht gegen die Requirement-Entity #}
-                                            {# p.age_year klappt, wenn getAgeYear() in ExamParticipant existiert #}
-                                            {% if req.gender == pGender and p.ageYear >= req.minAge and p.ageYear <= req.maxAge %}
+                                            {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
                                                 {% set options = options|merge([req]) %}
                                             {% endif %}
                                             
