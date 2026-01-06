@@ -171,11 +171,15 @@ final class ExamResultController extends AbstractPageController
 
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Not found'], 404);
 
+        // Wir holen den Participant separat ohne User-Join, um Proxy-Fehler zu vermeiden
         $participant = $ep->getParticipant();
-        // Wir nutzen direkt das Feld 'gender' der Participant-Entity, 
-        // das wir vorhin in der Entity definiert haben.
-        $genderStr = strtoupper($participant->getGender() ?? ''); 
-        $gender = (str_starts_with($genderStr, 'M')) ? 'MALE' : 'FEMALE';
+        if (null === $participant) {
+            return new JsonResponse(['error' => 'Participant not found'], 404);
+        }
+
+        // Direkter Zugriff auf das Feld gender (Mapping: geschlecht)
+        $rawGender = $participant->getGender() ?? 'W'; 
+        $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
         
         // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
         $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
