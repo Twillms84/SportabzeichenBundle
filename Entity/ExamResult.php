@@ -58,4 +58,10 @@ class ExamResult
         $this->points = $points; 
         return $this; 
     }
+
+    public function getStufe(): ?string { return $this->stufe; }
+    public function setStufe(?string $stufe): self { 
+        $this->stufe = $stufe; 
+        return $this; 
+    }
 }
