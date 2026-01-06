@@ -7,6 +7,7 @@ namespace PulsR\SportabzeichenBundle\Entity;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use PulsR\SportabzeichenBundle\Entity\Exam;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'sportabzeichen_exam_participants')]
@@ -15,6 +16,9 @@ class ExamParticipant
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
+    #[ORM\ManyToOne(targetEntity: Exam::class)]
+    #[ORM\JoinColumn(nullable: false, name: 'exam_id')]
+    private ?Exam $exam = null;
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Participant::class)]
@@ -38,6 +42,17 @@ class ExamParticipant
     }
 
     // Getter & Setter ...
+    public function getExam(): ?Exam
+    {
+        return $this->exam;
+    }
+
+    public function setExam(?Exam $exam): self
+    {
+        $this->exam = $exam;
+
+        return $this;
+    }
     public function getId(): ?int { return $this->id; }
     
     public function getParticipant(): ?Participant { return $this->participant; }
