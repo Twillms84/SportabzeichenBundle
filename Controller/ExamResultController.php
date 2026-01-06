@@ -163,8 +163,9 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
+        // Wir joinen NUR p, nicht u!
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p') // Wir laden ep und p direkt zusammen!
+            ->select('ep', 'p')
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->where('ep.id = :id')
@@ -172,24 +173,13 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
+        if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        $leistung = isset($data['leistung']) && $data['leistung'] !== '' 
-            ? (float)str_replace(',', '.', (string)$data['leistung']) 
-            : null;
-
-        if (!$ep || !$discipline) return new JsonResponse(['error' => 'Not found'], 404);
-
-        // Wir holen den Participant separat ohne User-Join, um Proxy-Fehler zu vermeiden
         $participant = $ep->getParticipant();
-        if (null === $participant) {
-            return new JsonResponse(['error' => 'Participant not found'], 404);
-        }
-
-        // Falls getGeschlecht() intern auf den User zugreift, 
-        // nimm lieber direkt die Property, falls möglich, oder den Alias:
+        
+        // Wir nutzen jetzt das lokale Feld 'gender' von Participant. 
+        // Das wurde beim Join oben mitgeladen und triggert KEINEN User-Proxy.
         $rawGender = $participant->getGender() ?? 'W'; 
-
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
         
         // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)

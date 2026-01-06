@@ -20,6 +20,9 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $username = null;
+    
     // --- NEU & WICHTIG: Laut DB ist dies NOT NULL und UNIQUE ---
     #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
     private string $importId = '';
@@ -51,6 +54,17 @@ class Participant implements CrudInterface
     public function getId(): ?int { return $this->id; }
 
     // --- Getter/Setter für das fehlende Feld ---
+        public function getUsername(): ?string
+    {
+        return $this->username;
+    }
+
+    public function setUsername(?string $username): self
+    {
+        $this->username = $username;
+        return $this;
+    }
+    
     public function getImportId(): string { return $this->importId; }
     public function setImportId(string $importId): self { $this->importId = $importId; return $this; }
 
