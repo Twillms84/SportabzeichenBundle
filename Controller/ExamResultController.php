@@ -280,47 +280,57 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
-    {
-        $year = $ep->getExamYear(); 
-        $p = $ep->getParticipant();
+{
+    // Wir holen das Jahr vom Exam-Objekt, das am Teilnehmer hängt
+    $year = $ep->getExam()->getYear(); 
+    $p = $ep->getParticipant();
 
-        if ($points > 0 && $disc->isSwimmingCategory()) {
-            $proof = null;
-            foreach ($p->getSwimmingProofs() as $sp) {
-                // ANPASSUNG: Falls ExamYear property 'year' heißt, anpassen
-                if ($sp->getExamYear() === $year) {
-                    $proof = $sp; break;
-                }
-            }
-            if (!$proof) {
-                $proof = new SwimmingProof();
-                $proof->setParticipant($p);
-                $proof->setExamYear($year);
-                $this->em->persist($proof);
-            }
-            
-            $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
-            $proof->setConfirmedAt(new \DateTime());
-            $proof->setValidUntil(new \DateTime("$validYear-12-31"));
-            $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
-        }
-
-        $hasValidSwim = false;
-        foreach ($ep->getResults() as $res) {
-            if ($res->getPoints() > 0 && $res->getDiscipline()->isSwimmingCategory()) {
-                $hasValidSwim = true;
+    // WICHTIG: Prüfen, ob die Disziplin zur Schwimm-Kategorie gehört
+    // (Stelle sicher, dass diese Methode in der Discipline-Entity existiert!)
+    if ($points > 0 && $disc->isSwimmingCategory()) {
+        $proof = null;
+        
+        // Wir suchen in der Collection des Participants nach einem Nachweis für dieses Jahr
+        foreach ($p->getSwimmingProofs() as $sp) {
+            if ($sp->getExamYear() === $year) {
+                $proof = $sp; 
                 break;
             }
         }
+        
+        if (!$proof) {
+            $proof = new SwimmingProof();
+            $proof->setParticipant($p);
+            $proof->setExamYear($year); // Hier ist dein Feld aus der Entity!
+            $this->em->persist($proof);
+        }
+        
+        // Gültigkeit berechnen (Jugendliche bis 18. Lj, Erwachsene 5 Jahre)
+        $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
+        
+        $proof->setConfirmedAt(new \DateTime());
+        $proof->setValidUntil(new \DateTime("$validYear-12-31"));
+        $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
+    }
 
-        if (!$hasValidSwim) {
-            foreach ($p->getSwimmingProofs() as $sp) {
-                if ($sp->getExamYear() === $year && str_starts_with($sp->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
-                    $this->em->remove($sp);
-                }
+    // Check, ob der automatische Nachweis gelöscht werden muss (Leistung wurde entfernt)
+    $hasValidSwim = false;
+    foreach ($ep->getResults() as $res) {
+        if ($res->getPoints() > 0 && $res->getDiscipline()->isSwimmingCategory()) {
+            $hasValidSwim = true;
+            break;
+        }
+    }
+
+    if (!$hasValidSwim) {
+        foreach ($p->getSwimmingProofs() as $sp) {
+            // Lösche nur Nachweise, die automatisch durch eine Disziplin erstellt wurden
+            if ($sp->getExamYear() === $year && str_starts_with($sp->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
+                $this->em->remove($sp);
             }
         }
     }
+}
 
     private function calculateSummary(ExamParticipant $ep): array
     {
