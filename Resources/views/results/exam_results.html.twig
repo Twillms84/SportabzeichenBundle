@@ -71,12 +71,14 @@
                     
                     <select name="class" class="form-select form-select-sm" style="width: auto;">
                         <option value="">Alle Klassen</option>
-                        {% for c in classes %}
-                            {# c ist hier vermutlich nur ein String oder Array aus dem Group-By Query #}
-                            <option value="{{ c.klasse }}" {{ selectedClass == c.klasse ? 'selected' : '' }}>
-                                {{ c.klasse }}
-                            </option>
-                        {% endfor %}
+                        <select name="class" class="form-select" onchange="this.form.submit()">
+                            <option value="">Alle Klassen</option>
+                            {% for c in classes %}
+                                <option value="{{ c }}" {% if c == selectedClass %}selected{% endif %}>
+                                    {{ c }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </select>
                     <button type="submit" class="btn btn-primary btn-sm">
                         {{ icon('filter')|raw }} Filter
