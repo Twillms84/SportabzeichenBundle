@@ -266,9 +266,9 @@
                                                         <option value="{{ req.discipline.id }}" 
                                                                 {{ selectedId == req.discipline.id ? 'selected' : '' }}
                                                                 data-unit="{{ cleanUnit }}"
-                                                                data-bronze="{{ req.valueBronze }}"
-                                                                data-silber="{{ req.valueSilver }}"
-                                                                data-gold="{{ req.valueGold }}">
+                                                                data-bronze="{{ req.bronze }}"
+                                                                data-silber="{{ req.silver }}"
+                                                                data-gold="{{ req.gold }}">
                                                             {{ req.discipline.name }}
                                                         </option>
                                                     {% endfor %}
