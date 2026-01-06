@@ -8,7 +8,7 @@ use Doctrine\DBAL\Connection;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route; // Nutzung von Attribute (PHP 8+)
+use Symfony\Component\Routing\Annotation\Route;
 
 #[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
 final class ParticipantUploadController extends AbstractPageController
@@ -35,7 +35,6 @@ final class ParticipantUploadController extends AbstractPageController
 
                     while (($row = fgetcsv($handle)) !== false) {
                         try {
-                            // Mindestens 3 Spalten erwartet
                             if (count($row) < 3) {
                                 $skipped++;
                                 continue;
@@ -56,19 +55,35 @@ final class ParticipantUploadController extends AbstractPageController
 
                             $geburtsdatum = self::parseDate($geburtsdatumRaw);
 
-                            // Upsert (Insert oder Update bei Konflikt)
+                            // --- NEU: Username und User-ID aus IServ-Tabelle auflösen ---
+                            // Wir suchen in der IServ 'users' Tabelle nach der importid
+                            $iservUser = $conn->fetchAssociative(
+                                'SELECT act FROM users WHERE importid = :iid LIMIT 1',
+                                ['iid' => $importId]
+                            );
+
+                            $username = $iservUser ? $iservUser['act'] : null;
+
+                            // Upsert: Jetzt inklusive der Spalten 'username' und 'user_id'
                             $conn->executeStatement(
                                 <<<SQL
-                                    INSERT INTO sportabzeichen_participants (import_id, geschlecht, geburtsdatum)
-                                    VALUES (:import_id, :geschlecht, :geburtsdatum)
+                                    INSERT INTO sportabzeichen_participants (
+                                        import_id, username, user_id, geschlecht, geburtsdatum, updated_at
+                                    )
+                                    VALUES (
+                                        :import_id, :username, :username, :geschlecht, :geburtsdatum, NOW()
+                                    )
                                     ON CONFLICT (import_id)
                                     DO UPDATE SET
+                                        username = EXCLUDED.username,
+                                        user_id = EXCLUDED.user_id,
                                         geschlecht = EXCLUDED.geschlecht,
                                         geburtsdatum = EXCLUDED.geburtsdatum,
                                         updated_at = NOW()
                                 SQL,
                                 [
                                     'import_id'    => $importId,
+                                    'username'     => $username, // 'act' wird in beide Spalten geschrieben
                                     'geschlecht'   => $geschlecht,
                                     'geburtsdatum' => $geburtsdatum,
                                 ]
@@ -77,7 +92,6 @@ final class ParticipantUploadController extends AbstractPageController
                             $imported++;
 
                         } catch (\Throwable $e) {
-                            // Optional: $error loggen ($e->getMessage())
                             $skipped++;
                         }
                     }
@@ -101,16 +115,11 @@ final class ParticipantUploadController extends AbstractPageController
 
     private static function parseDate(?string $input): ?string
     {
-        if (!$input) {
-            return null;
-        }
+        if (!$input) return null;
 
-        // Gängige deutsche und internationale Formate
         foreach (['d.m.Y', 'Y-m-d', 'd-m-Y', 'd/m/Y'] as $fmt) {
             $dt = \DateTime::createFromFormat($fmt, $input);
-            if ($dt !== false) {
-                return $dt->format('Y-m-d');
-            }
+            if ($dt !== false) return $dt->format('Y-m-d');
         }
 
         return null;
