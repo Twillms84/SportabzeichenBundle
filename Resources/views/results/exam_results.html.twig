@@ -284,7 +284,7 @@
 
                                             {# WICHTIG: Das Unit-Span muss da sein, sonst könnte JS abstürzen #}
                                             <span class="input-group-text px-1 text-muted" style="font-size: 0.7rem;">
-                                                {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? unitMap[selectedReq.discipline.einheit] ?? '' %}
+                                                {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
                                                 {{ currentUnit }}
                                             </span>
                                         </div>
