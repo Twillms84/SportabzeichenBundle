@@ -7,34 +7,39 @@ namespace PulsR\SportabzeichenBundle\Entity;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use PulsR\SportabzeichenBundle\Entity\Exam;
 use PulsR\SportabzeichenBundle\Repository\ExamParticipantRepository;
 
 #[ORM\Entity(repositoryClass: ExamParticipantRepository::class)]
 #[ORM\Table(name: 'sportabzeichen_exam_participants')]
+#[ORM\UniqueConstraint(name: 'uniq_exam_participant', columns: ['exam_id', 'participant_id'])]
 class ExamParticipant
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
-    
-    // Die Verbindung zur Prüfung (Hierüber holen wir das Jahr)
+
     #[ORM\ManyToOne(targetEntity: Exam::class)]
-    #[ORM\JoinColumn(nullable: false, name: 'exam_id')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE', name: 'exam_id')]
     private ?Exam $exam = null;
 
     #[ORM\ManyToOne(targetEntity: Participant::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE', name: 'participant_id')]
     private ?Participant $participant = null;
 
-    // HINWEIS: $examYear wurde hier entfernt, da es jetzt über $exam läuft.
+    // PHP: $age  <-->  DB: 'age_year'
+    #[ORM\Column(type: 'integer', name: 'age_year')]
+    private ?int $age = null;
 
-    #[ORM\Column(type: 'integer')]
-    private ?int $ageYear = null; // Das Alter im Prüfungsjahr
+    // NEU: Wir speichern die Punkte fest in der DB für Performance & Statistiken
+    #[ORM\Column(type: 'integer', nullable: true, name: 'total_points')]
+    private ?int $totalPoints = 0;
 
-    // Relation zu den Ergebnissen
-    #[ORM\OneToMany(mappedBy: 'examParticipant', targetEntity: ExamResult::class, cascade: ['persist', 'remove'])]
+    // NEU: Wir speichern die Medaille fest in der DB
+    #[ORM\Column(length: 20, nullable: true, name: 'final_medal')]
+    private ?string $finalMedal = 'none';
+
+    #[ORM\OneToMany(mappedBy: 'examParticipant', targetEntity: ExamResult::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $results;
 
     public function __construct()
@@ -42,78 +47,36 @@ class ExamParticipant
         $this->results = new ArrayCollection();
     }
 
-    public function getId(): ?int 
-    { 
-        return $this->id; 
-    }
+    // --- GETTER & SETTER ---
 
-    public function getExam(): ?Exam
-    {
-        return $this->exam;
-    }
+    public function getId(): ?int { return $this->id; }
 
-    public function setExam(?Exam $exam): self
-    {
-        $this->exam = $exam;
-        return $this;
-    }
-    
-    public function getParticipant(): ?Participant 
-    { 
-        return $this->participant; 
-    }
+    public function getExam(): ?Exam { return $this->exam; }
+    public function setExam(?Exam $exam): self { $this->exam = $exam; return $this; }
 
-    public function setParticipant(?Participant $participant): self 
-    { 
-        $this->participant = $participant; 
-        return $this; 
-    }
+    public function getParticipant(): ?Participant { return $this->participant; }
+    public function setParticipant(?Participant $participant): self { $this->participant = $participant; return $this; }
 
-    /**
-     * Hilfsmethode: Holt das Jahr direkt aus dem verknüpften Exam-Objekt.
-     * So muss der Rest des Codes nicht geändert werden.
-     */
-    public function getExamYear(): ?int 
-    { 
-        return $this->exam ? $this->exam->getExamYear() : null; 
-    }
-    
-    public function getAgeYear(): ?int 
-    { 
-        return $this->ageYear; 
-    }
+    // Helper: Greift auf das Jahr des verknüpften Exams zu
+    public function getExamYear(): ?int { return $this->exam?->getYear(); }
 
-    public function setAgeYear(int $ageYear): self 
-    { 
-        $this->ageYear = $ageYear; 
-        return $this; 
-    }
+    // Umbenannt: getAgeYear -> getAge
+    public function getAge(): ?int { return $this->age; }
+    public function setAge(int $age): self { $this->age = $age; return $this; }
+    // Fallback Alias, falls alter Code noch getAgeYear aufruft:
+    public function getAgeYear(): ?int { return $this->age; }
+
+    public function getTotalPoints(): ?int { return $this->totalPoints; }
+    public function setTotalPoints(?int $totalPoints): self { $this->totalPoints = $totalPoints; return $this; }
+
+    public function getFinalMedal(): ?string { return $this->finalMedal; }
+    public function setFinalMedal(?string $finalMedal): self { $this->finalMedal = $finalMedal; return $this; }
 
     /**
      * @return Collection<int, ExamResult>
      */
-    public function getResults(): Collection 
-    { 
-        return $this->results; 
-    }
-    
-    // Methoden für Punkteberechnung (Dummy-Platzhalter, falls du sie im Controller nutzt)
-    public function getTotalPoints(): int
+    public function getResults(): Collection
     {
-        $points = 0;
-        foreach ($this->results as $result) {
-            $points += $result->getPoints();
-        }
-        return $points;
-    }
-
-    public function getFinalMedal(): ?string
-    {
-        // Einfache Logik, muss wahrscheinlich an deine Regeln angepasst werden
-        $points = $this->getTotalPoints();
-        if ($points >= 11) return 'Gold'; // Beispielwerte
-        if ($points >= 8) return 'Silber';
-        if ($points >= 4) return 'Bronze';
-        return null;
+        return $this->results;
     }
 }

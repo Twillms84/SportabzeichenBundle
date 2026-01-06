@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use PulsR\SportabzeichenBundle\Repository\ExamRepository;
 
 #[ORM\Table(name: 'sportabzeichen_exams')]
-#[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\ExamRepository')]
+#[ORM\Entity(repositoryClass: ExamRepository::class)]
 class Exam
 {
     #[ORM\Id]
@@ -15,31 +16,40 @@ class Exam
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
-    #[ORM\Column(type: 'string', length: 255)]
-    private ?string $examName = null;
+    // PHP: $name  <-->  DB: 'exam_name'
+    #[ORM\Column(type: 'string', length: 255, name: 'exam_name')]
+    private ?string $name = null;
 
-    #[ORM\Column(type: 'integer')]
-    private ?int $examYear = null;
+    // PHP: $year  <-->  DB: 'exam_year'
+    #[ORM\Column(type: 'integer', name: 'exam_year')]
+    private ?int $year = null;
 
-    #[ORM\Column(type: 'date', nullable: true)]
-    private ?\DateTimeInterface $examDate = null;
+    // PHP: $date  <-->  DB: 'exam_date'
+    #[ORM\Column(type: 'date', nullable: true, name: 'exam_date')]
+    private ?\DateTimeInterface $date = null;
+
+    // --- GETTER & SETTER (Clean English) ---
 
     public function getId(): ?int { return $this->id; }
 
-    public function getExamName(): ?string { return $this->examName; }
-    public function setExamName(string $name): self { $this->examName = $name; return $this; }
+    public function getName(): ?string { return $this->name; }
+    public function setName(string $name): self { $this->name = $name; return $this; }
 
-    public function getExamYear(): ?int { return $this->examYear; }
-    public function setExamYear(int $year): self { $this->examYear = $year; return $this; }
+    public function getYear(): ?int { return $this->year; }
+    public function setYear(int $year): self { $this->year = $year; return $this; }
 
-    public function getExamDate(): ?\DateTimeInterface { return $this->examDate; }
-    public function setExamDate(?\DateTimeInterface $date): self { $this->examDate = $date; return $this; }
-    
-    public function getName(): string
-    {
-        return 'Sportabzeichen ' . $this->getExamYear();
+    public function getDate(): ?\DateTimeInterface { return $this->date; }
+    public function setDate(?\DateTimeInterface $date): self { $this->date = $date; return $this; }
+
+    // String Repräsentation
+    public function __toString(): string 
+    { 
+        return $this->name ?? (string)$this->year; 
     }
-    // Kleiner Helfer für das Entity
-    public function __toString(): string { return $this->examName ?? (string)$this->examYear; }
-
+    
+    // Hilfsmethode, falls man "Sportabzeichen 2024" braucht
+    public function getDisplayName(): string
+    {
+        return 'Sportabzeichen ' . $this->year;
+    }
 }
