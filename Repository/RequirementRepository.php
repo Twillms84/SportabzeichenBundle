@@ -31,9 +31,9 @@ class RequirementRepository extends ServiceEntityRepository
         ->andWhere(':age BETWEEN r.age_min AND r.age_max') // DB-Spalten 'age_min/max'
         ->setParameters([
             'disc'   => $discipline,
-            'jahr'   => $year,
-            'gender' => $gender,
-            'age'    => $age,
+            'jahr'   => (int)$year,
+            'gender' => (string)$gender,
+            'age'    => (int)$age,
         ])
             ->getQuery()
             ->getOneOrNullResult();
