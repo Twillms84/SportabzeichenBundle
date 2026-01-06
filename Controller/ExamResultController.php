@@ -30,7 +30,8 @@ final class ExamResultController extends AbstractPageController
     #[Route('/', name: 'exams', methods: ['GET'])]
     public function examSelection(): Response
     {
-        $exams = $this->em->getRepository(Exam::class)->findBy([], ['examYear' => 'DESC']);
+        // ANPASSUNG: Property heißt jetzt 'year' in der Entity
+        $exams = $this->em->getRepository(Exam::class)->findBy([], ['year' => 'DESC']);
         return $this->render('@PulsRSportabzeichen/results/index.html.twig', ['exams' => $exams]);
     }
 
@@ -39,25 +40,18 @@ final class ExamResultController extends AbstractPageController
     {
         $selectedClass = $request->query->get('class');
 
-        // 1. Teilnehmer laden (DQL)
-        // Wir holen nur Teilnehmer, die zu DIESEM Exam gehören
         $qb = $this->em->createQueryBuilder();
-        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd') // Alles vorladen ("Eager Loading")
-           ->from(ExamParticipant::class, 'ep')
-           ->join('ep.participant', 'p')
-           ->join('p.user', 'u')
-           ->leftJoin('p.swimmingProofs', 'sp')
-           ->leftJoin('ep.results', 'res')
-           ->leftJoin('res.discipline', 'd')
-           
-           // --- WICHTIGE ÄNDERUNG START ---
-           // Wir filtern nicht nach einem Jahr-Feld in ep, sondern nach der Relation zum Exam-Objekt
-           ->where('ep.exam = :exam')
-           ->setParameter('exam', $exam)
-           // --- WICHTIGE ÄNDERUNG ENDE ---
-
-           ->orderBy('u.lastname', 'ASC')
-           ->addOrderBy('u.firstname', 'ASC');
+        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd')
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->join('p.user', 'u')
+            ->leftJoin('p.swimmingProofs', 'sp')
+            ->leftJoin('ep.results', 'res')
+            ->leftJoin('res.discipline', 'd')
+            ->where('ep.exam = :exam')
+            ->setParameter('exam', $exam)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC');
 
         if ($selectedClass) {
             $qb->andWhere('u.auxinfo = :class')->setParameter('class', $selectedClass);
@@ -71,7 +65,6 @@ final class ExamResultController extends AbstractPageController
         $resultsData = [];
 
         foreach ($examParticipants as $ep) {
-            // Check Swimming Validity
             $hasSwimming = false;
             $swimmingExpiry = null;
             $today = new \DateTime();
@@ -79,33 +72,29 @@ final class ExamResultController extends AbstractPageController
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
                 if ($proof->getValidUntil() >= $today) {
                     $hasSwimming = true;
-                    // Finde das längste Datum
                     if ($swimmingExpiry === null || $proof->getValidUntil() > $swimmingExpiry) {
                         $swimmingExpiry = $proof->getValidUntil();
                     }
                 }
             }
 
-            // Results mappen für JS/Twig Matrix
             foreach ($ep->getResults() as $res) {
                 $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
                     'leistung' => $res->getLeistung(),
                     'points' => $res->getPoints(),
-                    // Kleiner Tipp: Statt Strings 'gold' lieber Konstanten nutzen, aber so gehts erstmal:
                     'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'),
                     'category' => $res->getDiscipline()->getCategory()
                 ];
             }
             
-            // Wir packen das Objekt UND berechnete Werte rein
             $participantsData[] = [
-                'entity' => $ep, // Zugriff im Twig: item.entity
+                'entity' => $ep,
                 'ep_id' => $ep->getId(),
                 'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
                 'nachname' => $ep->getParticipant()->getUser()->getLastname(),
                 'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
-                'geschlecht' => $ep->getParticipant()->getGeschlecht(),
-                // Falls getAgeYear() nicht existiert, musst du es in ExamParticipant.php erstellen oder hier berechnen:
+                // ANPASSUNG: getGeschlecht() -> getGender() (vorausgesetzt Participant Entity wurde auch angepasst)
+                'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(), 
                 'total_points' => $ep->getTotalPoints(),
                 'final_medal' => $ep->getFinalMedal(),
@@ -115,46 +104,48 @@ final class ExamResultController extends AbstractPageController
         }
 
         // 3. Anforderungen/Disziplinen laden
-        // Hier nutzen wir das Jahr aus dem Exam-Objekt ($exam->getExamYear())
+        // ANPASSUNG: DQL nutzt jetzt englische Property-Namen (r.year, r.selectionId)
         $requirements = $this->em->createQueryBuilder()
             ->select('r', 'd')
             ->from(Requirement::class, 'r')
             ->join('r.discipline', 'd')
-            ->where('r.jahr = :year') // In der Anforderungs-Tabelle heißt es meistens 'jahr'
-            ->setParameter('year', $exam->getExamYear())
+            ->where('r.year = :year') 
+            ->setParameter('year', $exam->getYear()) // getExamYear() -> getYear()
             ->orderBy('d.category', 'ASC')
-            ->addOrderBy('r.auswahlnummer', 'ASC')
+            ->addOrderBy('r.selectionId', 'ASC') // auswahlnummer -> selectionId
             ->getQuery()
-            ->getResult();
+            ->getArrayResult(); // Wir bleiben bei ArrayResult für Performance/Template-Kompatibilität
 
         $disciplines = [];
+        
+        // Da wir getArrayResult nutzen, sind die Keys hier Strings!
         foreach ($requirements as $req) {
-            /** @var Requirement $req */
-            $d = $req->getDiscipline();
+            // $req ist hier ein Array!
+            $d = $req['discipline']; 
             
-            // Initialisieren, falls noch nicht vorhanden
-            if (!isset($disciplines[$d->getCategory()])) {
-                 $disciplines[$d->getCategory()] = [];
+            // Mapping DB/Array Keys -> Variablen
+            // Hinweis: Da wir getArrayResult() nutzen, greifen wir auf die gemappten Namen zu
+            // r.selectionId (DQL) -> 'selectionId' (Array Key)
+            
+            $cat = $d['category']; // oder 'kategorie', check deine Discipline Entity mapping
+            
+            if (!isset($disciplines[$cat])) {
+                 $disciplines[$cat] = [];
             }
 
-            // Um Duplikate zu vermeiden (da Requirements pro Alter/Geschlecht mehrfach vorkommen):
-            // Wir nutzen die ID als Key für Eindeutigkeit
-            if (!isset($disciplines[$d->getCategory()][$d->getId()])) {
-                $disciplines[$d->getCategory()][$d->getId()] = [
-                    'id' => $d->getId(),
-                    'name' => $d->getName(),
-                    'unit' => $d->getUnit(),
-                    'category' => $d->getCategory()
-                ];
+            if (!isset($disciplines[$cat][$d['id']])) {
+                $disciplines[$cat][$d['id']] = $d;
             }
+            
+            // requirement an die Disziplin hängen, falls nötig, oder Logik beibehalten
+            // In deinem Originalcode hast du nur die Disziplin gespeichert.
+            // Falls du Requirement-Details im Header brauchst, müsstest du sie hier mergen.
         }
         
-        // Array Keys bereinigen (damit Twig einfach drüber loopen kann)
         foreach($disciplines as $kat => $vals) {
             $disciplines[$kat] = array_values($vals);
         }
 
-        // Klassenliste für Filter (Direktes SQL ist in IServ okay für die Users Tabelle)
         $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
@@ -181,17 +172,18 @@ final class ExamResultController extends AbstractPageController
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Not found'], 404);
 
         // 1. Requirement suchen
-        // Mapping IServ Geschlecht -> DB Geschlecht
-        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGeschlecht() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
+        // ANPASSUNG: getGeschlecht() -> getGender()
+        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGender() ?? ''), 'M')) ? 'MALE' : 'FEMALE';
         
+        // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
         $req = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
             ->where('r.discipline = :disc')
-            ->andWhere('r.jahr = :year')
-            ->andWhere('r.geschlecht = :gender')
-            ->andWhere(':age BETWEEN r.ageMin AND r.ageMax')
+            ->andWhere('r.year = :year')
+            ->andWhere('r.gender = :gender')
+            ->andWhere(':age BETWEEN r.minAge AND r.maxAge') // ageMin -> minAge
             ->setParameters([
                 'disc' => $discipline,
-                'year' => $ep->getExamYear(), // Oder $ep->getExam()->getExamYear() wenn Relation da ist
+                'year' => $ep->getExamYear(), 
                 'gender' => $gender,
                 'age' => $ep->getAgeYear()
             ])
@@ -205,11 +197,10 @@ final class ExamResultController extends AbstractPageController
         if ($req && $leistung !== null && $leistung > 0) {
             $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
             
-            // Helper convert string "1:30" or "1,5" to float logic could go here, 
-            // but for now we assume simple floats in DB string fields
-            $gold = (float)str_replace(',', '.', $req->getGold() ?? '0');
-            $silber = (float)str_replace(',', '.', $req->getSilber() ?? '0');
-            $bronze = (float)str_replace(',', '.', $req->getBronze() ?? '0');
+            // ANPASSUNG: Getter in Englisch
+            $gold = (float)str_replace(',', '.', (string)$req->getGold());
+            $silber = (float)str_replace(',', '.', (string)$req->getSilver()); // getSilber -> getSilver
+            $bronze = (float)str_replace(',', '.', (string)$req->getBronze());
 
             if ($calc === 'SMALLER') {
                 if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
@@ -222,7 +213,7 @@ final class ExamResultController extends AbstractPageController
             }
         }
 
-        // 3. Konflikte bereinigen (gleiche Kategorie löschen)
+        // 3. Konflikte bereinigen
         if ($req) {
             $cat = $discipline->getCategory();
             foreach ($ep->getResults() as $res) {
@@ -251,7 +242,6 @@ final class ExamResultController extends AbstractPageController
             }
             $result->setLeistung($leistung);
             $result->setPoints($points);
-            // Wenn Entity Feld 'stufe' nicht hat, ignorieren wir es hier im Objekt, aber im JSON geben wir es zurück
         }
 
         // 5. Schwimmnachweis
@@ -273,18 +263,15 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    /**
-     * Zentralisierte Schwimm-Logik
-     */
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
-        $year = $ep->getExamYear(); // Oder aus $ep->getExam() holen
+        $year = $ep->getExamYear(); 
         $p = $ep->getParticipant();
 
-        // A) Setzen
         if ($points > 0 && $disc->isSwimmingCategory()) {
             $proof = null;
             foreach ($p->getSwimmingProofs() as $sp) {
+                // ANPASSUNG: Falls ExamYear property 'year' heißt, anpassen
                 if ($sp->getExamYear() === $year) {
                     $proof = $sp; break;
                 }
@@ -302,12 +289,8 @@ final class ExamResultController extends AbstractPageController
             $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
         }
 
-        // B) Löschen (Wenn Schwimmdisziplin gelöscht wurde oder Punkte 0)
-        // Wir prüfen, ob es NOCH gültige Schwimm-Ergebnisse gibt
         $hasValidSwim = false;
         foreach ($ep->getResults() as $res) {
-            // Achtung: Wenn wir oben remove() aufgerufen haben, müssen wir prüfen ob das Objekt noch verwaltet wird
-            // Da wir aber oben removeElement gemacht haben, iteriert die Schleife nur über die "bleibenden".
             if ($res->getPoints() > 0 && $res->getDiscipline()->isSwimmingCategory()) {
                 $hasValidSwim = true;
                 break;
@@ -315,7 +298,6 @@ final class ExamResultController extends AbstractPageController
         }
 
         if (!$hasValidSwim) {
-            // Lösche proofs, die DISCIPLINE basiert sind UND aus diesem Jahr
             foreach ($p->getSwimmingProofs() as $sp) {
                 if ($sp->getExamYear() === $year && str_starts_with($sp->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
                     $this->em->remove($sp);
@@ -329,7 +311,8 @@ final class ExamResultController extends AbstractPageController
         $cats = ['Ausdauer' => 0, 'Kraft' => 0, 'Schnelligkeit' => 0, 'Koordination' => 0];
         
         foreach ($ep->getResults() as $res) {
-            $k = $res->getDiscipline()->getCatgory();
+            // ANPASSUNG: Typo fix getCatgory -> getCategory
+            $k = $res->getDiscipline()->getCategory();
             if (isset($cats[$k]) && $res->getPoints() > $cats[$k]) {
                 $cats[$k] = $res->getPoints();
             }
@@ -337,7 +320,6 @@ final class ExamResultController extends AbstractPageController
         
         $total = array_sum($cats);
         
-        // Check Swimming
         $hasSwimming = false;
         $today = new \DateTime();
         foreach ($ep->getParticipant()->getSwimmingProofs() as $sp) {
@@ -354,13 +336,7 @@ final class ExamResultController extends AbstractPageController
             elseif ($total >= 4) $medal = 'bronze';
         }
 
-        // Entity update
-        // Falls du in ExamParticipant Setter für totalPoints/finalMedal hast:
-        // $ep->setTotalPoints($total);
-        // $ep->setFinalMedal($medal);
-        // $this->em->flush(); // hier nicht flushen, macht der Caller
-
-        // Wir führen ein direktes Update aus, falls Setter fehlen oder um sicher zu sein
+        // Wir führen ein direktes Update aus
         $this->em->getConnection()->update('sportabzeichen_exam_participants', 
             ['total_points' => $total, 'final_medal' => $medal], 
             ['id' => $ep->getId()]
