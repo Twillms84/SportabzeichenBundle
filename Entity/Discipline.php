@@ -83,6 +83,14 @@ class Discipline
         }
         return $this;
     }
+    public function isSwimmingCategory(): bool
+    {
+        // Hier prüfen wir, ob die Kategorie "Ausdauer" oder "Schnelligkeit" ist 
+        // UND ob es eine Schwimmdisziplin ist. 
+        // Am einfachsten über den Namen oder ein Flag, falls vorhanden:
+        return str_contains(strtolower($this->name ?? ''), 'schwimmen') 
+            || str_contains(strtolower($this->category ?? ''), 'schwimmen');
+    }
 
     public function removeRequirement(Requirement $requirement): self
     {
