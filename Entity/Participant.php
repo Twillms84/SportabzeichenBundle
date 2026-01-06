@@ -20,23 +20,26 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
+    // --- NEU & WICHTIG: Laut DB ist dies NOT NULL und UNIQUE ---
+    #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
+    private string $importId = '';
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $user = null;
 
-    // PHP: $birthdate  <-->  DB: 'geburtsdatum'
     #[ORM\Column(type: 'date', nullable: true, name: 'geburtsdatum')]
     private ?\DateTimeInterface $birthdate = null;
 
-    // PHP: $gender  <-->  DB: 'geschlecht'
     #[ORM\Column(type: 'string', length: 10, nullable: true, name: 'geschlecht')]
     private ?string $gender = null; 
 
-    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: SwimmingProof::class, cascade: ['remove'])]
+    // Relation zu Schwimmnachweisen
+    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: SwimmingProof::class, cascade: ['persist', 'remove'])]
     private Collection $swimmingProofs;
 
-    // Optional: Rückbeziehung zu den Teilnahmen (falls du mal wissen willst "An welchen Prüfungen hat dieser Teilnehmer teilgenommen?")
-    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: ExamParticipant::class, cascade: ['remove'])]
+    // Relation zu Prüfungen (Hier fehlte oft die korrekte Verknüpfung)
+    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: ExamParticipant::class, cascade: ['persist', 'remove'])]
     private Collection $examParticipants;
 
     public function __construct()
@@ -47,42 +50,35 @@ class Participant implements CrudInterface
 
     public function getId(): ?int { return $this->id; }
 
+    // --- Getter/Setter für das fehlende Feld ---
+    public function getImportId(): string { return $this->importId; }
+    public function setImportId(string $importId): self { $this->importId = $importId; return $this; }
+
     public function getUser(): ?User { return $this->user; }
     public function setUser(?User $user): self { $this->user = $user; return $this; }
 
-    // --- UMBENANNT: getGeburtsdatum -> getBirthdate ---
     public function getBirthdate(): ?\DateTimeInterface { return $this->birthdate; }
     public function setBirthdate(?\DateTimeInterface $birthdate): self { $this->birthdate = $birthdate; return $this; }
-    // Fallback Alias, falls alter Code noch getGeburtsdatum sucht:
+    // Alias für alten Code
     public function getGeburtsdatum(): ?\DateTimeInterface { return $this->birthdate; }
 
-
-    // --- UMBENANNT: getGeschlecht -> getGender ---
-    // Das behebt deinen Fehler im ExamResultController
     public function getGender(): ?string { return $this->gender; }
     public function setGender(?string $gender): self { $this->gender = $gender; return $this; }
-    // Fallback Alias:
+    // Alias für alten Code
     public function getGeschlecht(): ?string { return $this->gender; }
-
 
     /**
      * @return Collection<int, SwimmingProof>
      */
-    public function getSwimmingProofs(): Collection
-    {
-        return $this->swimmingProofs;
-    }
+    public function getSwimmingProofs(): Collection { return $this->swimmingProofs; }
 
     /**
      * @return Collection<int, ExamParticipant>
      */
-    public function getExamParticipants(): Collection
-    {
-        return $this->examParticipants;
-    }
+    public function getExamParticipants(): Collection { return $this->examParticipants; }
 
     public function __toString(): string
     {
-        return $this->user ? (string)$this->user : 'Unbekannt';
+        return $this->user ? (string)$this->user : ($this->importId ?: 'Unbekannt');
     }
 }

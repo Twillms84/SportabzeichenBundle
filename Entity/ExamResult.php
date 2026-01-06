@@ -15,6 +15,9 @@ class ExamResult
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
+    #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
+    private string $importId = '';
+
     #[ORM\ManyToOne(targetEntity: ExamParticipant::class, inversedBy: 'results')]
     #[ORM\JoinColumn(name: 'ep_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private ?ExamParticipant $examParticipant = null;

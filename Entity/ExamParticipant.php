@@ -9,9 +9,9 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use PulsR\SportabzeichenBundle\Repository\ExamParticipantRepository;
 
-#[ORM\Entity]
+#[ORM\Entity] // Ggf. hier repositoryClass hinzufügen, falls du eins hast
 #[ORM\Table(name: 'sportabzeichen_exam_participants')]
-#[ORM\UniqueConstraint(name: 'uniq_exam_participant', columns: ['exam_id', 'participant_id'])]
+#[ORM\UniqueConstraint(name: 'sportabzeichen_exam_participants_exam_id_participant_id_key', columns: ['exam_id', 'participant_id'])]
 class ExamParticipant
 {
     #[ORM\Id]
@@ -20,25 +20,27 @@ class ExamParticipant
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Exam::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE', name: 'exam_id')]
+    #[ORM\JoinColumn(name: 'exam_id', nullable: false, onDelete: 'CASCADE')]
     private ?Exam $exam = null;
 
-    #[ORM\ManyToOne(targetEntity: Participant::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE', name: 'participant_id')]
+    // HIER WAR EINE LÜCKE: "inversedBy" ist nötig, damit $participant->getExamParticipants() gefüllt wird!
+    #[ORM\ManyToOne(targetEntity: Participant::class, inversedBy: 'examParticipants')]
+    #[ORM\JoinColumn(name: 'participant_id', nullable: false, onDelete: 'CASCADE')]
     private ?Participant $participant = null;
 
-    // Mapping auf deine existierende Spalte "age_year"
+    // DB: age_year (not null) -> PHP: $age
     #[ORM\Column(type: 'integer', name: 'age_year')]
     private ?int $age = null;
 
-    // Existierende Spalte "total_points"
-    #[ORM\Column(type: 'integer', nullable: true, options: ['default' => 0], name: 'total_points')]
-    private ?int $totalPoints = 0;
+    // DB: total_points (default 0)
+    #[ORM\Column(type: 'integer', options: ['default' => 0], name: 'total_points')]
+    private int $totalPoints = 0;
 
-    // Existierende Spalte "final_medal" (Länge 10 laut deinem Schema)
-    #[ORM\Column(length: 10, nullable: true, options: ['default' => 'NONE'], name: 'final_medal')]
-    private ?string $finalMedal = 'NONE';
+    // DB: final_medal (default 'NONE')
+    #[ORM\Column(type: 'string', length: 10, options: ['default' => 'NONE'], name: 'final_medal')]
+    private string $finalMedal = 'NONE';
 
+    // Relation zu den Ergebnissen
     #[ORM\OneToMany(mappedBy: 'examParticipant', targetEntity: ExamResult::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $results;
 
@@ -55,26 +57,20 @@ class ExamParticipant
     public function getParticipant(): ?Participant { return $this->participant; }
     public function setParticipant(?Participant $participant): self { $this->participant = $participant; return $this; }
 
-    // Der Controller sucht oft nach "getExamYear", das leiten wir hier weiter
     public function getExamYear(): ?int { return $this->exam?->getYear(); }
 
-    // Wir nennen es im Code "$age", mappen es aber auf "age_year"
     public function getAge(): ?int { return $this->age; }
     public function setAge(int $age): self { $this->age = $age; return $this; }
-    // Fallback Alias für alten Code
-    public function getAgeYear(): ?int { return $this->age; }
+    public function getAgeYear(): ?int { return $this->age; } // Alias
 
-    public function getTotalPoints(): ?int { return $this->totalPoints; }
-    public function setTotalPoints(?int $totalPoints): self { $this->totalPoints = $totalPoints; return $this; }
+    public function getTotalPoints(): int { return $this->totalPoints; }
+    public function setTotalPoints(int $totalPoints): self { $this->totalPoints = $totalPoints; return $this; }
 
-    public function getFinalMedal(): ?string { return $this->finalMedal; }
-    public function setFinalMedal(?string $finalMedal): self { $this->finalMedal = $finalMedal; return $this; }
+    public function getFinalMedal(): string { return $this->finalMedal; }
+    public function setFinalMedal(string $finalMedal): self { $this->finalMedal = $finalMedal; return $this; }
 
     /**
      * @return Collection<int, ExamResult>
      */
-    public function getResults(): Collection
-    {
-        return $this->results;
-    }
+    public function getResults(): Collection { return $this->results; }
 }
