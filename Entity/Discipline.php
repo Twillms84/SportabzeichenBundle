@@ -53,23 +53,23 @@ class Discipline
 
     public function getUnit(): ?string
     {
-        return $this->unit;
+        return $this->einheit;
     }
 
     public function setUnit(string $unit): self
     {
-        $this->unit = $unit;
+        $this->einheit = $unit;
         return $this;
     }
 
     public function getCategory(): ?string
     {
-        return $this->category;
+        return $this->kategorie;
     }
 
     public function setCategory(string $category): self
     {
-        $this->category = $category;
+        $this->kategorie = $category;
         return $this;
     }
 
