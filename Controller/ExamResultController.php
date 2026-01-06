@@ -186,8 +186,10 @@ final class ExamResultController extends AbstractPageController
             return new JsonResponse(['error' => 'Participant not found'], 404);
         }
 
-        // Direkter Zugriff auf das Feld gender (Mapping: geschlecht)
+        // Falls getGeschlecht() intern auf den User zugreift, 
+        // nimm lieber direkt die Property, falls möglich, oder den Alias:
         $rawGender = $participant->getGender() ?? 'W'; 
+
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
         
         // ANPASSUNG: DQL Query auf neue englische Properties (year, gender, minAge, maxAge)
