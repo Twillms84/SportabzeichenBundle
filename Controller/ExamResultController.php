@@ -49,9 +49,13 @@ final class ExamResultController extends AbstractPageController
            ->leftJoin('p.swimmingProofs', 'sp')
            ->leftJoin('ep.results', 'res')
            ->leftJoin('res.discipline', 'd')
-           ->where('ep.examYear = :year') // Falls du die Relation in ExamParticipant noch nicht hast, nutzen wir das Jahr
-           // ODER WENN DU DIE RELATION HAST: ->where('ep.exam = :exam') ->setParameter('exam', $exam)
-           ->setParameter('year', $exam->getExamYear())
+           
+           // --- WICHTIGE ÄNDERUNG START ---
+           // Wir filtern nicht nach einem Jahr-Feld in ep, sondern nach der Relation zum Exam-Objekt
+           ->where('ep.exam = :exam')
+           ->setParameter('exam', $exam)
+           // --- WICHTIGE ÄNDERUNG ENDE ---
+
            ->orderBy('u.lastname', 'ASC')
            ->addOrderBy('u.firstname', 'ASC');
 
@@ -62,8 +66,7 @@ final class ExamResultController extends AbstractPageController
         /** @var ExamParticipant[] $examParticipants */
         $examParticipants = $qb->getQuery()->getResult();
 
-        // 2. Damit das Twig-Template nicht explodiert, bauen wir die Struktur leicht um
-        // oder wir passen Twig an. Hier bereiten wir die Daten so auf, wie Twig sie erwartet.
+        // 2. Daten aufbereiten für Twig
         $participantsData = [];
         $resultsData = [];
 
@@ -88,34 +91,36 @@ final class ExamResultController extends AbstractPageController
                 $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
                     'leistung' => $res->getLeistung(),
                     'points' => $res->getPoints(),
-                    'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'), // Quick hack
+                    // Kleiner Tipp: Statt Strings 'gold' lieber Konstanten nutzen, aber so gehts erstmal:
+                    'stufe' => $res->getPoints() === 3 ? 'gold' : ($res->getPoints() === 2 ? 'silber' : 'bronze'),
                     'kategorie' => $res->getDiscipline()->getKategorie()
                 ];
             }
             
             // Wir packen das Objekt UND berechnete Werte rein
             $participantsData[] = [
-                'entity' => $ep, // Zugriff im Twig: p.entity.participant.user.lastname
+                'entity' => $ep, // Zugriff im Twig: item.entity
                 'ep_id' => $ep->getId(),
                 'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
                 'nachname' => $ep->getParticipant()->getUser()->getLastname(),
                 'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
                 'geschlecht' => $ep->getParticipant()->getGeschlecht(),
-                'age_year' => $ep->getAgeYear(),
-                'total_points' => $ep->getTotalPoints(), // Stelle sicher, dass Getter existiert
-                'final_medal' => $ep->getFinalMedal(),   // Stelle sicher, dass Getter existiert
+                // Falls getAgeYear() nicht existiert, musst du es in ExamParticipant.php erstellen oder hier berechnen:
+                'age_year' => $ep->getAgeYear(), 
+                'total_points' => $ep->getTotalPoints(),
+                'final_medal' => $ep->getFinalMedal(),
                 'has_swimming' => $hasSwimming,
                 'swimming_expiry' => $swimmingExpiry
             ];
         }
 
         // 3. Anforderungen/Disziplinen laden
-        // Hier nutzen wir Requirements um zu wissen, welche Disziplinen aktiv sind
+        // Hier nutzen wir das Jahr aus dem Exam-Objekt ($exam->getExamYear())
         $requirements = $this->em->createQueryBuilder()
             ->select('r', 'd')
             ->from(Requirement::class, 'r')
             ->join('r.discipline', 'd')
-            ->where('r.jahr = :year')
+            ->where('r.jahr = :year') // In der Anforderungs-Tabelle heißt es meistens 'jahr'
             ->setParameter('year', $exam->getExamYear())
             ->orderBy('d.kategorie', 'ASC')
             ->addOrderBy('r.auswahlnummer', 'ASC')
@@ -126,30 +131,35 @@ final class ExamResultController extends AbstractPageController
         foreach ($requirements as $req) {
             /** @var Requirement $req */
             $d = $req->getDiscipline();
-            // Bauen wir das Array so, wie es das Template erwartet (grouped by Kategorie)
+            
+            // Initialisieren, falls noch nicht vorhanden
+            if (!isset($disciplines[$d->getKategorie()])) {
+                 $disciplines[$d->getKategorie()] = [];
+            }
+
+            // Um Duplikate zu vermeiden (da Requirements pro Alter/Geschlecht mehrfach vorkommen):
+            // Wir nutzen die ID als Key für Eindeutigkeit
             if (!isset($disciplines[$d->getKategorie()][$d->getId()])) {
-                $disciplines[$d->getKategorie()][] = [
+                $disciplines[$d->getKategorie()][$d->getId()] = [
                     'id' => $d->getId(),
                     'name' => $d->getName(),
                     'einheit' => $d->getEinheit(),
                     'kategorie' => $d->getKategorie()
                 ];
-                // Markieren um Duplikate zu vermeiden (Reqs sind ja pro Alter/Geschlecht mehrfach da)
-                $disciplines[$d->getKategorie()][$d->getId()] = true; 
             }
         }
         
-        // Array Keys bereinigen (wegen der ID-Prüfung oben)
+        // Array Keys bereinigen (damit Twig einfach drüber loopen kann)
         foreach($disciplines as $kat => $vals) {
-            $disciplines[$kat] = array_values(array_filter($vals, 'is_array'));
+            $disciplines[$kat] = array_values($vals);
         }
 
-        // Klassenliste für Filter
+        // Klassenliste für Filter (Direktes SQL ist in IServ okay für die Users Tabelle)
         $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
             'exam' => $exam,
-            'participants' => $participantsData, // Angepasstes Array
+            'participants' => $participantsData,
             'disciplines' => $disciplines,
             'results' => $resultsData,
             'classes' => $classes,
