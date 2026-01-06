@@ -9,7 +9,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use PulsR\SportabzeichenBundle\Repository\ExamParticipantRepository;
 
-#[ORM\Entity(repositoryClass: ExamParticipantRepository::class)]
+#[ORM\Entity]
 #[ORM\Table(name: 'sportabzeichen_exam_participants')]
 #[ORM\UniqueConstraint(name: 'uniq_exam_participant', columns: ['exam_id', 'participant_id'])]
 class ExamParticipant
