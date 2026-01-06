@@ -222,17 +222,29 @@
                                     
                                     {# ÄNDERUNG 1: Wir iterieren über Disziplinen, nicht Requirements #}
                                     {% for discipline in items %}
-                                    
-                                        {# ÄNDERUNG 2: Wir schauen uns die Requirements DIESER Disziplin an #}
-                                        {# Wir nehmen an, dass in Discipline.php eine Relation "requirements" existiert #}
-                                        {% for req in discipline.requirements %}
+                                        {# 1. Das Ergebnis aus dem großen Array herausfischen #}
+                                        {# Wir nutzen p.ep_id (Teilnehmer) und discipline.id (Disziplin) als Schlüssel #}
+                                        {% set result = results[p.ep_id][discipline.id] ?? null %}
                                         
-                                            {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                                {% set options = options|merge([req]) %}
-                                            {% endif %}
+                                        {# ... hier folgt dein Code für Requirements (req in discipline.requirements) ... #}
+                                        
+                                        {# ... weiter unten bei den Inputs ... #}
+
+                                        {# 2. Radio-Button (Auswahl der Disziplin) #}
+                                        {# Wenn 'result' existiert, wurde diese Disziplin gewählt -> checked #}
+                                        <input type="radio" 
+                                            name="selection_{{ p.ep_id }}_{{ category }}" 
+                                            value="{{ discipline.id }}"
+                                            {{ result ? 'checked' : '' }} 
+                                            class="..." >
+
+                                        {# 3. Eingabefeld (Leistung) #}
+                                        {# Wenn 'result' existiert, zeige den Wert an #}
+                                        <input type="text" 
+                                            name="leistung_{{ p.ep_id }}_{{ discipline.id }}" 
+                                            value="{{ result ? result.leistung : '' }}"
+                                            class="..." >
                                             
-                                        {% endfor %}
-                                        
                                     {% endfor %}
 
                                     {# Ab hier bleibt deine Logik fast gleich #}
