@@ -184,6 +184,12 @@ final class ExamResultController extends AbstractPageController
         $rawGender = $participant->getGender() ?? 'W'; 
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
 
+        $disciplineId = (int)($data['discipline_id'] ?? 0);
+        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+
+        if (!$discipline) {
+            return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+        }
         // 3. Erst jetzt kommt dein Requirement-Query (Zeile 173)
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
             $discipline,
