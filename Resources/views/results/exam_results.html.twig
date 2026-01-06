@@ -258,7 +258,7 @@
                                             {% else %}
                                                 {% for req in options %}
                                                     {# Key-Check: 'unit' (aus error log) oder 'einheit' (legacy) #}
-                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? unitMap[req.discipline.einheit] ?? req.discipline.unit %}
+                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
                                                     
                                                     <option value="{{ req.discipline.id }}" 
                                                             {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
