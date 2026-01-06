@@ -46,7 +46,8 @@ class ExamParticipant
 
     public function __construct()
     {
-        $this->results = new ArrayCollection();
+        // Falls das fehlt, bitte ergänzen:
+        $this->results = new \Doctrine\Common\Collections\ArrayCollection();
     }
 
     public function getId(): ?int { return $this->id; }

@@ -165,14 +165,15 @@ final class ExamResultController extends AbstractPageController
         
         // 1. Participant laden (inklusive Exam für das Jahr)
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'e')
+            ->select('ep', 'p', 'e', 'r') // 'r' für results hinzugefügt
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->join('ep.exam', 'e')
+            ->leftJoin('ep.results', 'r') // Link zu den existierenden Ergebnissen
             ->where('ep.id = :id')
             ->setParameter('id', (int)($data['ep_id'] ?? 0))
             ->getQuery()
-            ->setHint(\Doctrine\ORM\Query::HINT_FORCE_PARTIAL_LOAD, true)
+            // Wir entfernen HINT_FORCE_PARTIAL_LOAD, da es hier mehr Probleme macht als es löst
             ->getOneOrNullResult();
 
         if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
