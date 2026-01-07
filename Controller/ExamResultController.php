@@ -182,7 +182,7 @@ final class ExamResultController extends AbstractPageController
 
         $currentCat = $discipline->getCategory();
         
-        // --- BERECHNUNGS-DATEN VORBEREITEN ---
+        // Daten für Berechnung vorbereiten
         $year = (int)$ep->getExam()->getYear();
         $age  = (int)$ep->getAgeYear();
         $rawGender = $ep->getParticipant()->getGender() ?? 'W';
@@ -192,7 +192,7 @@ final class ExamResultController extends AbstractPageController
         $leistung = ($leistungInput !== null && $leistungInput !== '') 
             ? (float)str_replace(',', '.', (string)$leistungInput) : null;
 
-        // 1. Alte Ergebnisse dieser Kategorie entfernen
+        // 2. Alte Ergebnisse dieser Kategorie entfernen (Synchron für Doctrine)
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
                 $ep->removeResult($existingRes); 
@@ -201,20 +201,24 @@ final class ExamResultController extends AbstractPageController
         }
         $this->em->flush();
 
-        // 2. Punkte berechnen
+        // 3. Logik-Check: Verband oder Messung?
         $points = 0;
         $stufe = 'none';
         $calc = strtoupper($discipline->getBerechnungsart() ?? '');
 
         if ($calc === 'VERBAND') {
-            $points = 3; $stufe = 'gold'; $leistung = 1.0;
+            // Sonderfall: Verbandsleistung zählt immer als Gold (3 Punkte)
+            $points = 3;
+            $stufe = 'gold';
+            $leistung = 1.0; // Dummy-Wert für die Datenbank
         } elseif ($leistung !== null && $leistung > 0) {
+            // Normale Berechnung über Requirements
             $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
             $points = $pData['points'];
             $stufe = $pData['stufe'];
         }
 
-        // 3. Neues Ergebnis erstellen und verknüpfen
+        // 4. Neues Ergebnis erstellen und verknüpfen
         $newResult = new ExamResult();
         $newResult->setDiscipline($discipline);
         $newResult->setLeistung($leistung ?? 0.0);
