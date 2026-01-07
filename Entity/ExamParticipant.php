@@ -74,8 +74,6 @@ class ExamParticipant
      * @return Collection<int, ExamResult>
      */
     public function getResults(): Collection { return $this->results; }
-
-    public function getResults(): Collection
 {
     return $this->results;
 }
