@@ -307,22 +307,22 @@ final class ExamResultController extends AbstractPageController
 
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
-        $year = $ep->getExam()->getYear(); 
-        $p = $ep->getParticipant();
+        $year = $ep->getExam()->getYear();
+        // WICHTIG: Wir holen nur die ID, um das Objekt-Laden zu vermeiden
+        $participantId = $ep->getParticipant()->getId();
 
-        // Wenn Punkte > 0 und es eine Schwimmdisziplin ist -> Nachweis eintragen
+        // 1. Bestehenden Nachweis direkt über das Repository suchen
+        // Wir nutzen das Participant-Objekt als Referenz, aber ohne es zu "initialisieren"
+        $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+            'participant' => $ep->getParticipant(),
+            'examYear' => $year
+        ]);
+
+        // Wenn Punkte > 0 und es eine Schwimmdisziplin ist
         if ($points > 0 && $disc->isSwimmingCategory()) {
-            $proof = null;
-            foreach ($p->getSwimmingProofs() as $sp) {
-                if ($sp->getExamYear() === $year) {
-                    $proof = $sp; 
-                    break;
-                }
-            }
-            
             if (!$proof) {
                 $proof = new SwimmingProof();
-                $proof->setParticipant($p);
+                $proof->setParticipant($ep->getParticipant());
                 $proof->setExamYear($year);
                 $this->em->persist($proof);
             }
@@ -333,20 +333,24 @@ final class ExamResultController extends AbstractPageController
             $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
         }
 
-        // Falls die Leistung gelöscht wurde, prüfen ob noch eine ANDERE Schwimmdisziplin vorliegt
-        $hasValidSwim = false;
-        foreach ($ep->getResults() as $res) {
-            if ($res->getPoints() > 0 && $res->getDiscipline()->isSwimmingCategory()) {
-                $hasValidSwim = true;
-                break;
-            }
-        }
+        // 2. Falls gelöscht wurde: Check, ob noch andere Schwimm-Ergebnisse da sind
+        if ($points === 0 && $disc->isSwimmingCategory()) {
+            // Wir zählen direkt in der DB, um $ep->getResults() zu vermeiden, 
+            // falls das auch zum User-Fehler führt
+            $otherSwimCount = (int) $this->em->createQueryBuilder()
+                ->select('COUNT(res.id)')
+                ->from(ExamResult::class, 'res')
+                ->join('res.discipline', 'd')
+                ->where('res.examParticipant = :ep')
+                ->andWhere('res.points > 0')
+                ->andWhere('d.category IN (:swimCats)') // Falls du isSwimmingCategory() logik hier brauchst
+                ->setParameter('ep', $ep)
+                ->setParameter('swimCats', ['Ausdauer', 'Schnelligkeit']) // Hier die Kategorien eintragen, die Schwimmen sein können
+                ->getQuery()
+                ->getSingleScalarResult();
 
-        if (!$hasValidSwim) {
-            foreach ($p->getSwimmingProofs() as $sp) {
-                if ($sp->getExamYear() === $year && str_starts_with($sp->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
-                    $this->em->remove($sp);
-                }
+            if ($otherSwimCount === 0 && $proof && str_starts_with($proof->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
+                $this->em->remove($proof);
             }
         }
     }
