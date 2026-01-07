@@ -74,9 +74,6 @@ class ExamParticipant
      * @return Collection<int, ExamResult>
      */
     public function getResults(): Collection { return $this->results; }
-{
-    return $this->results;
-}
 
     public function addResult(ExamResult $result): self
     {
