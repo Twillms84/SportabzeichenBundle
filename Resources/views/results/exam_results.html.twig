@@ -170,13 +170,21 @@
                                 {# Manueller Schwimmnachweis #}
                                 {% if hasSwimmingCategory %}
                                     <div class="mt-1">
+                                         <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
+                                            <input class="form-check-input ms-0" type="checkbox" role="switch"
+                                                   id="swim-switch-{{ p.ep_id }}"
+                                                   {{ p.has_swimming ? 'checked' : '' }}
+                                                   data-save 
+                                                   data-ep-id="{{ p.ep_id }}" 
+                                                   data-type="swimming"
+                                                   style="cursor: pointer;">
+                                                   
+                                            <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
+                                                   for="swim-switch-{{ p.ep_id }}"
+                                                   id="swimming-label-{{ p.ep_id }}">
+                                                  {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
+                                            </label>
                                         <div class="js-swimming-status-{{ ep.id }}">
-                                            {% if ep.participant.hasValidSwimmingProof(exam.year) %}
-                                                <span class="text-success">OK</span>
-                                            {% else %}
-                                                <span class="text-danger">✘</span>
-                                            {% endif %}
-                                        </div>
                                     </div>
                                         
                                         {% if p.swimming_expiry and p.has_swimming %}
