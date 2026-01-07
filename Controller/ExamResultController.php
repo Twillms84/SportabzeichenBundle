@@ -362,8 +362,7 @@ final class ExamResultController extends AbstractPageController
             'stufe' => $stufe,
             'total_points' => $this->calculateTotalPoints($ep), // Deine Summen-Logik
             'final_medal' => $this->calculateMedal($ep),       // Deine Medaillen-Logik
-            'has_swimming' => $hasSwimming,                    // DAS HIER IST NEU
-        ]);
+            'has_swimming' => ($proof !== null), // Gibt true oder false ans JS        ]);
     }
 
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void

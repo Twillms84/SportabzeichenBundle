@@ -125,16 +125,25 @@ document.addEventListener('DOMContentLoaded', function() {
                         medalBadge.textContent = '';
                     }
                 }
-                const swimIcon = row.querySelector('.js-swimming-status-' + epId) || row.querySelector('.js-swimming-status');
-                if (swimIcon && typeof data.has_swimming !== 'undefined') {
-                    if (data.has_swimming) {
-                        // Anzeige als "Erfüllt" (z.B. grüner Haken oder Wellen-Icon)
-                        swimIcon.innerHTML = '<span class="text-success" title="Schwimmnachweis:">OK</span>'; // Oder dein Icon-HTML
-                        swimIcon.classList.add('is-verified');
-                    } else {
-                        // Anzeige als "Fehlt"
-                        swimIcon.innerHTML = '<span class="text-danger" title="Schwimmnachweis fehlt">✘</span>';
-                        swimIcon.classList.remove('is-verified');
+                // LIVE SCHWIMM-UPDATE für den Form-Switch
+                const swimSwitch = document.getElementById('swim-switch-' + epId);
+                const swimLabel = document.getElementById('swimming-label-' + epId);
+
+                if (swimSwitch && typeof data.has_swimming !== 'undefined') {
+                    // 1. Den Switch-Haken setzen oder entfernen
+                    swimSwitch.checked = data.has_swimming;
+
+                    // 2. Das Label anpassen (Text und Farbe)
+                    if (swimLabel) {
+                        if (data.has_swimming) {
+                            swimLabel.textContent = 'Schwimmen: OK';
+                            swimLabel.classList.remove('text-danger');
+                            swimLabel.classList.add('text-success');
+                        } else {
+                            swimLabel.textContent = 'Schwimmen: Fehlt';
+                            swimLabel.classList.remove('text-success');
+                            swimLabel.classList.add('text-danger');
+                        }
                     }
                 }
             }
@@ -144,6 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    
     // --- HELPER FUNKTIONEN ---
 
     function updateRequirementHints(select) {
