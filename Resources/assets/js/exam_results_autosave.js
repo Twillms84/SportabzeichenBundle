@@ -168,4 +168,37 @@ document.addEventListener('DOMContentLoaded', function() {
         if(labelG) labelG.textContent = g;
         if(unitLabel) unitLabel.textContent = unit;
     }
+    // Funktion zum Senden an den Server
+    function sendData($row) {
+        const data = {
+            ep_id: $row.data('ep-id'),
+            discipline_id: $row.find('.discipline-select').val(),
+            leistung: $row.find('.leistung-input').val()
+        };
+
+        $.post('/sportabzeichen/exams/results/exam/result/save', JSON.stringify(data), function(response) {
+            // UI aktualisieren (Punkte-Badge, Gesamtpunkte, etc.)
+            $row.find('.points-badge').text(response.points);
+            
+            // Verbands-Sperre
+            const $input = $row.find('.leistung-input');
+            if (response.is_verband) {
+                $input.val('').prop('disabled', true).addClass('bg-light');
+            } else {
+                $input.prop('disabled', false).removeClass('bg-light');
+            }
+            
+            updateTotalSummary(response); // Deine Funktion für die Gesamtanzeige
+        });
+    }
+
+    // Event 1: Disziplin wird geändert
+    $(document).on('change', '.discipline-select', function() {
+        sendData($(this).closest('tr'));
+    });
+
+    // Event 2: Leistung wird eingetragen
+    $(document).on('change', '.leistung-input', function() {
+        sendData($(this).closest('tr'));
+    });
 });
