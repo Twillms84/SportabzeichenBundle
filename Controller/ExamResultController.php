@@ -201,9 +201,9 @@ final class ExamResultController extends AbstractPageController
         // Matching Requirement suchen
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
             $discipline,
-            (int)$exam->getYear(),
+            (int)$year,
             $gender,
-            (int)$ep->getAgeYear()
+            (int)$age
         );
 
         $points = 0;
