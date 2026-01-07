@@ -2,20 +2,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('autosave-form');
     if (!form) return;
 
-    // Wir holen die Basis-URL (z.B. /sportabzeichen/exams/results/exam)
-    // Im Twig solltest du data-discipline-route und data-result-route setzen
-    const disciplineRoute = form.getAttribute('data-discipline-route'); 
-    const resultRoute = form.getAttribute('data-result-route');
+    const saveRoute = form.getAttribute('data-global-route');
     const csrfToken = form.getAttribute('data-global-token');
 
-    // --- 1. INITIALISIERUNG ---
+    // --- 1. INITIALISIERUNG: Anforderungen anzeigen ---
     document.querySelectorAll('.js-discipline-select').forEach(select => {
         updateRequirementHints(select);
     });
 
-    // --- 2. EVENT LISTENER ---
+    // --- 2. EVENT LISTENER: Ändern & Speichern ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
+        
+        // Nur reagieren, wenn das Element Teil des Speicher-Prozesses ist
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
@@ -26,21 +25,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
 
-        // Bestimme die Route basierend auf dem Element-Typ
-        const isSelect = (el.tagName === 'SELECT');
-        const targetRoute = isSelect ? disciplineRoute : resultRoute;
-
-        if (isSelect) {
+        // A) Wenn Disziplin gewechselt wurde: Sofort die Anforderungen (B/S/G) aktualisieren
+        if (el.tagName === 'SELECT') {
             updateRequirementHints(el);
         }
 
-        if (!selectEl.value || !epId) return;
+        // Validierung
+        if (!selectEl || !selectEl.value || !epId) return;
 
+        // B) AJAX SAVE REQUEST
         try {
-            // UI Feedback
+            // UI Feedback: Zeigen, dass gespeichert wird
             inputEl.style.opacity = '0.5';
 
-            const response = await fetch(targetRoute, {
+            const response = await fetch(saveRoute, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -55,118 +53,164 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             if (!response.ok) throw new Error('Server-Fehler');
+
             const data = await response.json();
             
+            // UI Feedback zurücksetzen
             inputEl.style.opacity = '1';
 
             if (data.status === 'ok') {
-                // 1. VERBANDS-LOGIK (UI Sperre)
-                // Wenn der Controller sagt, es ist eine Verbandsdisziplin (3 Punkte fix)
-                if (data.points === 3 && data.stufe === 'gold' && isSelect) {
-                    const selectedOption = selectEl.options[selectEl.selectedIndex];
-                    if (selectedOption.getAttribute('data-calc') === 'VERBAND') {
-                        inputEl.value = ''; 
-                        inputEl.disabled = true;
-                        inputEl.placeholder = 'Verband';
-                    }
-                } else if (isSelect) {
-                    inputEl.disabled = false;
-                    inputEl.placeholder = '';
-                }
-
-                // 2. FARB-UPDATE
+                
+                // 1. ZELLEN-FARBE UPDATE (Einzeldisziplin)
+                // Controller sendet jetzt 'gold', 'silber', 'bronze' oder 'none' (alles klein)
                 const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
+                
                 [selectEl, inputEl].forEach(element => {
                     element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
                     element.classList.add('medal-' + resultColor);
                 });
 
-                // 3. KATEGORIE BEREINIGEN (Nur bei Disziplin-Wechsel relevant)
-                if (isSelect && kat) {
-                    row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                        if (otherEl.closest('td') !== cell) {
+                // 2. ANDERE ZELLEN DER GLEICHEN KATEGORIE BEREINIGEN
+                if (kat) {
+                    const groupInputs = row.querySelectorAll(`[data-kategorie="${kat}"]`);
+                    groupInputs.forEach(otherEl => {
+                        const otherCell = otherEl.closest('td');
+                        // Nur andere Zellen bearbeiten, nicht die aktuelle
+                        if (otherCell !== cell) {
                             if (otherEl.tagName === 'INPUT') otherEl.value = '';
+                            if (otherEl.tagName === 'SELECT') {
+                                // Optional: Reset Select, falls gewünscht
+                            }
                             otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                             otherEl.classList.add('medal-none');
                         }
                     });
                 }
+                
+                // 3. GESAMTPUNKTE UPDATE
+                const totalBadge = document.getElementById('total-points-' + epId);
+                if (totalBadge) {
+                    const valSpan = totalBadge.querySelector('.pts-val');
+                    if (valSpan) valSpan.textContent = data.total_points;
+                }
 
-                // 4. STATISTIK UPDATE (Punkte & Medaille)
-                updateUIWidgets(epId, row, data);
+                // 4. MEDAILLEN BADGE UPDATE (Gesamtergebnis) -> HIER WAR DIE WICHTIGSTE ÄNDERUNG
+                const medalBadge = row.querySelector('.js-medal-badge');
+                if (medalBadge) {
+                    // Sicherstellen, dass wir einen String haben
+                    const rawMedalName = data.final_medal ? String(data.final_medal) : ''; 
+                    const lowerMedalName = rawMedalName.toLowerCase();
+
+                    if (lowerMedalName && lowerMedalName !== 'none') {
+                        medalBadge.style.display = 'inline-block';
+                        
+                        // Text kapitalisieren (gold -> Gold) für die Anzeige
+                        medalBadge.textContent = rawMedalName.charAt(0).toUpperCase() + rawMedalName.slice(1);
+                        
+                        // Alte Klassen entfernen
+                        medalBadge.className = 'badge badge-mini js-medal-badge'; // Basisklassen resetten
+                        
+                        // Neue Klasse hinzufügen (basierend auf Kleinschreibung prüfen)
+                        if (lowerMedalName === 'gold') {
+                            medalBadge.classList.add('bg-warning', 'text-dark');
+                        } else if (lowerMedalName === 'silber') {
+                            medalBadge.classList.add('bg-secondary', 'text-white');
+                        } else if (lowerMedalName === 'bronze') {
+                            // Bei Bronze nehmen wir oft 'danger' (rot) oder 'warning' mit dunklerer Schrift, 
+                            // oder einen eigenen Style. Standard Bootstrap 'bg-danger' passt oft gut genug als Bronze-Ersatz.
+                            medalBadge.classList.add('bg-danger', 'text-white'); 
+                        }
+                    } else {
+                        medalBadge.style.display = 'none';
+                        medalBadge.textContent = '';
+                    }
+                }
+                const swimIcon = row.querySelector('.js-swimming-status-' + epId) || row.querySelector('.js-swimming-status');
+                if (swimIcon && typeof data.has_swimming !== 'undefined') {
+                    if (data.has_swimming) {
+                        // Anzeige als "Erfüllt" (z.B. grüner Haken oder Wellen-Icon)
+                        swimIcon.innerHTML = '<span class="text-success" title="Schwimmnachweis:">OK</span>'; // Oder dein Icon-HTML
+                        swimIcon.classList.add('is-verified');
+                    } else {
+                        // Anzeige als "Fehlt"
+                        swimIcon.innerHTML = '<span class="text-danger" title="Schwimmnachweis fehlt">✘</span>';
+                        swimIcon.classList.remove('is-verified');
+                    }
+                }
             }
         } catch (e) {
-            console.error('Fehler:', e);
-            inputEl.style.backgroundColor = '#ffe6e6';
+            console.error('Fehler beim Autosave:', e);
+            inputEl.style.backgroundColor = '#ffe6e6'; // Fehler rot markieren
         }
     });
 
-    // --- HELPER ---
-
-    function updateUIWidgets(epId, row, data) {
-        // Gesamtpunkte
-        const totalBadge = document.getElementById('total-points-' + epId);
-        if (totalBadge) {
-            const valSpan = totalBadge.querySelector('.pts-val');
-            if (valSpan) valSpan.textContent = data.total_points;
-        }
-
-        // Medaille
-        const medalBadge = row.querySelector('.js-medal-badge');
-        if (medalBadge) {
-            const medal = data.final_medal ? String(data.final_medal).toLowerCase() : 'none';
-            if (medal !== 'none') {
-                medalBadge.style.display = 'inline-block';
-                medalBadge.textContent = medal.charAt(0).toUpperCase() + medal.slice(1);
-                medalBadge.className = 'badge badge-mini js-medal-badge'; // Reset
-                
-                const classes = { 'gold': 'bg-warning text-dark', 'silber': 'bg-secondary text-white', 'bronze': 'bg-danger text-white' };
-                if (classes[medal]) medalBadge.className += ' ' + classes[medal];
-            } else {
-                medalBadge.style.display = 'none';
-            }
-        }
-    }
-
-    // 3. LIVE SCHWIMM-UPDATE (NEU)
-        const swimIcon = row.querySelector('.js-swimming-status-' + epId) || row.querySelector('.js-swimming-status');
-        if (swimIcon && typeof data.has_swimming !== 'undefined') {
-            if (data.has_swimming) {
-                // Anzeige als "Erfüllt" (z.B. grüner Haken oder Wellen-Icon)
-                swimIcon.innerHTML = '<span class="text-success" title="Schwimmnachweis erbracht">OK</span>'; // Oder dein Icon-HTML
-                swimIcon.classList.add('is-verified');
-            } else {
-                // Anzeige als "Fehlt"
-                swimIcon.innerHTML = '<span class="text-danger" title="Schwimmnachweis fehlt">✘</span>';
-                swimIcon.classList.remove('is-verified');
-            }
-        }
-    }
+    // --- HELPER FUNKTIONEN ---
 
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
-        const opt = select.options[select.selectedIndex];
-        if (!parentTd || !opt) return;
+        if (!parentTd) return;
 
-        const labels = {
-            b: parentTd.querySelector('.js-val-b'),
-            s: parentTd.querySelector('.js-val-s'),
-            g: parentTd.querySelector('.js-val-g'),
-            unit: parentTd.querySelector('.js-unit-label')
-        };
+        const selectedOption = select.options[select.selectedIndex];
+        
+        const labelB = parentTd.querySelector('.js-val-b');
+        const labelS = parentTd.querySelector('.js-val-s');
+        const labelG = parentTd.querySelector('.js-val-g');
+        const unitLabel = parentTd.querySelector('.js-unit-label');
         const input = parentTd.querySelector('input[data-type="leistung"]');
 
-        if (!opt.value) {
-            Object.values(labels).forEach(l => l && (l.textContent = l === labels.unit ? '' : '-'));
+        if (!selectedOption || !selectedOption.value) {
+            if(labelB) labelB.textContent = '-';
+            if(labelS) labelS.textContent = '-';
+            if(labelG) labelG.textContent = '-';
+            if(unitLabel) unitLabel.textContent = '';
             if(input) input.disabled = true;
             return;
         }
 
-        if(input) input.disabled = (opt.getAttribute('data-calc') === 'VERBAND');
-        
-        if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
-        if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
-        if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
-        if(labels.unit) labels.unit.textContent = opt.getAttribute('data-unit') || '';
+        if(input) input.disabled = false;
+
+        // Diese Attribute müssen im Twig Template gesetzt werden!
+        const b = selectedOption.getAttribute('data-bronze') || '-';
+        const s = selectedOption.getAttribute('data-silber') || '-';
+        const g = selectedOption.getAttribute('data-gold') || '-';
+        const unit = selectedOption.getAttribute('data-unit') || '';
+
+        if(labelB) labelB.textContent = b;
+        if(labelS) labelS.textContent = s;
+        if(labelG) labelG.textContent = g;
+        if(unitLabel) unitLabel.textContent = unit;
     }
+    // Funktion zum Senden an den Server
+    function sendData($row) {
+        const data = {
+            ep_id: $row.data('ep-id'),
+            discipline_id: $row.find('.discipline-select').val(),
+            leistung: $row.find('.leistung-input').val()
+        };
+
+        $.post('/sportabzeichen/exams/results/exam/result/save', JSON.stringify(data), function(response) {
+            // UI aktualisieren (Punkte-Badge, Gesamtpunkte, etc.)
+            $row.find('.points-badge').text(response.points);
+            
+            // Verbands-Sperre
+            const $input = $row.find('.leistung-input');
+            if (response.is_verband) {
+                $input.val('').prop('disabled', true).addClass('bg-light');
+            } else {
+                $input.prop('disabled', false).removeClass('bg-light');
+            }
+            
+            updateTotalSummary(response); // Deine Funktion für die Gesamtanzeige
+        });
+    }
+
+    // Event 1: Disziplin wird geändert
+    $(document).on('change', '.discipline-select', function() {
+        sendData($(this).closest('tr'));
+    });
+
+    // Event 2: Leistung wird eingetragen
+    $(document).on('change', '.leistung-input', function() {
+        sendData($(this).closest('tr'));
+    });
 });
