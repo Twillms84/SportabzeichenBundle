@@ -173,7 +173,7 @@ final class ExamResultController extends AbstractPageController
         // Wir suchen ein Requirement, das diese Auswahlnummer im Prüfungsjahr hat
         $req = $this->em->getRepository(Requirement::class)->findOneBy([
             'selectionId' => $auswahlnummer, // selectionId ist dein DB-Feld für die Auswahlnummer
-            'year' => $ep->getExam()->getYear()
+            'jahr' => $ep->getExam()->getYear()
         ]);
 
         if (!$req) {
