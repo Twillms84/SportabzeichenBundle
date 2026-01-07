@@ -280,7 +280,22 @@ final class ExamResultController extends AbstractPageController
     {
         if ($leistung === null || $leistung <= 0) return ['points' => 0, 'stufe' => 'none'];
         
-        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGender() ?? 'W'), 'M')) ? 'MALE' : 'FEMALE';
+        // Wir holen uns die Participant-ID ohne den Proxy zu triggern
+        $participantId = $ep->getParticipant()->getId();
+
+        // Wir gehen direkt über das Connection-Objekt auf die Tabelle. 
+        // Das umgeht das komplette Entity-Problem von Doctrine.
+        $genderRaw = $this->em->getConnection()->fetchOne(
+            'SELECT geschlecht FROM sportabzeichen_participants WHERE id = (
+                SELECT participant_id FROM sportabzeichen_exam_participants WHERE id = ?
+            )', 
+            [$ep->getId()]
+        );
+
+        // Falls das Geschlecht "MALE" oder "FEMALE" in der DB steht
+        $gender = (str_contains(strtoupper($genderRaw ?? 'FEMALE'), 'MALE')) ? 'MALE' : 'FEMALE';
+
+        // Requirement suchen - hier nutzen wir das Repository, da Requirements meist keine User-Verknüpfung haben
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
             $discipline, (int)$ep->getExam()->getYear(), $gender, (int)$ep->getAgeYear()
         );
@@ -291,6 +306,7 @@ final class ExamResultController extends AbstractPageController
         $vG = (float)$req->getGold(); 
         $vS = (float)$req->getSilver(); 
         $vB = (float)$req->getBronze();
+        
         $p = 0; $s = 'none';
 
         if ($calc === 'SMALLER') {
@@ -302,6 +318,7 @@ final class ExamResultController extends AbstractPageController
             elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
             elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
         }
+        
         return ['points' => $p, 'stufe' => $s];
     }
 
