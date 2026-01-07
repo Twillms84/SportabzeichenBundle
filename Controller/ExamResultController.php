@@ -163,7 +163,10 @@ final class ExamResultController extends AbstractPageController
     public function saveExamDiscipline(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+        $ep = $this->em->getRepository(ExamParticipant::class)->createQueryBuilder('ep')
+            ->where('ep.id = :id')->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()->getOneOrNullResult();
+
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
 
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Daten unvollständig'], 404);
@@ -282,6 +285,44 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
+    private function calculatePoints(ExamParticipant $ep, Discipline $discipline, ?float $leistung): array 
+    {
+        if ($leistung === null || $leistung <= 0) return ['points' => 0, 'stufe' => 'none'];
+        
+        $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGender() ?? 'W'), 'M')) ? 'MALE' : 'FEMALE';
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
+            $discipline, (int)$ep->getExam()->getYear(), $gender, (int)$ep->getAgeYear()
+        );
+
+        if (!$req) return ['points' => 0, 'stufe' => 'none'];
+
+        $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
+        $vG = (float)$req->getGold(); $vS = (float)$req->getSilver(); $vB = (float)$req->getBronze();
+        $p = 0; $s = 'none';
+
+        if ($calc === 'SMALLER') {
+            if ($leistung <= $vG && $vG > 0) { $p = 3; $s = 'gold'; }
+            elseif ($leistung <= $vS && $vS > 0) { $p = 2; $s = 'silber'; }
+            elseif ($leistung <= $vB && $vB > 0) { $p = 1; $s = 'bronze'; }
+        } else {
+            if ($leistung >= $vG) { $p = 3; $s = 'gold'; }
+            elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
+            elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
+        }
+        return ['points' => $p, 'stufe' => $s];
+    }
+
+    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, string $cat): JsonResponse 
+    {
+        $this->updateSwimmingProof($ep, $this->em->getRepository(Discipline::class)->findOneBy(['category' => $cat]), $points);
+        $this->em->flush();
+        $summary = $this->calculateSummary($ep);
+
+        return new JsonResponse([
+            'status' => 'ok', 'points' => $points, 'stufe' => $stufe, 'category' => $cat,
+            'total_points' => $summary['total'], 'final_medal' => $summary['medal'], 'has_swimming' => $summary['has_swimming']
+        ]);
+    }
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
         $year = $ep->getExam()->getYear(); 
