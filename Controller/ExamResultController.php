@@ -274,7 +274,11 @@ final class ExamResultController extends AbstractPageController
         $points = 0; $stufe = 'none';
 
         if ($leistung === null) {
-            if ($result) $this->em->remove($result);
+            if ($result) {
+                // Falls gelöscht wird, müssen wir den Schwimmnachweis evtl. entfernen
+                $this->updateSwimmingProof($ep, $discipline, 0); 
+                $this->em->remove($result);
+            }
         } else {
             if (!$result) {
                 $result = new ExamResult();
@@ -288,42 +292,56 @@ final class ExamResultController extends AbstractPageController
             $rawGender = $ep->getParticipant()->getGender() ?? 'W';
             $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
 
+            // Nutzt die neue zentrale Methode inkl. Verbands-Check
             $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
             $points = $pData['points'];
             $stufe = $pData['stufe'];
+            $req = $pData['req']; // Das Requirement für den Schwimm-Check
 
             $result->setLeistung($leistung);
             $result->setPoints($points);
             $result->setStufe($stufe);
+
+            // Trigger Schwimmnachweis
+            $nameLower = strtolower($discipline->getName() ?? '');
+            $isSchwimmRelevant = ($req && $req->isSwimmingProof()) || 
+                                 (!empty($discipline->getVerband()) && (str_contains($nameLower, 'schwimm') || str_contains($nameLower, 'dlrg')));
+
+            if ($isSchwimmRelevant) {
+                $this->updateSwimmingProof($ep, $discipline, $points);
+            }
         }
 
         $this->em->flush();
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
     }
-
     // --- HELPER METHODEN ---
 
     private function internalCalculate(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
     {
-        if ($leistung === null || $leistung <= 0) {
-            return ['points' => 0, 'stufe' => 'none', 'req' => null];
-        }
-
+        $istVerband = !empty($discipline->getVerband());
+        
+        // 1. Requirement immer suchen (wegen swimmingProof Flag)
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
             $discipline, $year, $gender, $age
         );
 
-        if (!$req) {
-            return ['points' => 0, 'stufe' => 'none', 'req' => null];
+        // 2. Sonderfall Verband
+        if ($istVerband) {
+            return ['points' => 3, 'stufe' => 'gold', 'req' => $req];
         }
 
+        if ($leistung === null || $leistung <= 0 || !$req) {
+            return ['points' => 0, 'stufe' => 'none', 'req' => $req];
+        }
+
+        // 3. Normale Berechnung
         $calc = strtoupper($discipline->getBerechnungsart() ?? 'GREATER');
         $vG = (float)$req->getGold(); 
         $vS = (float)$req->getSilver(); 
         $vB = (float)$req->getBronze();
         
         $p = 0; $s = 'none';
-
         if ($calc === 'SMALLER') {
             if ($leistung <= $vG && $vG > 0) { $p = 3; $s = 'gold'; }
             elseif ($leistung <= $vS && $vS > 0) { $p = 2; $s = 'silber'; }
