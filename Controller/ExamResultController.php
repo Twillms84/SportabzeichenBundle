@@ -182,45 +182,59 @@ final class ExamResultController extends AbstractPageController
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
         $currentCat = $discipline->getCategory();
-        
-        // 2. Bestehende Ergebnisse der Kategorie löschen (Wechsel-Logik)
-        foreach ($ep->getResults() as $existingRes) {
+    
+        // 1. Alte Ergebnisse dieser Kategorie finden UND aus der Collection entfernen
+        $results = $ep->getResults();
+        foreach ($results as $key => $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
                 $this->em->remove($existingRes);
+                $results->remove($key); // WICHTIG: Aus der Collection des Objekts löschen!
             }
         }
-        $this->em->flush(); // Kurz leeren, um Platz für Neues zu machen
-
-        // 3. Werte für Berechnung vorbereiten
-        $year = (int)$ep->getExam()->getYear();
-        $age  = (int)$ep->getAgeYear();
-        $rawGender = $ep->getParticipant()->getGender() ?? 'W';
-        $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
         
-        $leistungInput = $data['leistung'] ?? null;
-        $leistung = ($leistungInput !== null && $leistungInput !== '') 
-            ? (float)str_replace(',', '.', (string)$leistungInput) 
-            : null;
+        // 2. Flush VOR dem Neuanlegen (Datenbank sauber machen)
+        $this->em->flush();
 
+        // 3. Neues Ergebnis anlegen
         $points = 0;
         $stufe = 'none';
         $calc = strtoupper($discipline->getBerechnungsart() ?? '');
 
-        // 4. Sonderfall VERBAND oder normale Berechnung
+        $newResult = new ExamResult();
+        $newResult->setExamParticipant($ep);
+        $newResult->setDiscipline($discipline);
+
         if ($calc === 'VERBAND') {
             $points = 3;
             $stufe = 'gold';
-            $this->createNewResult($ep, $discipline, 1.0, 3, 'gold');
-        } elseif ($leistung !== null && $leistung > 0) {
-            $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
-            $points = $pData['points'];
-            $stufe = $pData['stufe'];
-            $this->createNewResult($ep, $discipline, $leistung, $points, $stufe);
+            $newResult->setLeistung(1.0);
+        } else {
+            // Falls ein Wert im Request war, berechnen, sonst 0
+            $leistungInput = $data['leistung'] ?? null;
+            $leistung = ($leistungInput !== null && $leistungInput !== '') 
+                ? (float)str_replace(',', '.', (string)$leistungInput) : null;
+                
+            if ($leistung !== null) {
+                $pData = $this->internalCalculate($discipline, (int)$ep->getExam()->getYear(), $gender, (int)$ep->getAgeYear(), $leistung);
+                $points = $pData['points'];
+                $stufe = $pData['stufe'];
+                $newResult->setLeistung($leistung);
+            } else {
+                // Nur Disziplin gewählt, noch keine Leistung
+                $newResult->setLeistung(0.0);
+            }
         }
 
-        return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
-    }
+        $newResult->setPoints($points);
+        $newResult->setStufe($stufe);
 
+        $this->em->persist($newResult);
+        $ep->addResult($newResult); // WICHTIG: Die Gegenseite der Relation bedienen!
+
+        $this->em->flush();
+
+        return }$this->generateSummaryResponse($ep, $points, $stufe, $discipline);
+    }
     /**
      * Ändern der Leistung (Textfeld)
      */
