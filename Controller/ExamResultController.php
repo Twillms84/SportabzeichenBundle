@@ -257,28 +257,19 @@ final class ExamResultController extends AbstractPageController
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline->getCategory());
     }
 
-    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, string $category): JsonResponse 
+    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, Discipline $disc): JsonResponse 
     {
-        // 1. Schwimm-Logik triggern
-        // Wir suchen die Disziplin, die gerade gespeichert wurde
-        $results = $ep->getResults();
-        foreach ($results as $res) {
-            if ($res->getDiscipline()->getCategory() === $category) {
-                $this->updateSwimmingProof($ep, $res->getDiscipline(), $res->getPoints());
-                break;
-            }
-        }
-        
+        // Schwimm-Logik mit der konkreten Disziplin triggern
+        $this->updateSwimmingProof($ep, $disc, $points);
         $this->em->flush();
 
-        // 2. Gesamtergebnis (Medaille/Punkte) berechnen
         $summary = $this->calculateSummary($ep);
 
         return new JsonResponse([
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'category' => $category,
+            'category' => $disc->getCategory(),
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming']
@@ -297,7 +288,9 @@ final class ExamResultController extends AbstractPageController
         if (!$req) return ['points' => 0, 'stufe' => 'none'];
 
         $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
-        $vG = (float)$req->getGold(); $vS = (float)$req->getSilver(); $vB = (float)$req->getBronze();
+        $vG = (float)$req->getGold(); 
+        $vS = (float)$req->getSilver(); 
+        $vB = (float)$req->getBronze();
         $p = 0; $s = 'none';
 
         if ($calc === 'SMALLER') {
@@ -311,18 +304,7 @@ final class ExamResultController extends AbstractPageController
         }
         return ['points' => $p, 'stufe' => $s];
     }
-
-    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, string $cat): JsonResponse 
-    {
-        $this->updateSwimmingProof($ep, $this->em->getRepository(Discipline::class)->findOneBy(['category' => $cat]), $points);
-        $this->em->flush();
-        $summary = $this->calculateSummary($ep);
-
-        return new JsonResponse([
-            'status' => 'ok', 'points' => $points, 'stufe' => $stufe, 'category' => $cat,
-            'total_points' => $summary['total'], 'final_medal' => $summary['medal'], 'has_swimming' => $summary['has_swimming']
-        ]);
-    }
+    
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
         $year = $ep->getExam()->getYear(); 
