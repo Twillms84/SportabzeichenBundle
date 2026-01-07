@@ -385,7 +385,7 @@ final class ExamResultController extends AbstractPageController
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'total_points' => $this->calculateTotalPoints($ep), // Deine Summen-Logik
+            'total_points' => $this->calculateSummary($ep), // Deine Summen-Logik
             'final_medal' => $this->calculateMedal($ep),       // Deine Medaillen-Logik
             'has_swimming' => ($proof !== null), // Gibt true oder false ans JS        ]);
     
