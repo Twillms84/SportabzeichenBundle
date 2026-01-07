@@ -303,14 +303,27 @@ final class ExamResultController extends AbstractPageController
 
     // --- HELPER METHODEN ---
 
-    private function internalCalculateWithRequirement(Requirement $req, string $calcArt, float $leistung): array
+    private function internalCalculate(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
     {
-        $calc = strtoupper($calcArt);
+        if ($leistung === null || $leistung <= 0) {
+            return ['points' => 0, 'stufe' => 'none', 'req' => null];
+        }
+
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
+            $discipline, $year, $gender, $age
+        );
+
+        if (!$req) {
+            return ['points' => 0, 'stufe' => 'none', 'req' => null];
+        }
+
+        $calc = strtoupper($discipline->getBerechnungsart() ?? 'GREATER');
         $vG = (float)$req->getGold(); 
         $vS = (float)$req->getSilver(); 
         $vB = (float)$req->getBronze();
         
         $p = 0; $s = 'none';
+
         if ($calc === 'SMALLER') {
             if ($leistung <= $vG && $vG > 0) { $p = 3; $s = 'gold'; }
             elseif ($leistung <= $vS && $vS > 0) { $p = 2; $s = 'silber'; }
@@ -320,7 +333,8 @@ final class ExamResultController extends AbstractPageController
             elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
             elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
         }
-        return ['points' => $p, $s];
+        
+        return ['points' => $p, 'stufe' => $s, 'req' => $req];
     }
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, Discipline $disc): JsonResponse 
