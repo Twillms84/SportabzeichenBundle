@@ -204,21 +204,20 @@ final class ExamResultController extends AbstractPageController
         // 3. Logik-Check: Verband oder Messung?
         $points = 0;
         $stufe = 'none';
+        // 1. Verbands-Check
         $istVerband = !empty($discipline->getVerband());
 
         if ($istVerband) {
-            // Sonderfall: Wenn ein Verband eingetragen ist, gibt es pauschal Gold
             $points = 3;
             $stufe = 'gold';
-            $leistung = 1.0; // Dummy-Leistung für die DB
+            $leistung = 1.0; 
         } elseif ($leistung !== null && $leistung > 0) {
-            // Normale Berechnung über Requirements (Tabellenwerte)
             $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
             $points = $pData['points'];
             $stufe = $pData['stufe'];
         }
 
-        // 4. Neues Ergebnis erstellen und verknüpfen
+        // 2. Neues Ergebnis speichern
         $newResult = new ExamResult();
         $newResult->setDiscipline($discipline);
         $newResult->setLeistung($leistung ?? 0.0);
@@ -228,6 +227,10 @@ final class ExamResultController extends AbstractPageController
         $ep->addResult($newResult); 
         $this->em->persist($newResult);
         $this->em->flush();
+
+        if ($discipline->isSwimmingCategory() || ($istVerband && $discipline->isSwimmingRequirement())) {
+            $this->updateSwimmingProof($ep, $discipline, $points);
+        }
 
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
     }
