@@ -164,102 +164,84 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        // 1. Grunddaten laden
-        $epId = (int)($data['ep_id'] ?? 0);
-        $disciplineId = (int)($data['discipline_id'] ?? 0);
+        // Nur ep und p laden, um den IServ-User-Key-Fehler zu umgehen
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
 
-        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
-        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
 
-        if (!$ep || !$discipline) {
-            return new JsonResponse(['error' => 'Teilnehmer oder Disziplin nicht gefunden'], 400);
-        }
+        $exam = $ep->getExam();
+        $participant = $ep->getParticipant();
+        
+        // Leistung sicher verarbeiten
+        $leistungInput = $data['leistung'] ?? '';
+        $leistung = ($leistungInput !== '') ? (float)str_replace(',', '.', (string)$leistungInput) : null;
 
-        // 2. Kategorie-Bereinigung
-        // Falls der Teilnehmer bereits ein Ergebnis in dieser Kategorie hat (aber eine andere Disziplin),
-        // löschen wir das alte Ergebnis, damit pro Kategorie nur eine Auswahl existiert.
-        $cat = $discipline->getCategory();
-        foreach ($ep->getResults() as $existingRes) {
-            if ($existingRes->getDiscipline()->getCategory() === $cat 
-                && $existingRes->getDiscipline()->getId() !== $discipline->getId()) {
-                $this->em->remove($existingRes);
+        // Geschlecht sicher bestimmen
+        $gender = (str_starts_with(strtoupper($participant->getGender() ?? 'W'), 'M')) ? 'MALE' : 'FEMALE';
+
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+        if (!$discipline) return new JsonResponse(['error' => 'Disziplin fehlt'], 404);
+
+        // Matching Requirement suchen
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
+            $discipline,
+            (int)$exam->getYear(),
+            $gender,
+            (int)$ep->getAgeYear()
+        );
+
+        $points = 0;
+        $stufe = 'none';
+
+        // Punkte-Logik (Prüfung auf $req ist wichtig!)
+        if ($req && $leistung !== null) {
+            $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
+            // Nutze deine Getter (getSilver() statt getSilber() falls das deine Entity ist)
+            $vGold = (float)$req->getGold();
+            $vSilber = (float)$req->getSilver(); 
+            $vBronze = (float)$req->getBronze();
+
+            if ($calc === 'SMALLER') {
+                if ($leistung <= $vGold && $vGold > 0) { $points = 3; $stufe = 'gold'; }
+                elseif ($leistung <= $vSilber && $vSilber > 0) { $points = 2; $stufe = 'silber'; }
+                elseif ($leistung <= $vBronze && $vBronze > 0) { $points = 1; $stufe = 'bronze'; }
+            } else {
+                if ($leistung >= $vGold) { $points = 3; $stufe = 'gold'; }
+                elseif ($leistung >= $vSilber) { $points = 2; $stufe = 'silber'; }
+                elseif ($leistung >= $vBronze) { $points = 1; $stufe = 'bronze'; }
             }
         }
 
-        // 3. ExamResult finden oder neu erstellen
+        // Ergebnis-Objekt verwalten
         $result = $this->em->getRepository(ExamResult::class)->findOneBy([
             'examParticipant' => $ep,
             'discipline' => $discipline
         ]);
 
-        if (!$result) {
-            $result = new ExamResult();
-            $result->setExamParticipant($ep);
-            $result->setDiscipline($discipline);
-            $ep->getResults()->add($result);
-            $this->em->persist($result);
-        }
-
-        // 4. Leistung verarbeiten (Komma zu Punkt, null erlauben)
-        $leistungInput = $data['leistung'] ?? null;
-        $leistung = ($leistungInput !== null && $leistungInput !== '') 
-            ? (float)str_replace(',', '.', (string)$leistungInput) 
-            : null;
-
-        // 5. Punkte-Berechnung
-        $points = 0;
-        $stufe = 'none';
-        $isVerband = !empty(trim((string)$discipline->getVerband() ?? ''));
-
-        if ($isVerband) {
-            // Joker-Regelung: Verband hinterlegt -> Immer 3 Punkte (Gold)
-            $points = 3;
-            $stufe = 'gold';
-        } elseif ($leistung !== null && $leistung > 0) {
-            // Normale Berechnung über die Requirements
-            // Hier suchen wir das passende Requirement für das Jahr
-            $req = $this->em->getRepository(Requirement::class)->findOneBy([
-                'discipline' => $discipline,
-                'jahr' => (int)$ep->getExam()->getYear()
-            ]);
-
-            if ($req) {
-                $calc = strtoupper($discipline->getBerechnungsart() ?? 'GREATER');
-                $gold = (float)$req->getGold();
-                $silber = (float)$req->getSilver();
-                $bronze = (float)$req->getBronze();
-
-                if ($calc === 'SMALLER') { // z.B. Laufen
-                    if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
-                } else { // z.B. Weitsprung
-                    if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
-                    elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
-                    elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
-                }
+        if ($leistung === null) {
+            if ($result) $this->em->remove($result);
+        } else {
+            if (!$result) {
+                $result = new ExamResult();
+                $result->setExamParticipant($ep);
+                $result->setDiscipline($discipline);
+                $this->em->persist($result);
             }
+            $result->setLeistung($leistung);
+            $result->setPoints($points);
+            $result->setStufe($stufe);
         }
 
-        // 6. Werte in Entity setzen und persistieren
-        $result->setLeistung($leistung); // Kann NULL sein, wenn nur Disziplin gewählt wurde
-        $result->setPoints($points);
-        $result->setStufe($stufe);
-
+        // WICHTIG: flush() schreibt die Änderungen in die DB
         $this->em->flush();
 
-        // 7. Schwimmnachweis-Update & Gesamt-Zusammenfassung
-        $this->updateSwimmingProof($ep, $discipline, $points);
-        $this->em->flush(); // Nochmal flushen für SwimmingProof
-
+        // Summary neu berechnen
         $summary = $this->calculateSummary($ep);
 
-        // 8. Antwort an das Frontend
         return new JsonResponse([
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'is_verband' => $isVerband,
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming']
