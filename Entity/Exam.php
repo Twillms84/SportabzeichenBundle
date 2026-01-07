@@ -28,12 +28,6 @@ class Exam
     #[ORM\Column(type: 'date', nullable: true, name: 'exam_date')]
     private ?\DateTimeInterface $date = null;
 
-    #[ORM\Column(type: 'float', nullable: true)]
-    private ?float $leistung = null;
-
-    #[ORM\Column(type: 'integer', nullable: true)]
-    private ?int $points = null;
-
     // --- GETTER & SETTER (Clean English) ---
 
     public function getId(): ?int { return $this->id; }
