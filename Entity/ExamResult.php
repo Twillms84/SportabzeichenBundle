@@ -48,7 +48,7 @@ class ExamResult
     }
 
     public function getLeistung(): ?float { return $this->leistung; }
-    public function setLeistung(float $leistung): self { 
+    public function setLeistung(?float $leistung): self { 
         $this->leistung = $leistung; 
         return $this; 
     }
