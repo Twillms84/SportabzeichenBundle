@@ -170,29 +170,27 @@
                                 {# Manueller Schwimmnachweis #}
                                 {% if hasSwimmingCategory %}
                                     <div class="mt-1">
-                                         <div class="form-check form-switch mt-2">
-                                            <input class="form-check-input" 
-                                                type="checkbox" 
+                                        <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
+                                            <input class="form-check-input ms-0" type="checkbox" role="switch"
                                                 id="swim-switch-{{ p.ep_id }}"
+                                                {{ p.has_swimming ? 'checked' : '' }}
                                                 data-save 
-                                                data-type="swimming" 
-                                                data-ep-id="{{ p.ep_id }}"
-                                                {% if p.hasSwimming %}checked{% endif %}>
-                                            
-                                            <label class="form-check-label small fw-semibold {% if p.hasSwimming %}text-success{% else %}text-danger{% endif %}" 
-                                                for="swim-switch-{{ p.id }}" 
-                                                id="swimming-label-{{ p.id }}">
-                                                Schwimmen: {% if p.hasSwimming %}OK{% else %}Fehlt{% endif %}
+                                                data-ep-id="{{ p.ep_id }}" 
+                                                data-type="swimming"
+                                                style="cursor: pointer;">
+                                                
+                                            <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
+                                                for="swim-switch-{{ p.ep_id }}"
+                                                id="swimming-label-{{ p.ep_id }}">
+                                                {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
                                             </label>
                                         </div>
-
-                                        {# Dieser Bereich wird durch JS live ein/ausgeblendet #}
-                                        <div id="swimming-expiry-{{ participant.id }}" 
-                                            style="display: {% if participant.hasSwimming %}block{% else %}none{% endif %};">
-                                            <small class="text-muted">Gültig bis: {{ participant.swimmingExpiresAt|date('d.m.Y') }}</small>
+                                        
+                                        {# Container für das Ablaufdatum (ID für JS wichtig) #}
+                                        <div id="swimming-expiry-{{ p.ep_id }}" style="display: {{ p.has_swimming ? 'block' : 'none' }};">
+                                            <small class="text-muted" style="font-size: 0.7rem;">Gültig bis: {{ p.swim_expires_at|date('d.m.Y') }}</small>
                                         </div>
                                     </div>
-
                                 {% endif %}
                             </div>
                         </td>
@@ -254,16 +252,14 @@
                                                 data-ep-id="{{ p.ep_id }}" 
                                                 data-type="discipline" 
                                                 data-kategorie="{{ category }}">
-                                            
+                                        
                                             {% if options is empty %}
                                                 <option value="">--</option>
                                             {% else %}
                                                 {% for req in options %}
-                                                    {# Key-Check: 'unit' (aus error log) oder 'einheit' (legacy) #}
                                                     {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
-                                                    
                                                     <option value="{{ req.discipline.id }}" 
-                                                            {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
+                                                            {{ (selectedReq and selectedReq.discipline.id == req.discipline.id) ? 'selected' : '' }}
                                                             data-unit="{{ cleanUnit }}"
                                                             data-bronze="{{ req.bronze }}"
                                                             data-silber="{{ req.silver }}"
@@ -277,25 +273,24 @@
                                         {# INPUT FELD & EINHEIT #}
                                         <div class="input-group input-group-sm">
                                             <input type="text" 
-                                                   class="form-control form-control-custom {{ mClass }}"
-                                                   value="{{ resObj ? resObj.leistung : '' }}"
-                                                   data-save 
-                                                   data-ep-id="{{ p.ep_id }}" 
-                                                   data-type="leistung" 
-                                                   data-kategorie="{{ category }}">
+                                                class="form-control form-control-custom {{ mClass }}"
+                                                value="{{ resObj ? resObj.leistung : '' }}"
+                                                data-save 
+                                                data-ep-id="{{ p.ep_id }}" 
+                                                data-type="leistung" 
+                                                data-kategorie="{{ category }}">
 
-                                            {# WICHTIG: Das Unit-Span muss da sein, sonst könnte JS abstürzen #}
-                                            <span class="input-group-text px-1 text-muted" style="font-size: 0.7rem;">
-                                                {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
-                                                {{ currentUnit }}
+                                            {# JS-Selektor 'js-unit-label' für die Live-Einheit #}
+                                            <span class="input-group-text px-1 text-muted js-unit-label" style="font-size: 0.7rem;">
+                                                {{ unitMap[selectedReq.discipline.unit] ?? selectedReq.discipline.unit ?? '' }}
                                             </span>
                                         </div>
 
-                                        {# HINTS (B/S/G) #}
-                                        <div class="req-hint">
-                                            <span class="req-val-b" title="Bronze">B:<span class="js-val-b">{{ selectedReq ? selectedReq.bronze : '-' }}</span></span>
-                                            <span class="req-val-s" title="Silber">S:<span class="js-val-s">{{ selectedReq ? selectedReq.silver : '-' }}</span></span>
-                                            <span class="req-val-g" title="Gold">G:<span class="js-val-g">{{ selectedReq ? selectedReq.gold : '-' }}</span></span>
+                                        {# HINTS (B/S/G) - JS-Selektoren js-val-b etc. #}
+                                        <div class="req-hint mt-1 d-flex justify-content-between text-muted" style="font-size: 0.7rem;">
+                                            <span title="Bronze">B:<span class="js-val-b">{{ selectedReq ? selectedReq.bronze : '-' }}</span></span>
+                                            <span title="Silber">S:<span class="js-val-s">{{ selectedReq ? selectedReq.silver : '-' }}</span></span>
+                                            <span title="Gold">G:<span class="js-val-g">{{ selectedReq ? selectedReq.gold : '-' }}</span></span>
                                         </div>
                                     </div>
                                 </td>
