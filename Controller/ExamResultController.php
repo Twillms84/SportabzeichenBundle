@@ -17,6 +17,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Doctrine\DBAL\Connection;
 
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
 #[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
@@ -379,7 +380,9 @@ final class ExamResultController extends AbstractPageController
     {
     $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
     $selectedClass = $request->query->get('class');
-
+    
+    $conn = $this->em->getConnection();
+    
     // 1. Prüfungsdaten laden
     $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
     if (!$exam) {
