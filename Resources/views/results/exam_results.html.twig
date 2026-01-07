@@ -188,7 +188,7 @@
                                         
                                         {# Container für das Ablaufdatum (ID für JS wichtig) #}
                                         <div id="swimming-expiry-{{ p.ep_id }}" style="display: {{ p.has_swimming ? 'block' : 'none' }};">
-                                            <small class="text-muted" style="font-size: 0.7rem;">Gültig bis: {{ p.swim_expires_at|date('d.m.Y') }}</small>
+                                            <small class="text-muted" style="font-size: 0.7rem;">Gültig bis: {{ p.swimming_expiry|date('d.m.Y') }}</small>
                                         </div>
                                     </div>
                                 {% endif %}
