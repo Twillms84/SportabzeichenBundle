@@ -164,7 +164,7 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        // 1. Participant + User EAGER laden (IServ Fix)
+        // 1. Eager Loading (IServ Fix)
         $ep = $this->em->createQueryBuilder()
             ->select('ep', 'p', 'u')
             ->from(ExamParticipant::class, 'ep')
@@ -175,62 +175,66 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
-        if (!$ep) return new JsonResponse(['error' => 'Participant nicht gefunden'], 404);
+        if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        $currentCat = $discipline->getCategory();
-        
-        // Daten für Berechnung vorbereiten
+        // Daten vorbereiten
         $year = (int)$ep->getExam()->getYear();
         $age  = (int)$ep->getAgeYear();
         $rawGender = $ep->getParticipant()->getGender() ?? 'W';
         $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
         
-        $leistungInput = $data['leistung'] ?? null;
-        $leistung = ($leistungInput !== null && $leistungInput !== '') 
-            ? (float)str_replace(',', '.', (string)$leistungInput) : null;
-
-        // 2. Alte Ergebnisse dieser Kategorie entfernen (Synchron für Doctrine)
+        // 2. Bestehende Ergebnisse der Kategorie löschen
+        $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                $ep->removeResult($existingRes); 
+                $ep->removeResult($existingRes);
                 $this->em->remove($existingRes);
             }
         }
         $this->em->flush();
 
-        // 3. Logik-Check: Verband oder Messung?
-        $points = 0;
-        $stufe = 'none';
-        // 1. Verbands-Check
+        // 3. Punkte und Requirement ermitteln
+        $points = 0; $stufe = 'none'; $leistung = null;
         $istVerband = !empty($discipline->getVerband());
 
+        // Wir holen das Requirement so oder so, um zu sehen, ob es ein Schwimmnachweis ist
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
+
         if ($istVerband) {
-            $points = 3;
-            $stufe = 'gold';
-            $leistung = 1.0; 
-        } elseif ($leistung !== null && $leistung > 0) {
-            $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
-            $points = $pData['points'];
-            $stufe = $pData['stufe'];
+            $points = 3; $stufe = 'gold'; $leistung = 1.0;
+        } else {
+            $leistungInput = $data['leistung'] ?? null;
+            $leistung = ($leistungInput !== null && $leistungInput !== '') ? (float)str_replace(',', '.', (string)$leistungInput) : null;
+            
+            if ($leistung > 0 && $req) {
+                $pData = $this->internalCalculateWithRequirement($req, $discipline->getBerechnungsart(), $leistung);
+                $points = $pData['points'];
+                $stufe = $pData['stufe'];
+            }
         }
 
-        // 2. Neues Ergebnis speichern
+        // 4. Speichern
         $newResult = new ExamResult();
         $newResult->setDiscipline($discipline);
         $newResult->setLeistung($leistung ?? 0.0);
         $newResult->setPoints($points);
         $newResult->setStufe($stufe);
-
-        $ep->addResult($newResult); 
+        $ep->addResult($newResult);
         $this->em->persist($newResult);
-        $this->em->flush();
 
-        if ($discipline->isSwimmingCategory() || ($istVerband && $discipline->isSwimmingRequirement())) {
+        // 5. Schwimmnachweis-Check via Requirement ODER Verband-Logik
+        // Wir nutzen das Feld 'swimmingProof' aus der Requirement-Entity!
+        $isSchwimmRelevant = ($req && $req->isSwimmingProof()) || 
+                             ($istVerband && str_contains(strtolower($discipline->getName()), 'schwimm'));
+
+        if ($isSchwimmRelevant) {
             $this->updateSwimmingProof($ep, $discipline, $points);
         }
+
+        $this->em->flush();
 
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
     }
@@ -299,13 +303,12 @@ final class ExamResultController extends AbstractPageController
 
     // --- HELPER METHODEN ---
 
-    private function internalCalculate($discipline, $year, $gender, $age, $leistung): array
+    private function internalCalculateWithRequirement(Requirement $req, string $calcArt, float $leistung): array
     {
-        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
-        if (!$req) return ['points' => 0, 'stufe' => 'none'];
-
-        $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
-        $vG = (float)$req->getGold(); $vS = (float)$req->getSilver(); $vB = (float)$req->getBronze();
+        $calc = strtoupper($calcArt);
+        $vG = (float)$req->getGold(); 
+        $vS = (float)$req->getSilver(); 
+        $vB = (float)$req->getBronze();
         
         $p = 0; $s = 'none';
         if ($calc === 'SMALLER') {
@@ -317,7 +320,7 @@ final class ExamResultController extends AbstractPageController
             elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
             elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
         }
-        return ['points' => $p, 'stufe' => $s];
+        return ['points' => $p, $s];
     }
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, Discipline $disc): JsonResponse 
@@ -341,23 +344,19 @@ final class ExamResultController extends AbstractPageController
 
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
-        $year = (int)$ep->getExam()->getYear();
-        $name = strtolower($disc->getName() ?? '');
-        $istVerband = !empty($disc->getVerband());
+        $year = $ep->getExam()->getYear();
+        // WICHTIG: Wir holen nur die ID, um das Objekt-Laden zu vermeiden
+        $participantId = $ep->getParticipant()->getId();
 
-        // Bestimmen, ob das hier ein Schwimm-Ereignis ist
-        // Wir nutzen die vorhandene Methode isSwimmingCategory() und ergänzen Verbands-Keywords
-        $giltAlsSchwimmNachweis = $disc->isSwimmingCategory() || 
-                                ($istVerband && (str_contains($name, 'schwimm') || str_contains($name, 'dlrg')));
-
-        // 1. Bestehenden Nachweis suchen
+        // 1. Bestehenden Nachweis direkt über das Repository suchen
+        // Wir nutzen das Participant-Objekt als Referenz, aber ohne es zu "initialisieren"
         $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
             'participant' => $ep->getParticipant(),
             'examYear' => $year
         ]);
 
-        // FALL A: Speichern/Aktualisieren (Punkte > 0)
-        if ($points > 0 && $giltAlsSchwimmNachweis) {
+        // Wenn Punkte > 0 und es eine Schwimmdisziplin ist
+        if ($points > 0 && $disc->isSwimmingCategory()) {
             if (!$proof) {
                 $proof = new SwimmingProof();
                 $proof->setParticipant($ep->getParticipant());
@@ -365,42 +364,33 @@ final class ExamResultController extends AbstractPageController
                 $this->em->persist($proof);
             }
             
+            $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
             $proof->setConfirmedAt(new \DateTime());
-
-            if ($istVerband) {
-                // Verbandsnachweise gelten "ewig" (IServ-Standard oft 100 Jahre)
-                $proof->setValidUntil(new \DateTime(($year + 100) . "-12-31"));
-                $proof->setRequirementMetVia('VERBAND:' . $disc->getVerband());
-            } else {
-                // Normale Disziplin (z.B. 800m Schwimmen)
-                $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
-                $proof->setValidUntil(new \DateTime("$validYear-12-31"));
-                $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
-            }
+            $proof->setValidUntil(new \DateTime("$validYear-12-31"));
+            $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
         }
 
-        // FALL B: Löschen (Punkte sind 0 geworden)
-        if ($points === 0 && $giltAlsSchwimmNachweis && $proof) {
-            // Prüfen, ob noch ein ANDERES Ergebnis für diesen Teilnehmer einen Schwimmbeweis rechtfertigt
+        // 2. Falls gelöscht wurde: Check, ob noch andere Schwimm-Ergebnisse da sind
+        if ($points === 0 && $disc->isSwimmingCategory()) {
+            // Wir zählen direkt in der DB, um $ep->getResults() zu vermeiden, 
+            // falls das auch zum User-Fehler führt
             $otherSwimCount = (int) $this->em->createQueryBuilder()
                 ->select('COUNT(res.id)')
                 ->from(ExamResult::class, 'res')
                 ->join('res.discipline', 'd')
                 ->where('res.examParticipant = :ep')
                 ->andWhere('res.points > 0')
-                ->andWhere('(d.category LIKE :schwimm OR d.name LIKE :schwimm OR d.name LIKE :dlrg)')
+                ->andWhere('d.category IN (:swimCats)') // Falls du isSwimmingCategory() logik hier brauchst
                 ->setParameter('ep', $ep)
-                ->setParameter('schwimm', '%schwimm%')
-                ->setParameter('dlrg', '%dlrg%')
+                ->setParameter('swimCats', ['Ausdauer', 'Schnelligkeit']) // Hier die Kategorien eintragen, die Schwimmen sein können
                 ->getQuery()
                 ->getSingleScalarResult();
 
-            if ($otherSwimCount === 0) {
+            if ($otherSwimCount === 0 && $proof && str_starts_with($proof->getRequirementMetVia() ?? '', 'DISCIPLINE:')) {
                 $this->em->remove($proof);
             }
         }
     }
-
     private function calculateSummary(ExamParticipant $ep): array
     {
         $cats = ['Ausdauer' => 0, 'Kraft' => 0, 'Schnelligkeit' => 0, 'Koordination' => 0];
