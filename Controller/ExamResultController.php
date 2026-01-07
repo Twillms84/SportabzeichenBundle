@@ -233,8 +233,9 @@ final class ExamResultController extends AbstractPageController
 
         $this->em->flush();
 
-        return }$this->generateSummaryResponse($ep, $points, $stufe, $discipline);
+        return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
     }
+
     /**
      * Ändern der Leistung (Textfeld)
      */
