@@ -163,24 +163,40 @@ final class ExamResultController extends AbstractPageController
     public function saveExamResult(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        
-        // Nur ep und p laden, um den IServ-User-Key-Fehler zu umgehen
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+    
+        // 1. Participant laden
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p', 'u')
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->leftJoin('p.user', 'u')
+            ->where('ep.id = :id')
+            ->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()
+            ->getOneOrNullResult();
 
-        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+            if (!$ep) return new JsonResponse(['error' => 'Not found'], 404);
 
-        $exam = $ep->getExam();
-        $participant = $ep->getParticipant();
-        
-        // Leistung sicher verarbeiten
-        $leistungInput = $data['leistung'] ?? '';
-        $leistung = ($leistungInput !== '') ? (float)str_replace(',', '.', (string)$leistungInput) : null;
+            // Werte sicherstellen
+            $year = $ep->getExam()->getYear();
+            $age  = $ep->getAgeYear();
 
-        // Geschlecht sicher bestimmen
-        $gender = (str_starts_with(strtoupper($participant->getGender() ?? 'W'), 'M')) ? 'MALE' : 'FEMALE';
+            // Leistung aus dem Request holen (löst den "Undefined variable"-Fehler)
+            $leistungInput = $data['leistung'] ?? null;
+            $leistung = ($leistungInput !== null && $leistungInput !== '') 
+                ? (float)str_replace(',', '.', (string)$leistungInput) 
+                : null;
 
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        if (!$discipline) return new JsonResponse(['error' => 'Disziplin fehlt'], 404);
+            $participant = $ep->getParticipant();
+            $rawGender = $participant->getGender() ?? 'W'; 
+            $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
+
+            $disciplineId = (int)($data['discipline_id'] ?? 0);
+            $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+
+            if (!$discipline) {
+                return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+            }
 
         // Matching Requirement suchen
         $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement(
