@@ -211,21 +211,31 @@ final class ExamResultController extends AbstractPageController
         $stufe = 'none';
 
         if ($req && $leistung !== null && $leistung > 0) {
-            $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
-            
-            // Gold/Silber/Bronze Werte holen
-            $gold = (float)$req->getGold();
-            $silber = (float)$req->getSilver();
-            $bronze = (float)$req->getBronze();
+            // NEU: Prüfung auf Verbandsabzeichen
+            // Wir prüfen, ob im Namen der Disziplin das Wort "Verband" vorkommt
+            $isVerband = str_contains(strtolower($discipline->getName() ?? ''), 'verband');
 
-            if ($calc === 'SMALLER') { // z.B. Laufen (Zeit)
-                if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
-                elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
-                elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
-            } else { // z.B. Weitsprung (Weite)
-                if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
-                elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
-                elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
+            if ($isVerband) {
+                // Automatisches Gold für Verbandsleistungen
+                $points = 3;
+                $stufe = 'gold';
+            } else {
+                // Normale Berechnung nach Tabelle
+                $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
+                
+                $gold = (float)$req->getGold();
+                $silber = (float)$req->getSilver();
+                $bronze = (float)$req->getBronze();
+
+                if ($calc === 'SMALLER') { // z.B. Laufen (Zeit)
+                    if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
+                    elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
+                    elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
+                } else { // z.B. Weitsprung (Weite)
+                    if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
+                    elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
+                    elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
+                }
             }
         }
 
@@ -382,7 +392,7 @@ final class ExamResultController extends AbstractPageController
     $selectedClass = $request->query->get('class');
     
     $conn = $this->em->getConnection();
-    
+
     // 1. Prüfungsdaten laden
     $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
     if (!$exam) {
