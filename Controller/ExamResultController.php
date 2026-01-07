@@ -163,27 +163,27 @@ final class ExamResultController extends AbstractPageController
     public function saveExamResult(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        $epId = (int)($data['ep_id'] ?? 0);
-        $auswahlnummer = $data['auswahlnummer'] ?? null; // Wir senden jetzt die Nr. (z.B. 1, 2, 3)
+        
+        // 1. Basis-Daten laden
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+        $auswahlnummer = $data['auswahlnummer'] ?? null;
 
-        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
-        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-
-        // 1. Disziplin über die Auswahlnummer und das Jahr finden
-        // Wir suchen ein Requirement, das diese Auswahlnummer im Prüfungsjahr hat
-        $req = $this->em->getRepository(Requirement::class)->findOneBy([
-            'selectionId' => $auswahlnummer, // selectionId ist dein DB-Feld für die Auswahlnummer
-            'jahr' => $ep->getExam()->getYear()
-        ]);
-
-        if (!$req) {
-            return new JsonResponse(['error' => 'Ungültige Auswahlnummer für dieses Jahr'], 400);
+        if (!$ep || $auswahlnummer === null) {
+            return new JsonResponse(['error' => 'Ungültige Daten'], 400);
         }
 
+        // 2. Requirement & Disziplin finden (jahr statt year!)
+        $req = $this->em->getRepository(Requirement::class)->findOneBy([
+            'selectionId' => (int)$auswahlnummer,
+            'jahr' => (int)$ep->getExam()->getYear()
+        ]);
+
+        if (!$req) return new JsonResponse(['error' => 'Disziplin nicht konfiguriert'], 400);
+        
         $discipline = $req->getDiscipline();
         $cat = $discipline->getCategory();
 
-        // 2. Konflikte lösen (Andere Disziplin in gleicher Kategorie entfernen)
+        // 3. Kategorie-Bereinigung: Andere Disziplin in dieser Kategorie löschen
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $cat 
                 && $existingRes->getDiscipline()->getId() !== $discipline->getId()) {
@@ -191,7 +191,7 @@ final class ExamResultController extends AbstractPageController
             }
         }
 
-        // 3. Resultat finden oder neu anlegen
+        // 4. Resultat finden oder neu anlegen
         $result = $this->em->getRepository(ExamResult::class)->findOneBy([
             'examParticipant' => $ep,
             'discipline' => $discipline
@@ -201,11 +201,11 @@ final class ExamResultController extends AbstractPageController
             $result = new ExamResult();
             $result->setExamParticipant($ep);
             $result->setDiscipline($discipline);
-            $ep->getResults()->add($result); // Damit calculateSummary es sofort sieht
+            $ep->getResults()->add($result);
             $this->em->persist($result);
         }
 
-        // 4. Leistung & Punkte (wie bisher)
+        // 5. Leistung & Punkte (Null-sicher!)
         $leistungInput = $data['leistung'] ?? null;
         $leistung = ($leistungInput !== null && $leistungInput !== '') 
             ? (float)str_replace(',', '.', (string)$leistungInput) 
@@ -218,17 +218,21 @@ final class ExamResultController extends AbstractPageController
         if ($isVerband) {
             $points = 3;
             $stufe = 'gold';
-        } elseif ($leistung !== null) {
-            // Hier deine bestehende Punkteberechnung gegen $req...
+        } elseif ($leistung !== null && $leistung > 0) {
+            // --- Hier kommt die Punkteberechnung ---
+            // (Wird nur ausgeführt, wenn wirklich eine Leistung da ist)
+            // points = calculatePoints($req, $leistung, $discipline->getBerechnungsart());
+            // stufe = ...
         }
 
-        $result->setLeistung($leistung);
+        // 6. Speichern (Leistung darf NULL sein!)
+        $result->setLeistung($leistung); 
         $result->setPoints($points);
         $result->setStufe($stufe);
 
         $this->em->flush();
-        
-        // 5. Swimming & Summary
+
+        // Summary & Schwimmen
         $this->updateSwimmingProof($ep, $discipline, $points);
         $this->em->flush();
         $summary = $this->calculateSummary($ep);
@@ -236,8 +240,10 @@ final class ExamResultController extends AbstractPageController
         return new JsonResponse([
             'status' => 'ok',
             'points' => $points,
+            'stufe' => $stufe,
             'is_verband' => $isVerband,
-            'total_points' => $summary['total']
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal']
         ]);
     }
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
