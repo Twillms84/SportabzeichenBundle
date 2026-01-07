@@ -251,6 +251,31 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
+        if (($data['type'] ?? '') === 'swimming') {
+        $year = (int)$ep->getExam()->getYear();
+        $proofRepo = $this->em->getRepository(SwimmingProof::class);
+        $proof = $proofRepo->findOneBy([
+            'participant' => $ep->getParticipant(),
+            'examYear' => $year
+        ]);
+
+        if ($proof) {
+            $this->em->remove($proof);
+        } else {
+            $proof = new SwimmingProof();
+            $proof->setParticipant($ep->getParticipant());
+            $proof->setExamYear($year);
+            $proof->setConfirmedAt(new \DateTime());
+            $proof->setRequirementMetVia('MANUAL');
+            // Gültigkeit setzen
+            $proof->setValidUntil(new \DateTime($year . '-12-31')); 
+            $this->em->persist($proof);
+        }
+
+        $this->em->flush();
+        // Nutzt die vorhandene Response-Logik für das Live-Update
+        return $this->generateSummaryResponse($ep, 0, 'none', new Discipline());
+        }
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Daten unvollständig'], 404);
 
