@@ -211,27 +211,27 @@ final class ExamResultController extends AbstractPageController
         $stufe = 'none';
 
         if ($req && $leistung !== null && $leistung > 0) {
-            // NEU: Prüfung auf Verbandsabzeichen
-            // Wir prüfen, ob im Namen der Disziplin das Wort "Verband" vorkommt
-            $isVerband = str_contains(strtolower($discipline->getName() ?? ''), 'verband');
+            // PRÜFUNG: Hat diese Disziplin einen Verband hinterlegt?
+            // Wir prüfen, ob das Feld 'verband' in der Discipline-Entity nicht leer ist
+            $verbandText = $discipline->getVerband(); // Stelle sicher, dass der Getter in der Entity existiert!
 
-            if ($isVerband) {
-                // Automatisches Gold für Verbandsleistungen
+            if (!empty(trim((string)$verbandText))) {
+                // AUTOMATIK: Wenn ein Verband eingetragen ist, gibt es immer Gold
                 $points = 3;
                 $stufe = 'gold';
             } else {
-                // Normale Berechnung nach Tabelle
+                // NORMAL: Berechnung nach Leistungswerten aus der Requirement-Tabelle
                 $calc = strtoupper($discipline->getBerechnungsart() ?? 'BIGGER');
                 
                 $gold = (float)$req->getGold();
                 $silber = (float)$req->getSilver();
                 $bronze = (float)$req->getBronze();
 
-                if ($calc === 'SMALLER') { // z.B. Laufen (Zeit)
+                if ($calc === 'SMALLER') { // Zeit-Disziplinen
                     if ($leistung <= $gold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung <= $silber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung <= $bronze) { $points = 1; $stufe = 'bronze'; }
-                } else { // z.B. Weitsprung (Weite)
+                } else { // Weite/Anzahl-Disziplinen
                     if ($leistung >= $gold) { $points = 3; $stufe = 'gold'; }
                     elseif ($leistung >= $silber) { $points = 2; $stufe = 'silber'; }
                     elseif ($leistung >= $bronze) { $points = 1; $stufe = 'bronze'; }
