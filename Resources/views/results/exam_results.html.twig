@@ -173,16 +173,16 @@
                                          <div class="form-check form-switch mt-2">
                                             <input class="form-check-input" 
                                                 type="checkbox" 
-                                                id="swim-switch-{{ participant.id }}"
+                                                id="swim-switch-{{ p.ep_id }}"
                                                 data-save 
                                                 data-type="swimming" 
-                                                data-ep-id="{{ participant.id }}"
-                                                {% if participant.hasSwimming %}checked{% endif %}>
+                                                data-ep-id="{{ p.ep_id }}"
+                                                {% if p.hasSwimming %}checked{% endif %}>
                                             
-                                            <label class="form-check-label small fw-semibold {% if participant.hasSwimming %}text-success{% else %}text-danger{% endif %}" 
-                                                for="swim-switch-{{ participant.id }}" 
-                                                id="swimming-label-{{ participant.id }}">
-                                                Schwimmen: {% if participant.hasSwimming %}OK{% else %}Fehlt{% endif %}
+                                            <label class="form-check-label small fw-semibold {% if p.hasSwimming %}text-success{% else %}text-danger{% endif %}" 
+                                                for="swim-switch-{{ p.id }}" 
+                                                id="swimming-label-{{ p.id }}">
+                                                Schwimmen: {% if p.hasSwimming %}OK{% else %}Fehlt{% endif %}
                                             </label>
                                         </div>
 
@@ -192,13 +192,7 @@
                                             <small class="text-muted">Gültig bis: {{ participant.swimmingExpiresAt|date('d.m.Y') }}</small>
                                         </div>
                                     </div>
-                                        
-                                        {% if p.swimming_expiry and p.has_swimming %}
-                                            <div class="small text-muted fst-italic ms-1" style="font-size: 0.75rem;">
-                                                Gültig bis: {{ p.swimming_expiry|date('d.m.Y') }}
-                                            </div>
-                                        {% endif %}
-                                    </div>
+
                                 {% endif %}
                             </div>
                         </td>
