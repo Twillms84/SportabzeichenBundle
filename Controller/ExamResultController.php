@@ -341,11 +341,12 @@ final class ExamResultController extends AbstractPageController
 
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
-        $year = $ep->getExam()->getYear();
+        $year = (int)$ep->getExam()->getYear();
         $name = strtolower($disc->getName() ?? '');
         $istVerband = !empty($disc->getVerband());
 
-        // Bestimmen, ob das hier überhaupt ein Schwimm-Ereignis ist
+        // Bestimmen, ob das hier ein Schwimm-Ereignis ist
+        // Wir nutzen die vorhandene Methode isSwimmingCategory() und ergänzen Verbands-Keywords
         $giltAlsSchwimmNachweis = $disc->isSwimmingCategory() || 
                                 ($istVerband && (str_contains($name, 'schwimm') || str_contains($name, 'dlrg')));
 
@@ -355,7 +356,7 @@ final class ExamResultController extends AbstractPageController
             'examYear' => $year
         ]);
 
-        // FALL A: Speichern/Aktualisieren
+        // FALL A: Speichern/Aktualisieren (Punkte > 0)
         if ($points > 0 && $giltAlsSchwimmNachweis) {
             if (!$proof) {
                 $proof = new SwimmingProof();
@@ -364,39 +365,37 @@ final class ExamResultController extends AbstractPageController
                 $this->em->persist($proof);
             }
             
-            // Gültigkeit berechnen
+            $proof->setConfirmedAt(new \DateTime());
+
             if ($istVerband) {
-                // Verbandsnachweise (z.B. DLRG) gelten "ewig" oder sehr lange
+                // Verbandsnachweise gelten "ewig" (IServ-Standard oft 100 Jahre)
                 $proof->setValidUntil(new \DateTime(($year + 100) . "-12-31"));
                 $proof->setRequirementMetVia('VERBAND:' . $disc->getVerband());
             } else {
-                // Normale Disziplin (800m Schwimmen etc.)
+                // Normale Disziplin (z.B. 800m Schwimmen)
                 $validYear = ($ep->getAgeYear() <= 17) ? ($year + (18 - $ep->getAgeYear())) : ($year + 4);
                 $proof->setValidUntil(new \DateTime("$validYear-12-31"));
                 $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
             }
-            
-            $proof->setConfirmedAt(new \DateTime());
         }
 
-        // FALL B: Löschen (wenn Punkte auf 0 gesetzt wurden)
-        if ($points === 0 && $giltAlsSchwimmNachweis) {
-            // Prüfen, ob noch eine ANDERE Leistung einen Schwimmbeweis rechtfertigt
+        // FALL B: Löschen (Punkte sind 0 geworden)
+        if ($points === 0 && $giltAlsSchwimmNachweis && $proof) {
+            // Prüfen, ob noch ein ANDERES Ergebnis für diesen Teilnehmer einen Schwimmbeweis rechtfertigt
             $otherSwimCount = (int) $this->em->createQueryBuilder()
                 ->select('COUNT(res.id)')
                 ->from(ExamResult::class, 'res')
                 ->join('res.discipline', 'd')
                 ->where('res.examParticipant = :ep')
                 ->andWhere('res.points > 0')
-                ->andWhere('(d.category IN (:swimCats) OR d.name LIKE :schwimm OR d.name LIKE :dlrg)')
+                ->andWhere('(d.category LIKE :schwimm OR d.name LIKE :schwimm OR d.name LIKE :dlrg)')
                 ->setParameter('ep', $ep)
-                ->setParameter('swimCats', ['Ausdauer', 'Schnelligkeit'])
                 ->setParameter('schwimm', '%schwimm%')
                 ->setParameter('dlrg', '%dlrg%')
                 ->getQuery()
                 ->getSingleScalarResult();
 
-            if ($otherSwimCount === 0 && $proof) {
+            if ($otherSwimCount === 0) {
                 $this->em->remove($proof);
             }
         }
