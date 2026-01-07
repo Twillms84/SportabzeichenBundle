@@ -23,7 +23,7 @@ class ExamResult
     #[ORM\JoinColumn(nullable: false)]
     private ?Discipline $discipline = null;
 
-    #[ORM\Column(type: 'float')]
+    #[ORM\Column(type: 'float', nullable: true)]
     private ?float $leistung = null; // Als Float speichern, z.B. 12.5 (Sekunden) oder 4.20 (Meter)
 
     #[ORM\Column(type: 'text', nullable: true)]
