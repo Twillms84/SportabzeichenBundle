@@ -159,7 +159,7 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
+   #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
     public function saveExamDiscipline(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -177,60 +177,52 @@ final class ExamResultController extends AbstractPageController
 
         if (!$ep) return new JsonResponse(['error' => 'Participant nicht gefunden'], 404);
 
-        $disciplineId = (int)($data['discipline_id'] ?? 0);
-        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
         $currentCat = $discipline->getCategory();
-    
-        // 1. Alte Ergebnisse dieser Kategorie finden UND aus der Collection entfernen
-        $results = $ep->getResults();
-        foreach ($results as $key => $existingRes) {
+        
+        // --- BERECHNUNGS-DATEN VORBEREITEN ---
+        $year = (int)$ep->getExam()->getYear();
+        $age  = (int)$ep->getAgeYear();
+        $rawGender = $ep->getParticipant()->getGender() ?? 'W';
+        $gender = (str_starts_with(strtoupper($rawGender), 'M')) ? 'MALE' : 'FEMALE';
+        
+        $leistungInput = $data['leistung'] ?? null;
+        $leistung = ($leistungInput !== null && $leistungInput !== '') 
+            ? (float)str_replace(',', '.', (string)$leistungInput) : null;
+
+        // 1. Alte Ergebnisse dieser Kategorie entfernen
+        foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
+                $ep->removeResult($existingRes); 
                 $this->em->remove($existingRes);
-                $results->remove($key); // WICHTIG: Aus der Collection des Objekts löschen!
             }
         }
-        
-        // 2. Flush VOR dem Neuanlegen (Datenbank sauber machen)
         $this->em->flush();
 
-        // 3. Neues Ergebnis anlegen
+        // 2. Punkte berechnen
         $points = 0;
         $stufe = 'none';
         $calc = strtoupper($discipline->getBerechnungsart() ?? '');
 
-        $newResult = new ExamResult();
-        $newResult->setExamParticipant($ep);
-        $newResult->setDiscipline($discipline);
-
         if ($calc === 'VERBAND') {
-            $points = 3;
-            $stufe = 'gold';
-            $newResult->setLeistung(1.0);
-        } else {
-            // Falls ein Wert im Request war, berechnen, sonst 0
-            $leistungInput = $data['leistung'] ?? null;
-            $leistung = ($leistungInput !== null && $leistungInput !== '') 
-                ? (float)str_replace(',', '.', (string)$leistungInput) : null;
-                
-            if ($leistung !== null) {
-                $pData = $this->internalCalculate($discipline, (int)$ep->getExam()->getYear(), $gender, (int)$ep->getAgeYear(), $leistung);
-                $points = $pData['points'];
-                $stufe = $pData['stufe'];
-                $newResult->setLeistung($leistung);
-            } else {
-                // Nur Disziplin gewählt, noch keine Leistung
-                $newResult->setLeistung(0.0);
-            }
+            $points = 3; $stufe = 'gold'; $leistung = 1.0;
+        } elseif ($leistung !== null && $leistung > 0) {
+            $pData = $this->internalCalculate($discipline, $year, $gender, $age, $leistung);
+            $points = $pData['points'];
+            $stufe = $pData['stufe'];
         }
 
+        // 3. Neues Ergebnis erstellen und verknüpfen
+        $newResult = new ExamResult();
+        $newResult->setDiscipline($discipline);
+        $newResult->setLeistung($leistung ?? 0.0);
         $newResult->setPoints($points);
         $newResult->setStufe($stufe);
 
+        $ep->addResult($newResult); 
         $this->em->persist($newResult);
-        $ep->addResult($newResult); // WICHTIG: Die Gegenseite der Relation bedienen!
-
         $this->em->flush();
 
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);

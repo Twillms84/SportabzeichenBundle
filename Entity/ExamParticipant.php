@@ -74,4 +74,31 @@ class ExamParticipant
      * @return Collection<int, ExamResult>
      */
     public function getResults(): Collection { return $this->results; }
+
+    public function getResults(): Collection
+{
+    return $this->results;
+}
+
+    public function addResult(ExamResult $result): self
+    {
+        if (!$this->results->contains($result)) {
+            $this->results->add($result);
+            $result->setExamParticipant($this);
+        }
+
+        return $this;
+    }
+
+    public function removeResult(ExamResult $result): self
+    {
+        if ($this->results->removeElement($result)) {
+            // set the owning side to null (unless already changed)
+            if ($result->getExamParticipant() === $this) {
+                $result->setExamParticipant(null);
+            }
+        }
+
+        return $this;
+    }
 }
