@@ -210,7 +210,7 @@ final class ExamResultController extends AbstractPageController
             $this->em->flush();
         }
 
-        return $this->generateSummaryResponse($ep, $points, $stufe, $currentCat);
+        return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);    
     }
 
     /**
@@ -304,7 +304,7 @@ final class ExamResultController extends AbstractPageController
         }
         return ['points' => $p, 'stufe' => $s];
     }
-    
+
     private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points): void
     {
         $year = $ep->getExam()->getYear(); 
