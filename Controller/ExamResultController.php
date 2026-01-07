@@ -254,6 +254,7 @@ final class ExamResultController extends AbstractPageController
                 $result = new ExamResult();
                 $result->setExamParticipant($ep);
                 $result->setDiscipline($discipline);
+                $ep->getResults()->add($result);
                 $this->em->persist($result);
             }
             
