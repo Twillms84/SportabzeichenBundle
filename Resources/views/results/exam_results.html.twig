@@ -170,7 +170,7 @@
 
                                 {# Manueller Schwimmnachweis #}
                                 <div class="swimming-status-wrapper" id="swimming-wrapper-{{ p.ep_id }}">
-                                    {% if participant.final_medal == 'none' and participant.total_points >= 4 and not participant.has_swimming %}
+                                    {% if p.final_medal == 'none' and p.total_points >= 4 and not p.has_swimming %}
                                         <label><small>Schwimmnachweis fehlt:</small></label>
                                         <select class="form-control form-control-sm swimming-selector" 
                                                 data-save 
