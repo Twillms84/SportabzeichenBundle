@@ -252,6 +252,10 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
+        if (isset($data['type']) && $data['type'] === 'swimming') {
+            return $this->handleManualSwimming($data);
+        }
+        
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Daten unvollständig'], 404);
 
@@ -527,6 +531,48 @@ final class ExamResultController extends AbstractPageController
             elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
         }
         return ['points' => $p, 'stufe' => $s];
+    }
+
+    /**
+ * Hilfsmethode für den manuellen Switch
+ */
+    private function handleManualSwimming(array $data): JsonResponse
+    {
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$data['ep_id']);
+        if (!$ep) return new JsonResponse(['error' => 'TN nicht gefunden'], 404);
+
+        $isChecked = (bool)$data['swimming'];
+        $year = $ep->getExam()->getYear();
+        $participant = $ep->getParticipant();
+        
+        $proofRepo = $this->em->getRepository(SwimmingProof::class);
+        $proof = $proofRepo->findOneBy(['participant' => $participant, 'examYear' => $year]);
+
+        if ($isChecked) {
+            if (!$proof) {
+                $proof = new SwimmingProof();
+                $proof->setParticipant($participant);
+                $proof->setExamYear($year);
+                $this->em->persist($proof);
+            }
+            // Nur setzen, wenn nicht von Disziplin gesperrt
+            if (!$proof->getRequirementMetVia() || !str_starts_with($proof->getRequirementMetVia(), 'DISCIPLINE:')) {
+                $proof->setConfirmedAt(new \DateTime());
+                $age = $ep->getAgeYear();
+                $validYear = ($age <= 17) ? ($year + (18 - $age)) : ($year + 4);
+                $proof->setValidUntil(new \DateTime("$validYear-12-31"));
+                $proof->setRequirementMetVia('MANUAL');
+            }
+        } else {
+            // Nur löschen, wenn es manuell war
+            if ($proof && $proof->getRequirementMetVia() === 'MANUAL') {
+                $this->em->remove($proof);
+            }
+        }
+        
+        $this->em->flush();
+        // Nutzt deine bestehende Summary-Methode für den Response
+        return $this->generateSummaryResponse($ep, 0, 'none', new Discipline());
     }
 
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
