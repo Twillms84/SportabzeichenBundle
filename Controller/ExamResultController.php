@@ -217,29 +217,42 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+        // Eager Loading des Teilnehmers inkl. Relationen
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p', 'u', 'ex')
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->join('p.user', 'u')
+            ->join('ep.exam', 'ex')
+            ->where('ep.id = :id')
+            ->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()
+            ->getOneOrNullResult();
 
-        if (!$ep || !$discipline) {
-            return new JsonResponse(['error' => 'Daten unvollständig'], 404);
+        if (!$ep) {
+            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+        }
+
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+        if (!$discipline) {
+            return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
         }
 
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
-        $resultRepo = $this->em->getRepository(ExamResult::class);
-        $result = $resultRepo->findOneBy(['examParticipant' => $ep, 'discipline' => $discipline]);
+        $result = $this->em->getRepository(ExamResult::class)->findOneBy([
+            'examParticipant' => $ep, 
+            'discipline' => $discipline
+        ]);
 
-        // Fall 1: Feld wurde geleert -> Ergebnis löschen
+        $points = 0; 
+        $stufe = 'none';
+
         if ($leistung === null) {
             if ($result) {
-                // Schwimm-Trigger entfernen
                 $this->service->updateSwimmingProof($ep, $discipline, 0);
                 $this->em->remove($result);
             }
-            $points = 0;
-            $stufe = 'none';
-        } 
-        // Fall 2: Leistung wurde eingetragen/geändert
-        else {
+        } else {
             if (!$result) {
                 $result = new ExamResult();
                 $result->setExamParticipant($ep);
@@ -262,7 +275,6 @@ final class ExamResultController extends AbstractPageController
             $points = $pData['points'];
             $stufe = $pData['stufe'];
 
-            // Schwimm-Trigger aktualisieren
             $this->service->updateSwimmingProof($ep, $discipline, $points, $pData['req']);
         }
 
