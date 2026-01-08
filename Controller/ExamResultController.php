@@ -183,6 +183,10 @@ final class ExamResultController extends AbstractPageController
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
+        if (isset($data['type']) && $data['type'] === 'swimming') {
+            return $this->handleManualSwimming($ep, $data);
+        }
+
         $year = (int)$ep->getExam()->getYear();
         $age  = (int)$ep->getAgeYear();
         $gender = (str_starts_with(strtoupper($ep->getParticipant()->getGender() ?? 'W'), 'M')) ? 'MALE' : 'FEMALE';
@@ -450,17 +454,13 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    private function updateSwimmingProof(ExamParticipant $examParticipant, Discipline $discipline, int $points, ?Requirement $requirement): void
+    // Ändere die Signatur (das ? beim Requirement macht es optional)
+    private function updateSwimmingProof(ExamParticipant $examParticipant, Discipline $discipline, int $points, ?Requirement $requirement = null): void
     {
         $examYear = $examParticipant->getExam()->getYear();
         
-        // 1. Check if the requirement is marked as a swimming proof
-        // Or if it's an association (they often don't have explicit req-flags but are swimming associations)
+        // 1. Ist es eine Schwimmdisziplin?
         $isSwimmingRelevant = ($requirement && $requirement->isSwimmingProof()) || !empty($discipline->getVerband());
-
-        if (!$isSwimmingRelevant) {
-            return; 
-        }
 
         $swimmingProofRepository = $this->em->getRepository(SwimmingProof::class);
         $proof = $swimmingProofRepository->findOneBy([
@@ -468,8 +468,8 @@ final class ExamResultController extends AbstractPageController
             'examYear' => $examYear
         ]);
 
-        // Scenario A: Achievement accomplished (points > 0)
-        if ($points > 0) {
+        // Scenario A: Leistung erbracht in einer Schwimmdisziplin
+        if ($isSwimmingRelevant && $points > 0) {
             if (!$proof) {
                 $proof = new SwimmingProof();
                 $proof->setParticipant($examParticipant->getParticipant());
@@ -478,21 +478,17 @@ final class ExamResultController extends AbstractPageController
             }
             
             $age = $examParticipant->getAgeYear();
-            // Validity calculation: Minors until 18th birthday, adults +4 years
             $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
             
             $proof->setConfirmedAt(new \DateTime());
             $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
             $proof->setRequirementMetVia('DISCIPLINE:' . $discipline->getId());
-            
-            $this->em->flush();
         } 
-        // Scenario B: Result reset to 0 (delete the proof if it came from this discipline)
-        elseif ($points === 0 && $proof) {
-            // Only remove if the proof was actually provided by THIS specific discipline
-            if ($proof->getRequirementMetVia() === 'DISCIPLINE:' . $discipline->getId()) {
+        // Scenario B: Wechsel zu einer Nicht-Schwimmdisziplin ODER Löschung
+        elseif ($proof && $proof->getRequirementMetVia() === 'DISCIPLINE:' . $discipline->getId()) {
+            // Nur löschen, wenn der bestehende Nachweis exakt von DIESER Disziplin kam
+            if (!$isSwimmingRelevant || $points === 0) {
                 $this->em->remove($proof);
-                $this->em->flush();
             }
         }
     }
