@@ -321,8 +321,8 @@ final class ExamResultController extends AbstractPageController
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming'],
-            'swimming_met_via' => $summary['met_via'],
-            'swimming_expiry' => $summary['expiry'] ? $summary['expiry']->format('Y-m-d') : null,
+            'swimming_met_via' => $summary['met_via'] ?? ($summary['swimming_met_via'] ?? ''),
+            'swimming_expiry'  => $summary['expiry'] ?? ($summary['swimming_expiry'] ?? null),
         ]);
     }
 

@@ -120,6 +120,12 @@ class SportabzeichenService
             ['id' => $ep->getId()]
         );
 
-        return ['total' => $total, 'medal' => $medal, 'has_swimming' => $hasSwimming];
+        return [
+            'total' => $total, 
+            'medal' => $medal, 
+            'has_swimming' => $hasSwimming,
+            'met_via'      => $metVia, 
+            'expiry'       => $expiryYear,
+        ];
     }
 }
