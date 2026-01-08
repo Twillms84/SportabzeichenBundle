@@ -172,12 +172,14 @@
                                     <div class="mt-1">
                                         <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
                                             <input class="form-check-input ms-0" type="checkbox" role="switch"
-                                                    id="swim-switch-{{ p.ep_id }}"
-                                                    {{ p.has_swimming ? 'checked' : '' }}
-                                                    data-save 
-                                                    data-ep-id="{{ p.ep_id }}" 
-                                                    data-type="swimming"
-                                                    style="cursor: pointer;">
+                                                id="swim-switch-{{ p.ep_id }}"
+                                                {{ p.has_swimming ? 'checked' : '' }}
+                                                {# NEU: Deaktivieren wenn durch Disziplin gesetzt #}
+                                                {{ (p.swimming_met_via starts with 'DISCIPLINE:') ? 'disabled' : '' }}
+                                                data-save 
+                                                data-ep-id="{{ p.ep_id }}" 
+                                                data-type="swimming"
+                                                style="cursor: {{ (p.swimming_met_via starts with 'DISCIPLINE:') ? 'not-allowed' : 'pointer' }};">
                                                    
                                             <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
                                                    for="swim-switch-{{ p.ep_id }}"

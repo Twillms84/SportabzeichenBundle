@@ -300,6 +300,54 @@ final class ExamResultController extends AbstractPageController
         $this->em->flush();
         return $this->generateSummaryResponse($ep, $points, $stufe, $discipline);
     }
+
+    #[Route('/exam/swimming/toggle', name: 'exam_swimming_toggle', methods: ['POST'])]
+    public function toggleSwimming(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $epId = (int)($data['ep_id'] ?? 0);
+        $isChecked = (bool)($data['swimming'] ?? false);
+
+        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
+        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+
+        $participant = $ep->getParticipant();
+        $year = $ep->getExam()->getYear();
+        
+        $proofRepo = $this->em->getRepository(SwimmingProof::class);
+        $proof = $proofRepo->findOneBy(['participant' => $participant, 'examYear' => $year]);
+
+        if ($isChecked) {
+            // Einschalten
+            if (!$proof) {
+                $proof = new SwimmingProof();
+                $proof->setParticipant($participant);
+                $proof->setExamYear($year);
+                $this->em->persist($proof);
+            }
+            
+            // Nur ändern, wenn nicht schon eine Disziplin drinsteht (Sicherheits-Check)
+            if (!$proof->getRequirementMetVia() || !str_starts_with($proof->getRequirementMetVia(), 'DISCIPLINE:')) {
+                $proof->setConfirmedAt(new \DateTime());
+                
+                // Gültigkeit berechnen
+                $age = $ep->getAgeYear();
+                $validUntilYear = ($age <= 17) ? ($year + (18 - $age)) : ($year + 4);
+                $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
+                $proof->setRequirementMetVia('MANUAL');
+            }
+        } else {
+            // Ausschalten: Nur löschen, wenn es MANUELL gesetzt wurde
+            if ($proof && $proof->getRequirementMetVia() === 'MANUAL') {
+                $this->em->remove($proof);
+            }
+        }
+
+        $this->em->flush();
+
+        // Wir nutzen die Summary-Response, um alle UI-Elemente (Punkte, Medaille) zu aktualisieren
+        return $this->generateSummaryResponse($ep, 0, 'none', new Discipline()); 
+    }
     // --- HELPER METHODEN ---
 
     private function internalCalculate(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
@@ -342,16 +390,23 @@ final class ExamResultController extends AbstractPageController
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, Discipline $discipline): JsonResponse
     {
-        // Wir berechnen die aktuellen Gesamtwerte (Punkte und Medaille)
         $summary = $this->calculateSummary($ep);
+        
+        // Wir holen den aktuellen Nachweis, um den 'met_via' String zu erhalten
+        $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+            'participant' => $ep->getParticipant(),
+            'examYear' => $ep->getExam()->getYear()
+        ]);
 
         return new JsonResponse([
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'total_points' => $summary['total'],   // Greift auf das Array aus calculateSummary zu
-            'final_medal' => $summary['medal'],    // Greift auf das Array aus calculateSummary zu
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming'],
+            // NEU: Damit JS weiß, ob der Switch gesperrt werden muss
+            'swimming_met_via' => $proof ? $proof->getRequirementMetVia() : null,
         ]);
     }
 
@@ -416,8 +471,11 @@ final class ExamResultController extends AbstractPageController
         $total = array_sum($cats);
         $hasSwimming = false;
         $today = new \DateTime();
+        $currentYear = $ep->getExam()->getYear();
+
         foreach ($ep->getParticipant()->getSwimmingProofs() as $sp) {
-            if ($sp->getValidUntil() >= $today) {
+            // Ein Nachweis gilt, wenn er im aktuellen Jahr erbracht wurde ODER noch in der Zukunft gültig ist
+            if ($sp->getExamYear() == $currentYear || $sp->getValidUntil() >= $today) {
                 $hasSwimming = true;
                 break;
             }

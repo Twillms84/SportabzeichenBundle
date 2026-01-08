@@ -149,6 +149,18 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (swimSwitch) {
                 swimSwitch.checked = data.has_swimming;
+                // NEU: Sperren wenn via Disziplin
+                const metVia = data.swimming_met_via || '';
+                if (metVia.startsWith('DISCIPLINE:')) {
+                    swimSwitch.disabled = true;
+                    swimSwitch.style.cursor = 'not-allowed';
+                    if (swimLabel) swimLabel.title = "Nachweis durch Disziplin erbracht";
+                } else {
+                    swimSwitch.disabled = false;
+                    swimSwitch.style.cursor = 'pointer';
+                    if (swimLabel) swimLabel.title = "";
+                }
+
                 if (swimLabel) {
                     swimLabel.textContent = data.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt';
                     swimLabel.classList.toggle('text-success', data.has_swimming);
