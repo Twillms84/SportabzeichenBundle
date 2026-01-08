@@ -68,11 +68,14 @@ final class ExamResultController extends AbstractPageController
         foreach ($examParticipants as $ep) {
             $hasSwimming = false;
             $swimmingExpiry = null;
+            $metVia = null; 
             $today = new \DateTime();
             
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
-                if ($proof->getValidUntil() >= $today) {
+                if ($proof->getExamYear() == $exam->getYear() || $proof->getValidUntil() >= $today) {
                     $hasSwimming = true;
+                    $metVia = $proof->getRequirementMetVia(); 
+                    
                     if ($swimmingExpiry === null || $proof->getValidUntil() > $swimmingExpiry) {
                         $swimmingExpiry = $proof->getValidUntil();
                     }
@@ -99,7 +102,8 @@ final class ExamResultController extends AbstractPageController
                 'total_points' => $ep->getTotalPoints(),
                 'final_medal' => $ep->getFinalMedal(),
                 'has_swimming' => $hasSwimming,
-                'swimming_expiry' => $swimmingExpiry
+                'swimming_expiry' => $swimmingExpiry,
+                'swimming_met_via' => $metVia,
             ];
         }
 
