@@ -241,6 +241,9 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
+        if (isset($data['type']) && $data['type'] === 'swimming') {
+            return $this->handleManualSwimming($data);
+        }
         // Eager Loading wie oben
         $ep = $this->em->createQueryBuilder()
             ->select('ep', 'p', 'u')
@@ -252,10 +255,6 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
-        if (isset($data['type']) && $data['type'] === 'swimming') {
-            return $this->handleManualSwimming($data);
-        }
-        
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$ep || !$discipline) return new JsonResponse(['error' => 'Daten unvollständig'], 404);
 
