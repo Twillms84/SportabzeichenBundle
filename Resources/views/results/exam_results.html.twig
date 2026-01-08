@@ -168,23 +168,38 @@
                                     </span>
                                 </div>
 
-                                {# Manueller Schwimmnachweis #}
-                                <div class="swimming-status-wrapper" id="swimming-wrapper-{{ p.ep_id }}">
-                                    {% if p.final_medal == 'none' and p.total_points >= 4 and not p.has_swimming %}
-                                        <label><small>Schwimmnachweis fehlt:</small></label>
-                                        <select class="form-control form-control-sm swimming-selector" 
+                                <div id="swimming-wrapper-{{ participant.ep_id }}" class="pt-2 border-top mt-2">
+                                    {% if participant.has_swimming %}
+                                        {# ZUSTAND A: Erledigt #}
+                                        <div class="text-success small">
+                                            <i class="fa fa-check-circle"></i> <strong>Schwimmen: OK</strong><br>
+                                            <span class="text-muted" style="font-size: 0.75rem;">
+                                                {{ participant.swimming_met_via }}
+                                                {% if participant.swimming_expiry %}
+                                                    (bis {{ participant.swimming_expiry|date('Y') }})
+                                                {% endif %}
+                                            </span>
+                                        </div>
+
+                                    {% elseif participant.total_points >= 4 %}
+                                        {# ZUSTAND B: Auswahl nötig #}
+                                        <select class="form-select form-select-sm mt-1" 
+                                                style="font-size: 0.85rem; background-color: #fff3cd; border-color: #ffecb5;"
                                                 data-save 
                                                 data-type="swimming_select" 
-                                                data-ep-id="{{ p.ep_id }}">
-                                            <option value="">-- Nachweis wählen --</option>
+                                                data-ep-id="{{ participant.ep_id }}">
+                                            
+                                            <option value="">-- Schwimmnachweis wählen --</option>
                                             {% for disc in swimming_disciplines %}
-                                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                                <option value="{{ disc.id }}">{{ disc.name }}</option>
                                             {% endfor %}
                                         </select>
-                                    {% elseif p.has_swimming %}
-                                        <span class="badge badge-success">
-                                            <i class="fa fa-check"></i> Schwimmnachweis ({{ p.swimming_met_via }})
-                                        </span>
+
+                                    {% else %}
+                                        {# ZUSTAND C: Noch gesperrt #}
+                                        <div class="text-muted small">
+                                            <i class="fa fa-lock"></i> Schwimmen (Punkte fehlen)
+                                        </div>
                                     {% endif %}
                                 </div>
                             </div>

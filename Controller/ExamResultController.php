@@ -42,6 +42,7 @@ final class ExamResultController extends AbstractPageController
     /**
      * Hauptansicht der Ergebnisse für eine Prüfung
      */
+
     #[Route('/exam/{id}', name: 'index', methods: ['GET'])]
     public function index(Exam $exam, Request $request): Response
     {
@@ -104,8 +105,8 @@ final class ExamResultController extends AbstractPageController
                 'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
                 'nachname' => $ep->getParticipant()->getUser()->getLastname(),
                 'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
-                'geschlecht' => $ep->getParticipant()->getGender(), // Wieder drin
-                'age_year' => $ep->getAgeYear(),                   // FIX: Das hat gefehlt!
+                'geschlecht' => $ep->getParticipant()->getGender(),
+                'age_year' => $ep->getAgeYear(),
                 'total_points' => $ep->getTotalPoints(),
                 'final_medal' => $ep->getFinalMedal(),
                 'has_swimming' => $hasSwimming,
@@ -145,7 +146,15 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$kat] = array_values($vals);
         }
 
+        // 4. Klassenliste für Filter laden
         $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
+
+        // --- NEU: Schwimm-Disziplinen für das Dropdown laden ---
+        $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
+            ['category' => 'Swimming'], // Filtert nach Kategorie "Swimming"
+            ['name' => 'ASC']
+        );
+        // -------------------------------------------------------
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
             'exam' => $exam,
@@ -153,7 +162,8 @@ final class ExamResultController extends AbstractPageController
             'disciplines' => $disciplines,
             'results' => $resultsData,
             'classes' => $classes,
-            'selectedClass' => $selectedClass
+            'selectedClass' => $selectedClass,
+            'swimming_disciplines' => $swimmingDisciplines, // NEU: Hier übergeben!
         ]);
     }
 
