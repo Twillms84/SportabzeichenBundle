@@ -161,55 +161,75 @@ final class ExamResultController extends AbstractPageController
      * AJAX-Speicherung einer Disziplinwahl + Leistung
      */
     #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
-    public function saveExamDiscipline(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
-        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+public function saveExamDiscipline(Request $request): JsonResponse
+{
+    $data = json_decode($request->getContent(), true);
+    
+    // Eager Loading: Wir laden ep, participant (p), user (u) und exam (ex) in einem Rutsch
+    $ep = $this->em->createQueryBuilder()
+        ->select('ep', 'p', 'u', 'ex')
+        ->from(ExamParticipant::class, 'ep')
+        ->join('ep.participant', 'p')
+        ->join('p.user', 'u')
+        ->join('ep.exam', 'ex')
+        ->where('ep.id = :id')
+        ->setParameter('id', (int)($data['ep_id'] ?? 0))
+        ->getQuery()
+        ->getOneOrNullResult();
 
-        if (isset($data['type']) && $data['type'] === 'swimming') {
-            return $this->handleManualSwimming($ep, $data);
-        }
-
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
-
-        // 1. Bereinigung der alten Disziplin in dieser Kategorie
-        $currentCat = $discipline->getCategory();
-        foreach ($ep->getResults() as $existingRes) {
-            if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                // Schwimm-Trigger der alten Disziplin entfernen
-                $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
-                $this->em->remove($existingRes);
-            }
-        }
-        $this->em->flush(); 
-
-        // 2. Berechnung & Speicherung
-        $leistung = $this->formatLeistung($data['leistung'] ?? null);
-        $pData = $this->service->calculateResult(
-            $discipline, 
-            (int)$ep->getExam()->getYear(), 
-            $this->getGenderString($ep), 
-            (int)$ep->getAgeYear(), 
-            $leistung
-        );
-
-        $newResult = new ExamResult();
-        $newResult->setExamParticipant($ep);
-        $newResult->setDiscipline($discipline);
-        $newResult->setLeistung(!empty($discipline->getVerband()) ? 1.0 : ($leistung ?? 0.0));
-        $newResult->setPoints($pData['points']);
-        $newResult->setStufe($pData['stufe']);
-        $this->em->persist($newResult);
-
-        // 3. Schwimm-Proof Update
-        $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req']);
-
-        $this->em->flush();
-        return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
+    if (!$ep) {
+        return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
     }
+
+    // Spezialfall: Manueller Schwimm-Haken (AJAX)
+    if (isset($data['type']) && $data['type'] === 'swimming') {
+        return $this->handleManualSwimming($ep, $data);
+    }
+
+    $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+    if (!$discipline) {
+        return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+    }
+
+    // 1. Bereinigung der alten Disziplin in dieser Kategorie
+    $currentCat = $discipline->getCategory();
+    foreach ($ep->getResults() as $existingRes) {
+        if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
+            $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
+            $this->em->remove($existingRes);
+        }
+    }
+    // Flush hier wichtig, um Platz für das neue Result zu machen (Unique Constraints)
+    $this->em->flush(); 
+
+    // 2. Berechnung & Speicherung
+    $leistung = $this->formatLeistung($data['leistung'] ?? null);
+    
+    // getGenderString greift jetzt auf den fertig geladenen User zu
+    $pData = $this->service->calculateResult(
+        $discipline, 
+        (int)$ep->getExam()->getYear(), 
+        $this->getGenderString($ep), 
+        (int)$ep->getAgeYear(), 
+        $leistung
+    );
+
+    $newResult = new ExamResult();
+    $newResult->setExamParticipant($ep);
+    $newResult->setDiscipline($discipline);
+    // Verbands-Disziplinen (z.B. Schwimmabzeichen) bekommen pauschal 1.0 Leistung
+    $newResult->setLeistung(!empty($discipline->getVerband()) ? 1.0 : ($leistung ?? 0.0));
+    $newResult->setPoints($pData['points']);
+    $newResult->setStufe($pData['stufe']);
+    $this->em->persist($newResult);
+
+    // 3. Schwimm-Proof Update (Automatischer Haken durch Disziplin)
+    $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? false);
+
+    $this->em->flush();
+    
+    return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
+}
 
     /**
      * Speichert die reine Leistung (Update eines Textfeldes)
