@@ -2,8 +2,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('autosave-form');
     if (!form) return;
 
-    // Wir holen die Basis-URL (z.B. /sportabzeichen/exams/results/exam)
-    // Im Twig solltest du data-discipline-route und data-result-route setzen
     const disciplineRoute = form.getAttribute('data-discipline-route'); 
     const resultRoute = form.getAttribute('data-result-route');
     const csrfToken = form.getAttribute('data-global-token');
@@ -19,14 +17,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
+        const type = el.getAttribute('data-type'); // 'discipline', 'leistung' oder 'swimming'
         const kat = el.getAttribute('data-kategorie');
         const cell = el.closest('td');
         const row = el.closest('tr');
         
-        const selectEl = cell.querySelector('select');
-        const inputEl = cell.querySelector('input[type="text"]');
-
-        // Bestimme die Route basierend auf dem Element-Typ
+        // Bestimme Route: 'swimming' nutzt resultRoute oder eine eigene, 
+        // hier nutzen wir resultRoute für den Switch-Sync
         const isSelect = (el.tagName === 'SELECT');
         const targetRoute = isSelect ? disciplineRoute : resultRoute;
 
@@ -34,96 +31,129 @@ document.addEventListener('DOMContentLoaded', function() {
             updateRequirementHints(el);
         }
 
-        if (!selectEl.value || !epId) return;
+        // Bei Leistungen oder Disziplin-Wechsel brauchen wir die Werte
+        let payload = {
+            ep_id: epId,
+            _token: csrfToken
+        };
+
+        if (type === 'swimming') {
+            payload.swimming = el.checked ? 1 : 0;
+            payload.type = 'swimming_toggle'; 
+        } else {
+            const selectEl = cell.querySelector('select');
+            const inputEl = cell.querySelector('input[type="text"]');
+            if (!selectEl.value || !epId) return;
+            
+            payload.discipline_id = selectEl.value;
+            payload.leistung = inputEl.value;
+            
+            // UI Feedback nur für Text-Inputs
+            if (inputEl) inputEl.style.opacity = '0.5';
+        }
 
         try {
-            // UI Feedback
-            inputEl.style.opacity = '0.5';
-
             const response = await fetch(targetRoute, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                body: JSON.stringify({
-                    ep_id: epId,
-                    discipline_id: selectEl.value,
-                    leistung: inputEl.value,
-                    _token: csrfToken
-                })
+                body: JSON.stringify(payload)
             });
 
             if (!response.ok) throw new Error('Server-Fehler');
             const data = await response.json();
             
-            inputEl.style.opacity = '1';
+            // UI Feedback zurücksetzen
+            const inputEl = cell ? cell.querySelector('input[type="text"]') : null;
+            if (inputEl) inputEl.style.opacity = '1';
 
-            if (data.status === 'ok') {
-                // 1. VERBANDS-LOGIK (UI Sperre)
-                // Wenn der Controller sagt, es ist eine Verbandsdisziplin (3 Punkte fix)
-                if (data.points === 3 && data.stufe === 'gold' && isSelect) {
-                    const selectedOption = selectEl.options[selectEl.selectedIndex];
-                    if (selectedOption.getAttribute('data-calc') === 'VERBAND') {
-                        inputEl.value = ''; 
-                        inputEl.disabled = true;
-                        inputEl.placeholder = 'Verband';
-                    }
-                } else if (isSelect) {
-                    inputEl.disabled = false;
-                    inputEl.placeholder = '';
-                }
+            if (data.status === 'ok' || data.success) {
+                
+                // 1. VERBANDS-LOGIK & FARBEN (nur wenn es kein reiner Schwimm-Switch-Klick war)
+                if (type !== 'swimming' && cell) {
+                    const selectEl = cell.querySelector('select');
+                    const inputEl = cell.querySelector('input[type="text"]');
 
-                // 2. FARB-UPDATE
-                const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
-                [selectEl, inputEl].forEach(element => {
-                    element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-                    element.classList.add('medal-' + resultColor);
-                });
-
-                // 3. KATEGORIE BEREINIGEN (Nur bei Disziplin-Wechsel relevant)
-                if (isSelect && kat) {
-                    row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                        if (otherEl.closest('td') !== cell) {
-                            if (otherEl.tagName === 'INPUT') otherEl.value = '';
-                            otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
-                            otherEl.classList.add('medal-none');
+                    if (data.points === 3 && data.stufe === 'gold' && isSelect) {
+                        const selectedOption = selectEl.options[selectEl.selectedIndex];
+                        if (selectedOption.getAttribute('data-calc') === 'VERBAND') {
+                            inputEl.value = ''; 
+                            inputEl.disabled = true;
+                            inputEl.placeholder = 'Verband';
                         }
+                    } else if (isSelect) {
+                        inputEl.disabled = false;
+                        inputEl.placeholder = '';
+                    }
+
+                    const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
+                    [selectEl, inputEl].forEach(element => {
+                        element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+                        element.classList.add('medal-' + resultColor);
                     });
+
+                    // Kategorien bereinigen
+                    if (isSelect && kat) {
+                        row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
+                            if (otherEl.closest('td') !== cell) {
+                                if (otherEl.tagName === 'INPUT') otherEl.value = '';
+                                otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                                otherEl.classList.add('medal-none');
+                            }
+                        });
+                    }
                 }
 
-                // 4. STATISTIK UPDATE (Punkte & Medaille)
+                // 2. GLOBALER UI UPDATE (Punkte, Medaille UND Schwimm-Status)
                 updateUIWidgets(epId, row, data);
             }
         } catch (e) {
             console.error('Fehler:', e);
-            inputEl.style.backgroundColor = '#ffe6e6';
+            if (el.type === 'text') el.style.backgroundColor = '#ffe6e6';
         }
     });
 
     // --- HELPER ---
 
     function updateUIWidgets(epId, row, data) {
-        // Gesamtpunkte
+        // A. Gesamtpunkte
         const totalBadge = document.getElementById('total-points-' + epId);
-        if (totalBadge) {
+        if (totalBadge && data.total_points !== undefined) {
             const valSpan = totalBadge.querySelector('.pts-val');
             if (valSpan) valSpan.textContent = data.total_points;
         }
 
-        // Medaille
+        // B. Medaille
         const medalBadge = row.querySelector('.js-medal-badge');
         if (medalBadge) {
             const medal = data.final_medal ? String(data.final_medal).toLowerCase() : 'none';
-            if (medal !== 'none') {
+            if (medal !== 'none' && medal !== '') {
                 medalBadge.style.display = 'inline-block';
                 medalBadge.textContent = medal.charAt(0).toUpperCase() + medal.slice(1);
-                medalBadge.className = 'badge badge-mini js-medal-badge'; // Reset
+                medalBadge.className = 'badge badge-mini js-medal-badge'; 
                 
                 const classes = { 'gold': 'bg-warning text-dark', 'silber': 'bg-secondary text-white', 'bronze': 'bg-danger text-white' };
                 if (classes[medal]) medalBadge.className += ' ' + classes[medal];
             } else {
                 medalBadge.style.display = 'none';
+            }
+        }
+
+        // C. NEU: Schwimm-Nachweis Live Update
+        // Der Controller muss data.has_swimming (bool) zurückgeben
+        if (data.has_swimming !== undefined) {
+            const swimSwitch = document.getElementById('swim-switch-' + epId);
+            const swimLabel = document.getElementById('swimming-label-' + epId);
+            
+            if (swimSwitch) {
+                swimSwitch.checked = data.has_swimming;
+                if (swimLabel) {
+                    swimLabel.textContent = data.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt';
+                    swimLabel.classList.toggle('text-success', data.has_swimming);
+                    swimLabel.classList.toggle('text-danger', !data.has_swimming);
+                }
             }
         }
     }
