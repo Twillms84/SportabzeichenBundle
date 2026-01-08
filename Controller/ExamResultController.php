@@ -350,19 +350,16 @@ final class ExamResultController extends AbstractPageController
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe, Discipline $discipline): JsonResponse
     {
-        // Wir prüfen live, ob für dieses Jahr ein Nachweis existiert
-        $hasSwimming = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-            'participant' => $ep->getParticipant(),
-            'examYear' => $ep->getExam()->getYear()
-        ]) !== null;
+        // Wir berechnen die aktuellen Gesamtwerte (Punkte und Medaille)
+        $summary = $this->calculateSummary($ep);
 
         return new JsonResponse([
             'status' => 'ok',
             'points' => $points,
             'stufe' => $stufe,
-            'total_points' => $this->calculateTotalPoints($ep), // Deine Summen-Logik
-            'final_medal' => $this->calculateMedal($ep),       // Deine Medaillen-Logik
-            'has_swimming' => $hasSwimming,                    // DAS HIER IST NEU
+            'total_points' => $summary['total'],   // Greift auf das Array aus calculateSummary zu
+            'final_medal' => $summary['medal'],    // Greift auf das Array aus calculateSummary zu
+            'has_swimming' => $summary['has_swimming'],
         ]);
     }
 
@@ -479,7 +476,7 @@ final class ExamResultController extends AbstractPageController
         }
         return ['points' => $p, 'stufe' => $s];
     }
-    
+
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request, Connection $conn): Response
     {
