@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const swimSwitch = document.getElementById('swim-switch-' + epId);
             const swimLabel = document.getElementById('swimming-label-' + epId);
             
+            
             if (swimSwitch) {
                 swimSwitch.checked = data.has_swimming;
                 // NEU: Sperren wenn via Disziplin
@@ -165,6 +166,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     swimLabel.textContent = data.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt';
                     swimLabel.classList.toggle('text-success', data.has_swimming);
                     swimLabel.classList.toggle('text-danger', !data.has_swimming);
+                }
+                const expiryLabel = document.getElementById('expiry-' + epId);
+                if (expiryLabel) {
+                    if (data.has_swimming && data.swimming_expiry) {
+                        // Formatiert YYYY-MM-DD zu DD.MM.YYYY
+                        const [y, m, d] = data.swimming_expiry.split('-');
+                        expiryLabel.textContent = `(bis ${d}.${m}.${y})`;
+                    } else {
+                        expiryLabel.textContent = '';
+                    }
                 }
             }
         }

@@ -181,11 +181,14 @@
                                                 data-type="swimming"
                                                 style="cursor: {{ (p.swimming_met_via starts with 'DISCIPLINE:') ? 'not-allowed' : 'pointer' }};">
                                                    
-                                            <label class="form-check-label small fw-semibold {{ p.has_swimming ? 'text-success' : 'text-danger' }}" 
-                                                   for="swim-switch-{{ p.ep_id }}"
-                                                   id="swimming-label-{{ p.ep_id }}">
+                                            <label id="swimming-label-{{ p.ep_id }}" class="form-check-label small">
                                                 {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
                                             </label>
+                                            <span id="expiry-{{ p.ep_id }}" class="text-muted d-block" style="font-size: 0.65rem;">
+                                                {% if p.has_swimming and p.swimming_expiry %}
+                                                    (bis {{ p.swimming_expiry|date('d.m.Y') }})
+                                                {% endif %}
+                                            </span>
                                         </div>
                                         
                                         {% if p.swimming_expiry and p.has_swimming %}

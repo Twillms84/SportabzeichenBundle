@@ -252,8 +252,40 @@ final class ExamResultController extends AbstractPageController
             ->getQuery()
             ->getOneOrNullResult();
 
+        // --- DIREKTER MANUELLER SCHWIMM-TOGGLE ---
         if (isset($data['type']) && $data['type'] === 'swimming') {
-            return $this->handleManualSwimming($ep, $data);
+            $isChecked = (bool)$data['swimming'];
+            $year = $ep->getExam()->getYear();
+            $participant = $ep->getParticipant();
+            
+            $proofRepo = $this->em->getRepository(SwimmingProof::class);
+            $proof = $proofRepo->findOneBy(['participant' => $participant, 'examYear' => $year]);
+
+            if ($isChecked) {
+                if (!$proof) {
+                    $proof = new SwimmingProof();
+                    $proof->setParticipant($participant);
+                    $proof->setExamYear($year);
+                    $this->em->persist($proof);
+                }
+                // Nur anfassen, wenn nicht von einer Disziplin gesperrt
+                if (!$proof->getRequirementMetVia() || !str_starts_with($proof->getRequirementMetVia(), 'DISCIPLINE:')) {
+                    $proof->setConfirmedAt(new \DateTime());
+                    // Gültigkeit berechnen (18. Geb oder +4 Jahre)
+                    $age = $ep->getAgeYear();
+                    $validYear = ($age <= 17) ? ($year + (18 - $age)) : ($year + 4);
+                    $proof->setValidUntil(new \DateTime("$validYear-12-31"));
+                    $proof->setRequirementMetVia('MANUAL');
+                    $proof->setConfirmedByUser($this->getUser()->getUsername());
+                }
+            } else {
+                // Nur löschen, wenn es manuell war
+                if ($proof && $proof->getRequirementMetVia() === 'MANUAL') {
+                    $this->em->remove($proof);
+                }
+            }
+            $this->em->flush();
+            return $this->generateSummaryResponse($ep, 0, 'none', new Discipline());
         }
         
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
@@ -413,8 +445,8 @@ final class ExamResultController extends AbstractPageController
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal'],
             'has_swimming' => $summary['has_swimming'],
-            // NEU: Damit JS weiß, ob der Switch gesperrt werden muss
             'swimming_met_via' => $proof ? $proof->getRequirementMetVia() : null,
+            'swimming_expiry' => $proof ? $proof->getValidUntil()->format('Y-m-d') : null, 
         ]);
     }
 
