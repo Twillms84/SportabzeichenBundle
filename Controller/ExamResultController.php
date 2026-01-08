@@ -151,7 +151,7 @@ final class ExamResultController extends AbstractPageController
 
         // --- NEU: Schwimm-Disziplinen für das Dropdown laden ---
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
-            ['category' => 'Swimming'], // Filtert nach Kategorie "Swimming"
+            ['category' => 'SWIMMING'], // Filtert nach Kategorie "Swimming"
             ['name' => 'ASC']
         );
         // -------------------------------------------------------
