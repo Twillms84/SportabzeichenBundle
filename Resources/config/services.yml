@@ -5,6 +5,10 @@ services:
         autowire: true
         public: false
 
+    # 1. Den Service explizit oder per Ordner-Struktur laden
+    PulsR\SportabzeichenBundle\Service\:
+        resource: '../../Service/*'
+        
     PulsR\SportabzeichenBundle\EventListener\MenuListener:
         arguments:
             - '@security.authorization_checker'
@@ -12,13 +16,12 @@ services:
             - { name: kernel.event_listener, event: iserv.menu.main, method: onBuildMainMenu}
 
     PulsR\SportabzeichenBundle\Controller\:
-        resource: '../../Controller/*'
+        resource: '../../*'
         public: true
         tags: ['controller.service_arguments']
 
     PulsR\SportabzeichenBundle\Repository\:
         resource: '../../Repository'
-        tags: ['doctrine.repository_service']
         
  #   PulsR\SportabzeichenBundle\Crud\:
  #       resource: '../../Crud/*'
