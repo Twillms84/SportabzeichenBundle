@@ -5,20 +5,27 @@ services:
         autowire: true
         public: false
 
-    # 1. Den Service explizit oder per Ordner-Struktur laden
+    # Controller explizit laden
+    PulsR\SportabzeichenBundle\Controller\:
+        resource: '../../Controller' # Kein /* am Ende, zeigt auf den Ordner
+        public: true
+        tags: ['controller.service_arguments']
+
+    # Service explizit laden
     PulsR\SportabzeichenBundle\Service\:
-        resource: '../../Service/*'
-        
+        resource: '../../Service'
+
+    # Repositories explizit laden
+    PulsR\SportabzeichenBundle\Repository\:
+        resource: '../../Repository'
+
     PulsR\SportabzeichenBundle\EventListener\MenuListener:
         arguments:
             - '@security.authorization_checker'
         tags:
             - { name: kernel.event_listener, event: iserv.menu.main, method: onBuildMainMenu}
 
-    PulsR\SportabzeichenBundle\Controller\:
-        resource: '../../*'
-        public: true
-        tags: ['controller.service_arguments']
+
 
     PulsR\SportabzeichenBundle\Repository\:
         resource: '../../Repository'
