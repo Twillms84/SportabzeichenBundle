@@ -98,15 +98,26 @@ class SportabzeichenService
         }
         
         $total = array_sum($cats);
+        
+        // Initialisierung der Variablen mit Standardwerten
         $hasSwimming = false;
+        $metVia = 'nicht vorhanden';
+        $expiryYear = null;
         $today = new \DateTime();
+
+        // Schwimmnachweise prüfen
         foreach ($ep->getParticipant()->getSwimmingProofs() as $sp) {
-            if ($sp->getExamYear() == $ep->getExam()->getYear() || $sp->getValidUntil() >= $today) {
+            // Prüfung: Gültig im aktuellen Prüfungsjahr ODER Ablaufdatum liegt in der Zukunft
+            if ($sp->getExamYear() == $ep->getExam()->getYear() || ($sp->getValidUntil() && $sp->getValidUntil() >= $today)) {
                 $hasSwimming = true;
+                // Bestimmen, woher der Nachweis kommt (z.B. "Bronze Abzeichen" oder "Manuell")
+                $metVia = $sp->getDiscipline() ? $sp->getDiscipline()->getName() : 'Manueller Eintrag';
+                $expiryYear = $sp->getValidUntil() ? $sp->getValidUntil()->format('Y') : $sp->getExamYear() + 4;
                 break;
             }
         }
 
+        // Medaille berechnen
         $medal = 'none';
         if ($hasSwimming) {
             if ($total >= 11) $medal = 'gold';
@@ -114,7 +125,7 @@ class SportabzeichenService
             elseif ($total >= 4) $medal = 'bronze';
         }
 
-        // Direktes SQL Update für Performance (wie im Original)
+        // Direktes SQL Update für Performance
         $this->em->getConnection()->update('sportabzeichen_exam_participants', 
             ['total_points' => $total, 'final_medal' => $medal], 
             ['id' => $ep->getId()]
