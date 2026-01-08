@@ -23,44 +23,31 @@ final class SwimmingProofController extends AbstractPageController
     ) {
     }
 
-    #[Route('/toggle', name: 'toggle', methods: ['POST'])]
-    public function toggle(Request $request, SportabzeichenService $service): JsonResponse
+    #[Route('/exam/swimming/add-proof', name: 'exam_swimming_add_proof', methods: ['POST'])]
+    public function addSwimmingProof(Request $request): JsonResponse
     {
-        // 1. JSON-Payload validieren
         $data = json_decode($request->getContent(), true);
-        $epId = $data['ep_id'] ?? null;
+        
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$data['ep_id']);
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)$data['discipline_id']);
 
-        if (!$epId) {
-            return new JsonResponse(['error' => 'Keine Teilnehmer-ID übermittelt'], 400);
+        if (!$ep || !$discipline) {
+            return new JsonResponse(['error' => 'Daten unvollständig'], 400);
         }
 
-        // 2. Teilnehmer laden
-        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
-        if (!$ep) {
-            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-        }
+        // Service-Methode: Erstellt den SwimmingProof Eintrag
+        $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
+        $this->em->flush();
 
-        try {
-            // 3. Logik an den Service delegieren
-            // Wir übergeben den aktuell eingeloggten IServ-User für die Protokollierung
-            $username = $this->getUser()->getUsername();
-            $service->toggleManualSwimming($ep, (bool)($data['swimming'] ?? false), $username);
+        // WICHTIG: syncSummary berechnet nun die Medaille neu, da has_swimming jetzt true ist
+        $summary = $this->service->syncSummary($ep);
 
-            // 4. Alles in die DB schreiben
-            $this->em->flush();
-
-            // 5. Medaille und Gesamtpunkte neu berechnen, damit das UI synchron bleibt
-            $summary = $service->syncSummary($ep);
-
-            return new JsonResponse([
-                'status' => 'ok',
-                'has_swimming' => $summary['has_swimming'],
-                'total_points' => $summary['total'],
-                'final_medal' => $summary['medal']
-            ]);
-
-        } catch (\Exception $e) {
-            return new JsonResponse(['error' => 'Serverfehler: ' . $e->getMessage()], 500);
-        }
+        return new JsonResponse([
+            'status' => 'ok',
+            'has_swimming' => true,
+            'swimming_met_via' => $discipline->getName(),
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal']
+        ]);
     }
 }

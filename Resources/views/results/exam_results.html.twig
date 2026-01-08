@@ -95,6 +95,7 @@
     <form id="autosave-form" 
       data-discipline-route="{{ path('sportabzeichen_results_exam_discipline_save') }}"
       data-result-route="{{ path('sportabzeichen_results_exam_result_save') }}"
+      data-swimming-route="{{ path('sportabzeichen_results_exam_swimming_add_proof') }}"
       data-global-token="{{ csrf_token('authenticate') }}">
 
         <div class="table-responsive">
@@ -168,36 +169,24 @@
                                 </div>
 
                                 {# Manueller Schwimmnachweis #}
-                                {% if hasSwimmingCategory %}
-                                    <div class="mt-1">
-                                        <div class="form-check form-switch d-flex align-items-center ps-0 gap-2">
-                                            <input class="form-check-input ms-0" type="checkbox" role="switch"
-                                                id="swim-switch-{{ p.ep_id }}"
-                                                {{ p.has_swimming ? 'checked' : '' }}
-                                                {# NEU: Deaktivieren wenn durch Disziplin gesetzt #}
-                                                {{ (p.swimming_met_via starts with 'DISCIPLINE:') ? 'disabled' : '' }}
+                                <div class="swimming-status-wrapper" id="swimming-wrapper-{{ p.ep_id }}">
+                                    {% if participant.final_medal == 'none' and participant.total_points >= 4 and not participant.has_swimming %}
+                                        <label><small>Schwimmnachweis fehlt:</small></label>
+                                        <select class="form-control form-control-sm swimming-selector" 
                                                 data-save 
-                                                data-ep-id="{{ p.ep_id }}" 
-                                                data-type="swimming"
-                                                style="cursor: {{ (p.swimming_met_via starts with 'DISCIPLINE:') ? 'not-allowed' : 'pointer' }};">
-                                                   
-                                            <label id="swimming-label-{{ p.ep_id }}" class="form-check-label small">
-                                                {{ p.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt' }}
-                                            </label>
-                                            <span id="expiry-{{ p.ep_id }}" class="text-muted d-block" style="font-size: 0.65rem;">
-                                                {% if p.has_swimming and p.swimming_expiry %}
-                                                    (bis {{ p.swimming_expiry|date('d.m.Y') }})
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        
-                                        {% if p.swimming_expiry and p.has_swimming %}
-                                            <div class="small text-muted fst-italic ms-1" style="font-size: 0.75rem;">
-                                                Gültig bis: {{ p.swimming_expiry|date('d.m.Y') }}
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                {% endif %}
+                                                data-type="swimming_select" 
+                                                data-ep-id="{{ p.ep_id }}">
+                                            <option value="">-- Nachweis wählen --</option>
+                                            {% for disc in swimming_disciplines %}
+                                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    {% elseif participant.has_swimming %}
+                                        <span class="badge badge-success">
+                                            <i class="fa fa-check"></i> Schwimmnachweis ({{ participant.swimming_met_via }})
+                                        </span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </td>
 

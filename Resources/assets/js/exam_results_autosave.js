@@ -2,8 +2,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('autosave-form');
     if (!form) return;
 
+    // Routen aus dem Formular-Tag lesen
     const disciplineRoute = form.getAttribute('data-discipline-route'); 
     const resultRoute = form.getAttribute('data-result-route');
+    // WICHTIG: Stelle sicher, dass data-swimming-route im HTML gesetzt ist!
+    const swimmingRoute = form.getAttribute('data-swimming-route'); 
     const csrfToken = form.getAttribute('data-global-token');
 
     // --- 1. INITIALISIERUNG ---
@@ -17,38 +20,43 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
-        const type = el.getAttribute('data-type'); // 'discipline', 'leistung' oder 'swimming'
+        const type = el.getAttribute('data-type'); // 'discipline', 'leistung', 'swimming_select'
         const kat = el.getAttribute('data-kategorie');
         const cell = el.closest('td');
         const row = el.closest('tr');
         
-        // Bestimme Route: 'swimming' nutzt resultRoute oder eine eigene, 
-        // hier nutzen wir resultRoute für den Switch-Sync
-        const isSelect = (el.tagName === 'SELECT');
-        const targetRoute = isSelect ? disciplineRoute : resultRoute;
-
-        if (isSelect) {
-            updateRequirementHints(el);
-        }
-
-        // Bei Leistungen oder Disziplin-Wechsel brauchen wir die Werte
+        let targetRoute = '';
         let payload = {
             ep_id: epId,
             _token: csrfToken
         };
 
-        if (type === 'swimming') {
-            payload.swimming = el.checked ? 1 : 0;
-            payload.type = 'swimming_toggle'; 
-        } else {
+        // A) LOGIK FÜR SCHWIMM-NACHWEIS (Dropdown)
+        if (type === 'swimming_select') {
+            if (!el.value) return; // Nichts tun, wenn "Bitte wählen"
+            
+            targetRoute = swimmingRoute;
+            payload.discipline_id = el.value;
+            // payload.type = 'swimming_manual'; // Nicht zwingend nötig, da eigene Route
+        } 
+        // B) LOGIK FÜR NORMALE DISZIPLINEN / LEISTUNGEN
+        else {
             const selectEl = cell.querySelector('select');
             const inputEl = cell.querySelector('input[type="text"]');
-            if (!selectEl.value || !epId) return;
             
+            if (!selectEl || !selectEl.value || !epId) return;
+
+            // Route bestimmen
+            targetRoute = (el.tagName === 'SELECT') ? disciplineRoute : resultRoute;
+
+            if (el.tagName === 'SELECT') {
+                updateRequirementHints(el);
+            }
+
             payload.discipline_id = selectEl.value;
-            payload.leistung = inputEl.value;
-            
-            // UI Feedback nur für Text-Inputs
+            payload.leistung = inputEl ? inputEl.value : '';
+
+            // UI Feedback (nur bei Textfeldern sinnvoll)
             if (inputEl) inputEl.style.opacity = '0.5';
         }
 
@@ -71,42 +79,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.status === 'ok' || data.success) {
                 
-                // 1. VERBANDS-LOGIK & FARBEN (nur wenn es kein reiner Schwimm-Switch-Klick war)
-                if (type !== 'swimming' && cell) {
-                    const selectEl = cell.querySelector('select');
-                    const inputEl = cell.querySelector('input[type="text"]');
-
-                    if (data.points === 3 && data.stufe === 'gold' && isSelect) {
-                        const selectedOption = selectEl.options[selectEl.selectedIndex];
-                        if (selectedOption.getAttribute('data-calc') === 'VERBAND') {
-                            inputEl.value = ''; 
-                            inputEl.disabled = true;
-                            inputEl.placeholder = 'Verband';
-                        }
-                    } else if (isSelect) {
-                        inputEl.disabled = false;
-                        inputEl.placeholder = '';
-                    }
-
-                    const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
-                    [selectEl, inputEl].forEach(element => {
-                        element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-                        element.classList.add('medal-' + resultColor);
-                    });
-
-                    // Kategorien bereinigen
-                    if (isSelect && kat) {
-                        row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                            if (otherEl.closest('td') !== cell) {
-                                if (otherEl.tagName === 'INPUT') otherEl.value = '';
-                                otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
-                                otherEl.classList.add('medal-none');
-                            }
-                        });
-                    }
+                // 1. VERBANDS-LOGIK & FARBEN (Nur für Disziplinen, nicht Schwimm-Dropdown)
+                if (type !== 'swimming_select' && cell) {
+                    handleDisciplineColors(data, cell, row, kat, el);
                 }
 
-                // 2. GLOBALER UI UPDATE (Punkte, Medaille UND Schwimm-Status)
+                // 2. GLOBALER UI UPDATE (Punkte, Medaille, Schwimm-Badge)
                 updateUIWidgets(epId, row, data);
             }
         } catch (e) {
@@ -115,7 +93,47 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // --- HELPER ---
+    // --- HELPER FUNCTIONS ---
+
+    // Ausgelagerte Farb-Logik für bessere Lesbarkeit
+    function handleDisciplineColors(data, cell, row, kat, el) {
+        const selectEl = cell.querySelector('select');
+        const inputEl = cell.querySelector('input[type="text"]');
+        const isSelect = (el.tagName === 'SELECT');
+
+        if (data.points === 3 && data.stufe === 'gold' && isSelect) {
+            const selectedOption = selectEl.options[selectEl.selectedIndex];
+            if (selectedOption.getAttribute('data-calc') === 'VERBAND') {
+                if(inputEl) {
+                    inputEl.value = ''; 
+                    inputEl.disabled = true;
+                    inputEl.placeholder = 'Verband';
+                }
+            }
+        } else if (isSelect && inputEl) {
+            inputEl.disabled = false;
+            inputEl.placeholder = '';
+        }
+
+        const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
+        [selectEl, inputEl].forEach(element => {
+            if(element) {
+                element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+                element.classList.add('medal-' + resultColor);
+            }
+        });
+
+        // Andere Felder der gleichen Kategorie zurücksetzen
+        if (isSelect && kat) {
+            row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
+                if (otherEl.closest('td') !== cell) {
+                    if (otherEl.tagName === 'INPUT') otherEl.value = '';
+                    otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                    otherEl.classList.add('medal-none');
+                }
+            });
+        }
+    }
 
     function updateUIWidgets(epId, row, data) {
         // A. Gesamtpunkte
@@ -141,41 +159,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // C. NEU: Schwimm-Nachweis Live Update
-        // Der Controller muss data.has_swimming (bool) zurückgeben
+        // C. SCHWIMM-NACHWEIS UPDATE (Dropdown -> Badge)
         if (data.has_swimming !== undefined) {
-            const swimSwitch = document.getElementById('swim-switch-' + epId);
-            const swimLabel = document.getElementById('swimming-label-' + epId);
+            const wrapper = document.getElementById('swimming-wrapper-' + epId);
             
-            
-            if (swimSwitch) {
-                swimSwitch.checked = data.has_swimming;
-                // NEU: Sperren wenn via Disziplin
-                const metVia = data.swimming_met_via || '';
-                if (metVia.startsWith('DISCIPLINE:')) {
-                    swimSwitch.disabled = true;
-                    swimSwitch.style.cursor = 'not-allowed';
-                    if (swimLabel) swimLabel.title = "Nachweis durch Disziplin erbracht";
-                } else {
-                    swimSwitch.disabled = false;
-                    swimSwitch.style.cursor = 'pointer';
-                    if (swimLabel) swimLabel.title = "";
-                }
-
-                if (swimLabel) {
-                    swimLabel.textContent = data.has_swimming ? 'Schwimmen: OK' : 'Schwimmen: Fehlt';
-                    swimLabel.classList.toggle('text-success', data.has_swimming);
-                    swimLabel.classList.toggle('text-danger', !data.has_swimming);
-                }
-                const expiryLabel = document.getElementById('expiry-' + epId);
-                if (expiryLabel) {
-                    if (data.has_swimming && data.swimming_expiry) {
-                        // Formatiert YYYY-MM-DD zu DD.MM.YYYY
-                        const [y, m, d] = data.swimming_expiry.split('-');
-                        expiryLabel.textContent = `(bis ${d}.${m}.${y})`;
-                    } else {
-                        expiryLabel.textContent = '';
+            if (wrapper) {
+                if (data.has_swimming) {
+                    // Wenn erfolgreich: Dropdown durch Badge ersetzen
+                    const metVia = data.swimming_met_via || 'Nachweis erbracht';
+                    // Datum formatieren (optional)
+                    let expiryStr = '';
+                    if (data.swimming_expiry) {
+                        const parts = data.swimming_expiry.split('-'); // YYYY-MM-DD
+                        if(parts.length === 3) expiryStr = ` (bis ${parts[2]}.${parts[1]}.${parts[0]})`;
                     }
+
+                    wrapper.innerHTML = `
+                        <span class="badge badge-success" style="font-size: 0.9em; padding: 5px;">
+                            <i class="fa fa-check"></i> Schwimmen: OK
+                        </span><br>
+                        <small class="text-muted" style="font-size: 0.75rem;">
+                            ${metVia}${expiryStr}
+                        </small>
+                    `;
+                } else {
+                    // Optional: Falls durch eine Löschung der Nachweis verloren geht, 
+                    // könnte man hier das Dropdown wiederherstellen. 
+                    // Das ist aber komplexer, da man die <option> Liste bräuchte.
+                    // Fürs erste reicht es, wenn bei Reload das Dropdown wiederkommt.
                 }
             }
         }
