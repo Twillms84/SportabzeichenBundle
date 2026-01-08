@@ -218,12 +218,15 @@ final class ExamResultController extends AbstractPageController
         $ep->addResult($newResult);
         $this->em->persist($newResult);
 
-        // 4. Schwimm-Trigger für die NEUE Disziplin
+        // 4. Schwimm-Trigger (VERBESSERT)
         $nameLower = strtolower($discipline->getName() ?? '');
-        $isSchwimmRelevant = ($req && $req->isSwimmingProof()) || 
-                             (!empty($discipline->getVerband()) && (str_contains($nameLower, 'schwimm') || str_contains($nameLower, 'dlrg')));
+        $istVerband = !empty($discipline->getVerband());
 
-        if ($isSchwimmRelevant) {
+        // Wir prüfen: Ist es im Requirement als Schwimm-Proof markiert ODER ist es ein Schwimm-Verband?
+        $isSchwimmRelevant = ($req && $req->isSwimmingProof()) || 
+                            ($istVerband && (str_contains($nameLower, 'schwimm') || str_contains($nameLower, 'dlrg') || str_contains($nameLower, 'rettung')));
+
+        if ($isSchwimmRelevant && $points > 0) {
             $this->updateSwimmingProof($ep, $discipline, $points);
         }
 
