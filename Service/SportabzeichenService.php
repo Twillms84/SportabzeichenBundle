@@ -111,7 +111,14 @@ class SportabzeichenService
             if ($sp->getExamYear() == $ep->getExam()->getYear() || ($sp->getValidUntil() && $sp->getValidUntil() >= $today)) {
                 $hasSwimming = true;
                 // Bestimmen, woher der Nachweis kommt (z.B. "Bronze Abzeichen" oder "Manuell")
-                $metVia = $sp->getDiscipline() ? $sp->getDiscipline()->getName() : 'Manueller Eintrag';
+                // Nutze diese sicherere Variante:
+                if (method_exists($sp, 'getDiscipline') && $sp->getDiscipline()) {
+                    $metVia = $sp->getDiscipline()->getName();
+                } elseif (method_exists($sp, 'getType')) {
+                    $metVia = $sp->getType();
+                } else {
+                    $metVia = 'Nachweis vorhanden';
+                }
                 $expiryYear = $sp->getValidUntil() ? $sp->getValidUntil()->format('Y') : $sp->getExamYear() + 4;
                 break;
             }
