@@ -24,11 +24,6 @@ services:
             - '@security.authorization_checker'
         tags:
             - { name: kernel.event_listener, event: iserv.menu.main, method: onBuildMainMenu}
-
-
-
-    PulsR\SportabzeichenBundle\Repository\:
-        resource: '../../Repository'
         
  #   PulsR\SportabzeichenBundle\Crud\:
  #       resource: '../../Crud/*'
