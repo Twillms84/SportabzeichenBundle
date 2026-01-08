@@ -355,50 +355,53 @@ final class ExamResultController extends AbstractPageController
         ]);
     }
 
-    private function updateSwimmingProof(ExamParticipant $ep, Discipline $disc, int $points, ?Requirement $req): void
+    private function updateSwimmingProof(ExamParticipant $examParticipant, Discipline $discipline, int $points, ?Requirement $requirement): void
     {
-        $year = $ep->getExam()->getYear();
+        $examYear = $examParticipant->getExam()->getYear();
         
-        // 1. Check: Ist das Requirement als Schwimmnachweis markiert?
-        // Oder ist es ein Verband (die haben oft kein explizites Req-Flag, sind aber Schwimm-Verbände)
-        $isSchwimmRelevant = ($req && $req->isSchwimmnachweis()) || !empty($disc->getVerband());
+        // 1. Check if the requirement is marked as a swimming proof
+        // Or if it's an association (they often don't have explicit req-flags but are swimming associations)
+        $isSwimmingRelevant = ($requirement && $requirement->isSwimmingProof()) || !empty($discipline->getVerband());
 
-        if (!$isSchwimmRelevant) {
+        if (!$isSwimmingRelevant) {
             return; 
         }
 
-        $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-            'participant' => $ep->getParticipant(),
-            'examYear' => $year
+        $swimmingProofRepository = $this->em->getRepository(SwimmingProof::class);
+        $proof = $swimmingProofRepository->findOneBy([
+            'participant' => $examParticipant->getParticipant(),
+            'examYear' => $examYear
         ]);
 
-        // Wenn Leistung erbracht (Punkte > 0)
+        // Scenario A: Achievement accomplished (points > 0)
         if ($points > 0) {
             if (!$proof) {
                 $proof = new SwimmingProof();
-                $proof->setParticipant($ep->getParticipant());
-                $proof->setExamYear($year);
+                $proof->setParticipant($examParticipant->getParticipant());
+                $proof->setExamYear($examYear);
                 $this->em->persist($proof);
             }
             
-            $age = $ep->getAgeYear();
-            $validUntilYear = ($age <= 17) ? ($year + (18 - $age)) : ($year + 4);
+            $age = $examParticipant->getAgeYear();
+            // Validity calculation: Minors until 18th birthday, adults +4 years
+            $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
             
             $proof->setConfirmedAt(new \DateTime());
             $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
-            $proof->setRequirementMetVia('DISCIPLINE:' . $disc->getId());
+            $proof->setRequirementMetVia('DISCIPLINE:' . $discipline->getId());
             
             $this->em->flush();
         } 
-        // Wenn Punkte auf 0 gesetzt wurden (Löschen der Leistung)
+        // Scenario B: Result reset to 0 (delete the proof if it came from this discipline)
         elseif ($points === 0 && $proof) {
-            // Nur löschen, wenn der Nachweis genau durch DIESE Disziplin erbracht wurde
-            if ($proof->getRequirementMetVia() === 'DISCIPLINE:' . $disc->getId()) {
+            // Only remove if the proof was actually provided by THIS specific discipline
+            if ($proof->getRequirementMetVia() === 'DISCIPLINE:' . $discipline->getId()) {
                 $this->em->remove($proof);
                 $this->em->flush();
             }
         }
     }
+
     private function calculateSummary(ExamParticipant $ep): array
     {
         $cats = ['Ausdauer' => 0, 'Kraft' => 0, 'Schnelligkeit' => 0, 'Koordination' => 0];
