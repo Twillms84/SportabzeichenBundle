@@ -182,7 +182,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
     }
 
     // Spezialfall: Manueller Schwimm-Haken (AJAX)
-    if (isset($data['type']) && $data['type'] === 'swimming_toggle') {
+    if (isset($data['type']) && $data['type'] === 'swimming') {
         return $this->handleManualSwimming($ep, $data);
     }
 
