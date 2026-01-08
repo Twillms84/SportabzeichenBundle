@@ -128,21 +128,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 3. LIVE SCHWIMM-UPDATE (NEU)
-        const swimIcon = row.querySelector('.js-swimming-status-' + epId) || row.querySelector('.js-swimming-status');
-        if (swimIcon && typeof data.has_swimming !== 'undefined') {
-            if (data.has_swimming) {
-                // Anzeige als "Erfüllt" (z.B. grüner Haken oder Wellen-Icon)
-                swimIcon.innerHTML = '<span class="text-success" title="Schwimmnachweis erbracht">OK</span>'; // Oder dein Icon-HTML
-                swimIcon.classList.add('is-verified');
-            } else {
-                // Anzeige als "Fehlt"
-                swimIcon.innerHTML = '<span class="text-danger" title="Schwimmnachweis fehlt">✘</span>';
-                swimIcon.classList.remove('is-verified');
-            }
-        }
-    }
-
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
         const opt = select.options[select.selectedIndex];
