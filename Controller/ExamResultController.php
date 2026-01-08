@@ -210,6 +210,67 @@ final class ExamResultController extends AbstractPageController
     }
 
     /**
+     * Speichert die reine Leistung (Update eines Textfeldes)
+     */
+    #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
+    public function saveExamResult(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)($data['ep_id'] ?? 0));
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+
+        if (!$ep || !$discipline) {
+            return new JsonResponse(['error' => 'Daten unvollständig'], 404);
+        }
+
+        $leistung = $this->formatLeistung($data['leistung'] ?? null);
+        $resultRepo = $this->em->getRepository(ExamResult::class);
+        $result = $resultRepo->findOneBy(['examParticipant' => $ep, 'discipline' => $discipline]);
+
+        // Fall 1: Feld wurde geleert -> Ergebnis löschen
+        if ($leistung === null) {
+            if ($result) {
+                // Schwimm-Trigger entfernen
+                $this->service->updateSwimmingProof($ep, $discipline, 0);
+                $this->em->remove($result);
+            }
+            $points = 0;
+            $stufe = 'none';
+        } 
+        // Fall 2: Leistung wurde eingetragen/geändert
+        else {
+            if (!$result) {
+                $result = new ExamResult();
+                $result->setExamParticipant($ep);
+                $result->setDiscipline($discipline);
+                $this->em->persist($result);
+            }
+
+            $pData = $this->service->calculateResult(
+                $discipline,
+                (int)$ep->getExam()->getYear(),
+                $this->getGenderString($ep),
+                (int)$ep->getAgeYear(),
+                $leistung
+            );
+
+            $result->setLeistung($leistung);
+            $result->setPoints($pData['points']);
+            $result->setStufe($pData['stufe']);
+            
+            $points = $pData['points'];
+            $stufe = $pData['stufe'];
+
+            // Schwimm-Trigger aktualisieren
+            $this->service->updateSwimmingProof($ep, $discipline, $points, $pData['req']);
+        }
+
+        $this->em->flush();
+
+        return $this->generateSummaryResponse($ep, $points, $stufe);
+    }
+    /**
      * Manueller Schwimm-Toggle (AJAX)
      */
     private function handleManualSwimming(ExamParticipant $ep, array $data): JsonResponse
