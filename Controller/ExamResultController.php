@@ -104,6 +104,8 @@ final class ExamResultController extends AbstractPageController
                 'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
                 'nachname' => $ep->getParticipant()->getUser()->getLastname(),
                 'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
+                'geschlecht' => $ep->getParticipant()->getGender(), // Wieder drin
+                'age_year' => $ep->getAgeYear(),                   // FIX: Das hat gefehlt!
                 'total_points' => $ep->getTotalPoints(),
                 'final_medal' => $ep->getFinalMedal(),
                 'has_swimming' => $hasSwimming,
