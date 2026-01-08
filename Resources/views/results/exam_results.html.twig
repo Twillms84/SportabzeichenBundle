@@ -181,9 +181,9 @@
                                                 <option value="{{ d.id }}">{{ d.name }}</option>
                                             {% endfor %}
                                         </select>
-                                    {% elseif participant.has_swimming %}
+                                    {% elseif p.has_swimming %}
                                         <span class="badge badge-success">
-                                            <i class="fa fa-check"></i> Schwimmnachweis ({{ participant.swimming_met_via }})
+                                            <i class="fa fa-check"></i> Schwimmnachweis ({{ p.swimming_met_via }})
                                         </span>
                                     {% endif %}
                                 </div>
