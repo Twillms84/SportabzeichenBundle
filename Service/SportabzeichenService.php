@@ -83,7 +83,37 @@ class SportabzeichenService
             }
         }
     }
+    public function toggleManualSwimming(ExamParticipant $ep, bool $active): void
+    {
+        $participant = $ep->getParticipant();
+        $repo = $this->em->getRepository(SwimmingProof::class);
+        
+        // Bestehenden Nachweis suchen
+        $proof = $repo->findOneBy(['participant' => $participant]);
 
+        // LOGIK: Wenn ein Nachweis existiert UND er von einer Disziplin kommt, 
+        // darf der manuelle Schalter nichts ändern (Sicherheitscheck im Backend)
+        if ($proof && $proof->getDiscipline() !== null) {
+            return; 
+        }
+
+        if ($active) {
+            if (!$proof) {
+                $proof = new SwimmingProof();
+                $proof->setParticipant($participant);
+                $this->em->persist($proof);
+            }
+            $proof->setExamYear($ep->getExam()->getYear());
+            // Gültigkeit + 4 Jahre (IServ/DOSB Standard)
+            $validUntil = (new \DateTime())->setDate((int)$ep->getExam()->getYear() + 4, 12, 31);
+            $proof->setValidUntil($validUntil);
+            $proof->setDiscipline(null); // Explizit null, da MANUELL
+        } else {
+            if ($proof) {
+                $this->em->remove($proof);
+            }
+        }
+    }
     /**
      * Berechnet die Gesamtpunktzahl und die finale Medaille
      */
