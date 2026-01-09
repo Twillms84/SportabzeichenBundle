@@ -58,12 +58,17 @@ class SportabzeichenService
     public function updateSwimmingProof(ExamParticipant $ep, Discipline $discipline, int $points, ?Requirement $req = null): void
     {
         $examYear = $ep->getExam()->getYear();
+        
+        // Ist Schwimmen hier überhaupt relevant?
         $isSwimmingRelevant = ($req && $req->isSwimmingProof()) || !empty($discipline->getVerband());
+        
+        // Wir suchen nach einem Nachweis für das AKTUELLE Jahr
         $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
             'participant' => $ep->getParticipant(),
             'examYear' => $examYear
         ]);
 
+        // FALL A: Leistung wurde eingetragen (Punkte > 0) und es ist eine Schwimm-Disziplin
         if ($isSwimmingRelevant && $points > 0) {
             if (!$proof) {
                 $proof = new SwimmingProof();
@@ -72,14 +77,39 @@ class SportabzeichenService
                 $this->em->persist($proof);
             }
             
+            // Standard-Gültigkeit berechnen
             $age = $ep->getAgeYear();
             $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
-            $proof->setConfirmedAt(new \DateTime());
+            
+            if (!$proof->getConfirmedAt()) {
+                $proof->setConfirmedAt(new \DateTime());
+            }
+            
             $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
+            
+            // Wir merken uns die ID der Disziplin, damit wir genau wissen, wer den Nachweis erstellt hat
             $proof->setRequirementMetVia('DISCIPLINE:' . $discipline->getId());
-        } elseif ($proof && $proof->getRequirementMetVia() === 'DISCIPLINE:' . $discipline->getId()) {
-            if (!$isSwimmingRelevant || $points === 0) {
-                $this->em->remove($proof);
+        } 
+        
+        // FALL B: Leistung wurde gelöscht (Punkte 0) ODER Disziplin geändert
+        // Wir müssen prüfen: Existiert ein Nachweis, der von DIESER Disziplin erstellt wurde?
+        elseif ($proof) {
+            // Wir prüfen das Feld requirementMetVia.
+            // Es könnte "DISCIPLINE:12" (ID) oder "DISCIPLINE:Name" sein.
+            // Checken wir sicherheitshalber auf ID, da wir das oben so setzen.
+            
+            $metVia = $proof->getRequirementMetVia();
+            $discIdCheck = 'DISCIPLINE:' . $discipline->getId();
+            
+            // Wenn der Nachweis von genau dieser Disziplin kommt...
+            if ($metVia === $discIdCheck) {
+                // ...und jetzt keine Punkte mehr da sind oder es nicht mehr relevant ist:
+                if (!$isSwimmingRelevant || $points === 0) {
+                    // WEG DAMIT!
+                    $this->em->remove($proof);
+                    // WICHTIG: Das flush passiert meist im Controller, aber sicherheitshalber:
+                    // $this->em->flush(); // (Nur wenn du sicher bist, dass der Controller es nicht macht)
+                }
             }
         }
     }
@@ -148,37 +178,41 @@ class SportabzeichenService
     public function createSwimmingProofFromDiscipline(ExamParticipant $ep, Discipline $discipline): void
     {
         $participant = $ep->getParticipant();
-        
-        // 1. Prüfen, ob für diesen Teilnehmer bereits ein Nachweis existiert
+        $examYear = $ep->getExam()->getYear(); 
+
+        // 1. Prüfen, ob für das AKTUELLE Jahr schon was da ist
+        // (Verhindert, dass wir Nachweise von 2024 überschreiben oder doppelt anlegen)
         $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-            'participant' => $participant
+            'participant' => $participant,
+            'examYear' => $examYear
         ]);
 
         if (!$proof) {
             // Falls kein Eintrag existiert, neuen anlegen
             $proof = new SwimmingProof();
             $proof->setParticipant($participant);
+            $proof->setExamYear($examYear);
             $this->em->persist($proof);
         }
 
-        // 2. Die gewählte Disziplin hinterlegen (Tippfehler 'x' entfernt)
+        // 2. Den KLARTEXT-Namen speichern (z.B. "Bronze Abzeichen")
+        // Das sieht im Frontend besser aus als eine ID.
         $proof->setRequirementMetVia($discipline->getName());
-        $proof->setExamYear($ep->getExam()->getYear());
         
-        // 3. Gültigkeit berechnen (Standard: Jahr der Prüfung + 4 Jahre bis Jahresende)
-        $validUntil = (new \DateTime())->setDate((int)$ep->getExam()->getYear() + 4, 12, 31);
+        // (Die Zeile setExamYear war hier doppelt, habe ich entfernt)
+        
+        // 3. Gültigkeit berechnen
+        $validUntil = (new \DateTime())->setDate((int)$examYear + 4, 12, 31);
         $proof->setValidUntil($validUntil);
 
-        // --- FIX: Bestätigungsdatum setzen (verhindert SQL Not Null Violation) ---
+        // 4. FIX: Bestätigt-Datum setzen (gegen den SQL Fehler)
         $proof->setConfirmedAt(new \DateTime());
-        // -------------------------------------------------------------------------
 
-        // 4. Legacy Support (optional)
+        // 5. Legacy Support
         if (method_exists($participant, 'setSwimmingProof')) {
             $participant->setSwimmingProof(true);
         }
 
-        // 5. Änderungen in die Datenbank schreiben
         $this->em->flush();
     }
 }
