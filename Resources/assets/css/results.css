@@ -80,6 +80,22 @@ input.medal-none { background-image: none !important; }
     vertical-align: middle; 
 }
 
+/* Kompaktes Dropdown für die Schwimm-Auswahl */
+.swimming-select-compact {
+    font-size: 0.75rem !important;      /* Sehr kleine Schrift (ca. 12px) */
+    padding-top: 2px !important;         /* Weniger Abstand oben */
+    padding-bottom: 2px !important;      /* Weniger Abstand unten */
+    padding-left: 6px !important;        /* Abstand links */
+    min-height: 26px !important;         /* Erzwingt geringere Höhe als Bootstrap Standard */
+    height: auto !important;
+    line-height: 1.2 !important;
+    width: 100%;                         /* Füllt die Breite, aber nicht mehr */
+    max-width: 220px;                    /* Verhindert, dass es riesig wird */
+    background-position: right 4px center !important; /* Pfeil etwas verschieben */
+    font-size: 0.85rem; 
+    background-color: #fff3cd; 
+    border-color: #ffecb5;
+}
 /* --- ANFORDERUNGEN & HELPER --- */
 .req-hint { 
     font-size: 0.9rem !important; /* Anforderungen größer */
