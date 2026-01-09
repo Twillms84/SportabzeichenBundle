@@ -149,8 +149,7 @@ class SportabzeichenService
     {
         $participant = $ep->getParticipant();
         
-        // 1. Prüfen, ob für diesen Teilnehmer bereits ein Nachweis existiert (Egal aus welchem Jahr)
-        // Das verhindert den "Unique violation" Fehler 23505
+        // 1. Prüfen, ob für diesen Teilnehmer bereits ein Nachweis existiert
         $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
             'participant' => $participant
         ]);
@@ -162,7 +161,7 @@ class SportabzeichenService
             $this->em->persist($proof);
         }
 
-        // 2. Die gewählte Disziplin (z.B. Bronze-Abzeichen) hinterlegen
+        // 2. Die gewählte Disziplin hinterlegen (Tippfehler 'x' entfernt)
         $proof->setRequirementMetVia($discipline->getName());
         $proof->setExamYear($ep->getExam()->getYear());
         
@@ -170,10 +169,16 @@ class SportabzeichenService
         $validUntil = (new \DateTime())->setDate((int)$ep->getExam()->getYear() + 4, 12, 31);
         $proof->setValidUntil($validUntil);
 
-        // 4. Den Teilnehmer als "hat Schwimmnachweis" markieren, falls das Feld existiert
-        // (Optional, falls du ein extra Boolean-Feld in der Tabelle hast)
+        // --- FIX: Bestätigungsdatum setzen (verhindert SQL Not Null Violation) ---
+        $proof->setConfirmedAt(new \DateTime());
+        // -------------------------------------------------------------------------
+
+        // 4. Legacy Support (optional)
         if (method_exists($participant, 'setSwimmingProof')) {
             $participant->setSwimmingProof(true);
         }
+
+        // 5. Änderungen in die Datenbank schreiben
+        $this->em->flush();
     }
 }
