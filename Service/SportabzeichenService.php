@@ -163,7 +163,7 @@ class SportabzeichenService
         }
 
         // 2. Die gewählte Disziplin (z.B. Bronze-Abzeichen) hinterlegen
-        $proof->setDiscipline($discipline);
+        $proof->setRequirementMetVia($discipline->getName());
         $proof->setExamYear($ep->getExam()->getYear());
         
         // 3. Gültigkeit berechnen (Standard: Jahr der Prüfung + 4 Jahre bis Jahresende)
