@@ -151,7 +151,7 @@ final class ExamResultController extends AbstractPageController
 
         // --- NEU: Schwimm-Disziplinen für das Dropdown laden ---
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
-            ['category' => 'SWIMMING'], // Filtert nach Kategorie "Swimming"
+            ['category' => 'Schwimmen'], // Filtert nach Kategorie "Swimming"
             ['name' => 'ASC']
         );
         // -------------------------------------------------------
@@ -189,11 +189,6 @@ public function saveExamDiscipline(Request $request): JsonResponse
 
     if (!$ep) {
         return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-    }
-
-    // Spezialfall: Manueller Schwimm-Haken (AJAX)
-    if (isset($data['type']) && $data['type'] === 'swimming') {
-        return $this->handleManualSwimming($ep, $data);
     }
 
     $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
