@@ -136,57 +136,72 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateUIWidgets(epId, row, data) {
-        // A. Gesamtpunkte
+        // A. Gesamtpunkte Update
         const totalBadge = document.getElementById('total-points-' + epId);
         if (totalBadge && data.total_points !== undefined) {
             const valSpan = totalBadge.querySelector('.pts-val');
             if (valSpan) valSpan.textContent = data.total_points;
         }
 
-        // B. Medaille
+        // B. Medaille Update
         const medalBadge = row.querySelector('.js-medal-badge');
         if (medalBadge) {
             const medal = data.final_medal ? String(data.final_medal).toLowerCase() : 'none';
+            // Prüfen ob Medaille vorhanden (nicht leer und nicht 'none')
             if (medal !== 'none' && medal !== '') {
+                medalBadge.classList.remove('d-none'); // Sicherstellen, dass sie sichtbar ist
                 medalBadge.style.display = 'inline-block';
                 medalBadge.textContent = medal.charAt(0).toUpperCase() + medal.slice(1);
-                medalBadge.className = 'badge badge-mini js-medal-badge'; 
                 
+                // Klassen resetten und neu setzen
+                medalBadge.className = 'badge badge-mini js-medal-badge'; 
                 const classes = { 'gold': 'bg-warning text-dark', 'silber': 'bg-secondary text-white', 'bronze': 'bg-danger text-white' };
                 if (classes[medal]) medalBadge.className += ' ' + classes[medal];
             } else {
                 medalBadge.style.display = 'none';
+                medalBadge.classList.add('d-none');
             }
         }
 
-        // C. SCHWIMM-NACHWEIS UPDATE (Dropdown -> Badge)
-        if (data.has_swimming !== undefined) {
-            const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        // C. SCHWIMM-BEREICH UPDATE (Live-Logik)
+        const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        if (wrapper && data.has_swimming !== undefined) {
             
-            if (wrapper) {
-                if (data.has_swimming) {
-                    // Wenn erfolgreich: Dropdown durch Badge ersetzen
-                    const metVia = data.swimming_met_via || 'Nachweis erbracht';
-                    // Datum formatieren (optional)
-                    let expiryStr = '';
-                    if (data.swimming_expiry) {
-                        const parts = data.swimming_expiry.split('-'); // YYYY-MM-DD
-                        if(parts.length === 3) expiryStr = ` (bis ${parts[2]}.${parts[1]}.${parts[0]})`;
-                    }
+            // FALL 1: Schwimmnachweis wurde gerade erfolgreich gespeichert
+            if (data.has_swimming) {
+                const metVia = data.swimming_met_via || 'Nachweis erbracht';
+                let expiryStr = '';
+                if (data.swimming_expiry) {
+                    const parts = data.swimming_expiry.split('-'); // YYYY-MM-DD
+                    if(parts.length === 3) expiryStr = ` (bis ${parts[2]}.${parts[1]}.${parts[0]})`;
+                }
 
-                    wrapper.innerHTML = `
-                        <span class="badge badge-success" style="font-size: 0.9em; padding: 5px;">
-                            <i class="fa fa-check"></i> Schwimmen: OK
-                        </span><br>
-                        <small class="text-muted" style="font-size: 0.75rem;">
+                wrapper.innerHTML = `
+                    <div class="text-success small">
+                        <i class="fa fa-check-circle"></i> <strong>Schwimmen: OK</strong><br>
+                        <span class="text-muted" style="font-size: 0.75rem;">
                             ${metVia}${expiryStr}
-                        </small>
-                    `;
-                } else {
-                    // Optional: Falls durch eine Löschung der Nachweis verloren geht, 
-                    // könnte man hier das Dropdown wiederherstellen. 
-                    // Das ist aber komplexer, da man die <option> Liste bräuchte.
-                    // Fürs erste reicht es, wenn bei Reload das Dropdown wiederkommt.
+                        </span>
+                    </div>
+                `;
+            } 
+            // FALL 2: Noch kein Nachweis (aber Punkte haben sich evtl. geändert)
+            else {
+                // Elemente suchen (die wir im Twig mit d-none versteckt hatten)
+                const dropdownContainer = wrapper.querySelector('.swim-dropdown-container');
+                const lockContainer = wrapper.querySelector('.swim-locked-container');
+
+                // Nur agieren, wenn die Container noch existieren (also nicht durch innerHTML überschrieben wurden)
+                if (dropdownContainer && lockContainer) {
+                    if (data.total_points >= 4) {
+                        // Genug Punkte -> Dropdown zeigen, Schloss weg
+                        dropdownContainer.classList.remove('d-none');
+                        lockContainer.classList.add('d-none');
+                    } else {
+                        // Zu wenig Punkte -> Schloss zeigen, Dropdown weg
+                        dropdownContainer.classList.add('d-none');
+                        lockContainer.classList.remove('d-none');
+                    }
                 }
             }
         }
