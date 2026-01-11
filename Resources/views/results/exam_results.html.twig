@@ -142,7 +142,6 @@
                     {% set epResults = results[p.ep_id] ?? {} %}
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
-                        {# 1. NAME, KLASSE & INFO #}
                         <td class="col-name py-2">
                             <div class="name-container">
                                 <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
@@ -161,46 +160,55 @@
                                     </span>
                                     
                                     <span class="badge badge-mini js-medal-badge" 
-                                          id="final-medal-{{ p.ep_id }}"
-                                          data-medal="{{ p.final_medal|default('') }}"
-                                          style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
+                                        id="final-medal-{{ p.ep_id }}"
+                                        data-medal="{{ p.final_medal|default('') }}"
+                                        style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
                                         {{ p.final_medal }}
                                     </span>
                                 </div>
 
+                                {# --- HIER BEGINNT DER NEUE SCHWIMM-BEREICH --- #}
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="pt-2 border-top mt-2">
-                                    {% if p.has_swimming %}
-                                        {# ZUSTAND A: Erledigt #}
+                                    
+                                    {# 1. BADGE CONTAINER (Wird nur ausgeblendet per CSS, ist aber im HTML) #}
+                                    <div class="swim-badge-container {% if not p.has_swimming %}d-none{% endif %}">
                                         <div class="text-success small">
                                             <i class="fa fa-check-circle"></i> <strong>Schwimmen: OK</strong><br>
-                                            <span class="text-muted" style="font-size: 0.75rem;">
+                                            <span class="text-muted js-swim-info" style="font-size: 0.75rem;">
                                                 {{ p.swimming_met_via }}
                                                 {% if p.swimming_expiry %}
                                                     (bis {{ p.swimming_expiry|date('Y') }})
                                                 {% endif %}
                                             </span>
+                                            {# Entfernen Button #}
+                                            <div>
+                                                <button type="button" class="btn btn-xs btn-link text-danger js-reset-swim" 
+                                                        data-ep-id="{{ p.ep_id }}" style="font-size: 0.7rem; padding: 0;">
+                                                    (entfernen)
+                                                </button>
+                                            </div>
                                         </div>
+                                    </div>
 
-                                    {% elseif p.total_points >= 4 %}
-                                        {# ZUSTAND B: Auswahl nötig #}
+                                    {# 2. DROPDOWN CONTAINER (Ist immer im HTML, wird ausgeblendet wenn Schwimmen da ist) #}
+                                    <div class="swim-dropdown-container {% if p.has_swimming %}d-none{% endif %}">
                                         <select class="form-select form-select-sm mt-1 swimming-select-compact" 
                                                 data-save 
                                                 data-type="swimming_select" 
-                                                data-ep-id="{{ p.ep_id }}">
+                                                data-ep-id="{{ p.ep_id }}"
+                                                style="background-color: #fff3cd; border-color: #ffecb5;">
                                             
-                                            <option value="">-- Schwimmnachweis wählen --</option>
+                                            <option value="">-- Schwimmen wählen --</option>
+                                            {# Die Schleife läuft IMMER durch, also sind die Options immer da #}
                                             {% for disc in swimming_disciplines %}
                                                 <option value="{{ disc.id }}">{{ disc.name }}</option>
                                             {% endfor %}
                                         </select>
+                                    </div>
 
-                                    {% else %}
-                                        {# ZUSTAND C: Noch gesperrt #}
-                                        <div class="text-muted small">
-                                            <i class="fa fa-lock"></i> Schwimmen (Punkte fehlen)
-                                        </div>
-                                    {% endif %}
                                 </div>
+                                {# --- ENDE SCHWIMM-BEREICH --- #}
+
                             </div>
                         </td>
 
