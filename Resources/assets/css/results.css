@@ -82,19 +82,43 @@ input.medal-none { background-image: none !important; }
 
 /* Kompaktes Dropdown für die Schwimm-Auswahl */
 .swimming-select-compact {
-    font-size: 0.75rem !important;      /* Sehr kleine Schrift (ca. 12px) */
-    padding-top: 2px !important;         /* Weniger Abstand oben */
-    padding-bottom: 2px !important;      /* Weniger Abstand unten */
-    padding-left: 6px !important;        /* Abstand links */
-    min-height: 26px !important;         /* Erzwingt geringere Höhe als Bootstrap Standard */
+    font-size: 0.8rem !important;        /* Schriftgröße harmonisiert */
+    padding-top: 3px !important;         
+    padding-bottom: 3px !important;
+    padding-left: 6px !important;
+    padding-right: 20px !important;      /* Platz für den Pfeil rechts */
+    
+    min-height: 28px !important;         /* Etwas griffiger */
     height: auto !important;
     line-height: 1.2 !important;
-    width: 100%;                         /* Füllt die Breite, aber nicht mehr */
-    max-width: 220px;                    /* Verhindert, dass es riesig wird */
-    background-position: right 4px center !important; /* Pfeil etwas verschieben */
-    font-size: 0.85rem; 
-    background-color: #fff3cd; 
-    border-color: #ffecb5;
+    
+    /* Breite eingekürzt */
+    width: 95% !important;               /* Nicht mehr volle Breite */
+    max-width: 180px !important;         /* Obergrenze, damit es in der Spalte Luft hat */
+    
+    /* Farben an Standard-Inputs angepasst (statt Gelb) */
+    background-color: #ffffff !important; 
+    border: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+    border-radius: 4px;                  /* Leicht abgerundete Ecken */
+    
+    background-position: right 4px center !important;
+    cursor: pointer;
+}
+
+/* Dark Mode Anpassung für das Schwimm-Dropdown */
+@media (prefers-color-scheme: dark) {
+    .swimming-select-compact {
+        background-color: #212529 !important;
+        color: #dee2e6 !important;
+        border: 1px solid #495057 !important;
+    }
+}
+
+[data-bs-theme="dark"] .swimming-select-compact {
+    background-color: #212529 !important;
+    color: #dee2e6 !important;
+    border: 1px solid #495057 !important;
 }
 /* --- ANFORDERUNGEN & HELPER --- */
 .req-hint { 
