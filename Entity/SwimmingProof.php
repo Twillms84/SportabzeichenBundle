@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: 'PulsR\SportabzeichenBundle\Repository\SwimmingProofRepository')]
 #[ORM\Table(name: 'sportabzeichen_swimming_proofs')]
+#[ORM\UniqueConstraint(name: 'unique_participant_proof_year', columns: ['participant_id', 'exam_year'])]
 class SwimmingProof
 {
     #[ORM\Id]
