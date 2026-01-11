@@ -6,7 +6,9 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
+use PulsR\SportabzeichenBundle\Entity\Discipline; // Import nicht vergessen!
 use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
+use PulsR\SportabzeichenBundle\Entity\SwimmingProof; // Vermutlich heißt deine Entity so?
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -17,9 +19,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
 final class SwimmingProofController extends AbstractPageController
 {
-    // Der EntityManager muss per Constructor rein, damit $this->em funktioniert
     public function __construct(
-        private readonly EntityManagerInterface $em
+        private readonly EntityManagerInterface $em,
+        private readonly SportabzeichenService $service // Service muss hier rein!
     ) {
     }
 
@@ -28,24 +30,63 @@ final class SwimmingProofController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$data['ep_id']);
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)$data['discipline_id']);
+        $epId = (int)($data['ep_id'] ?? 0);
+        $disciplineId = $data['discipline_id'] ?? null; // Kann leer sein!
 
-        if (!$ep || !$discipline) {
-            return new JsonResponse(['error' => 'Daten unvollständig'], 400);
+        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
+
+        if (!$ep) {
+            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
         }
 
-        // Service-Methode: Erstellt den SwimmingProof Eintrag
-        $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
-        $this->em->flush();
+        // --- FALL A: LÖSCHEN (Discipline ID ist leer oder 0 oder "-") ---
+        if (empty($disciplineId) || $disciplineId === '-') {
+            
+            // 1. Vorhandenen Nachweis suchen und löschen
+            // Annahme: Es gibt eine Relation oder wir suchen die Entity direkt.
+            // Falls du eine Methode im Service hast wie $this->service->removeSwimmingProof($ep), nutze diese.
+            // Andernfalls direkt via EntityManager:
+            
+            // Beispiel: Wir suchen den Nachweis zu diesem Teilnehmer
+            // ACHTUNG: Passe 'SwimmingProof' an deine echte Entity-Klasse an!
+            $existingProof = $this->em->getRepository(SwimmingProof::class)->findOneBy(['examParticipant' => $ep]);
+            
+            if ($existingProof) {
+                $this->em->remove($existingProof);
+                $this->em->flush();
+            }
 
-        // WICHTIG: syncSummary berechnet nun die Medaille neu, da has_swimming jetzt true ist
+            $hasSwimming = false;
+            $metVia = null;
+
+        } 
+        // --- FALL B: NEU SETZEN (Discipline ID ist vorhanden) ---
+        else {
+            $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
+
+            if (!$discipline) {
+                return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+            }
+
+            // Alten Nachweis ggf. bereinigen, falls Create das nicht automatisch macht
+            // Aber dein Service createSwimmingProofFromDiscipline regelt das vermutlich.
+            $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
+            $this->em->flush();
+
+            $hasSwimming = true;
+            $metVia = $discipline->getName();
+        }
+
+        // --- GEMEINSAMER ABSCHLUSS ---
+        
+        // Berechnung neu anstoßen (Punkte & Medaille aktualisieren)
+        // Wenn Nachweis weg ist, wird Medaille ggf. wieder 'none'
         $summary = $this->service->syncSummary($ep);
 
         return new JsonResponse([
             'status' => 'ok',
-            'has_swimming' => true,
-            'swimming_met_via' => $discipline->getName(),
+            'has_swimming' => $hasSwimming, // true oder false
+            'swimming_met_via' => $metVia,  // Name oder null
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal']
         ]);
