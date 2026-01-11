@@ -30,46 +30,49 @@ final class SwimmingProofController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        $epId = (int)($data['ep_id'] ?? 0);
-        $disciplineId = $data['discipline_id'] ?? null; // Kann leer sein!
+        // ID holen, aber Standardwert null, falls nicht gesetzt
+        $epId = $data['ep_id'] ?? null;
+        $disciplineId = $data['discipline_id'] ?? null; 
 
-        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
+        // 1. Teilnehmer suchen (Muss immer existieren)
+        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
 
         if (!$ep) {
             return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
         }
 
-        // --- FALL A: LÖSCHEN (Discipline ID ist leer oder 0 oder "-") ---
+        // --- ENTSCHEIDUNG: LÖSCHEN ODER SPEICHERN? ---
+        
+        // Wenn discipline_id leer, 0 oder "-" ist -> LÖSCHEN
         if (empty($disciplineId) || $disciplineId === '-') {
             
-            // 1. Vorhandenen Nachweis suchen und löschen
-            // Annahme: Es gibt eine Relation oder wir suchen die Entity direkt.
-            // Falls du eine Methode im Service hast wie $this->service->removeSwimmingProof($ep), nutze diese.
-            // Andernfalls direkt via EntityManager:
-            
-            // Beispiel: Wir suchen den Nachweis zu diesem Teilnehmer
-            // ACHTUNG: Passe 'SwimmingProof' an deine echte Entity-Klasse an!
-            $existingProof = $this->em->getRepository(SwimmingProof::class)->findOneBy(['examParticipant' => $ep]);
+            // WICHTIG: Hier musst du die Entity Klasse für den Schwimmnachweis eintragen.
+            // Ich nenne sie hier "SwimmingProof", prüfe bitte, wie sie bei dir heißt!
+            $existingProof = $this->em->getRepository(\PulsR\SportabzeichenBundle\Entity\SwimmingProof::class)
+                                      ->findOneBy(['examParticipant' => $ep]);
             
             if ($existingProof) {
                 $this->em->remove($existingProof);
                 $this->em->flush();
             }
-
+            
+            // Flags für die Antwort
             $hasSwimming = false;
             $metVia = null;
 
-        } 
-        // --- FALL B: NEU SETZEN (Discipline ID ist vorhanden) ---
-        else {
-            $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
+        } else {
+            // --- SPEICHERN ---
+            
+            // Jetzt suchen wir die Disziplin. Hier darf sie NICHT null sein.
+            $discipline = $this->em->getRepository(\PulsR\SportabzeichenBundle\Entity\Discipline::class)
+                                     ->find((int)$disciplineId);
 
             if (!$discipline) {
+                // Das war dein ursprünglicher Fehler: Er landete hier, obwohl er löschen wollte
                 return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
             }
 
-            // Alten Nachweis ggf. bereinigen, falls Create das nicht automatisch macht
-            // Aber dein Service createSwimmingProofFromDiscipline regelt das vermutlich.
+            // Dein Service erstellt den Eintrag (und löscht vermutlich alte vorher?)
             $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
             $this->em->flush();
 
@@ -77,16 +80,13 @@ final class SwimmingProofController extends AbstractPageController
             $metVia = $discipline->getName();
         }
 
-        // --- GEMEINSAMER ABSCHLUSS ---
-        
-        // Berechnung neu anstoßen (Punkte & Medaille aktualisieren)
-        // Wenn Nachweis weg ist, wird Medaille ggf. wieder 'none'
+        // --- UPDATE DER PUNKTE ---
         $summary = $this->service->syncSummary($ep);
 
         return new JsonResponse([
             'status' => 'ok',
-            'has_swimming' => $hasSwimming, // true oder false
-            'swimming_met_via' => $metVia,  // Name oder null
+            'has_swimming' => $hasSwimming,
+            'swimming_met_via' => $metVia,
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal']
         ]);
