@@ -8,7 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use PulsR\SportabzeichenBundle\Entity\Discipline;
 use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
-use PulsR\SportabzeichenBundle\Entity\SwimmingProof; // <--- Das ist die Entity aus deinem Service!
+use PulsR\SportabzeichenBundle\Entity\SwimmingProof;
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -28,66 +28,59 @@ final class SwimmingProofController extends AbstractPageController
     #[Route('/exam/swimming/add-proof', name: 'exam_swimming_add_proof', methods: ['POST'])]
     public function addSwimmingProof(Request $request): JsonResponse
     {
-        $data = json_decode($request->getContent(), true);
-        
-        // Werte sicher abrufen
-        $epId = $data['ep_id'] ?? null;
-        $disciplineId = $data['discipline_id'] ?? null;
-
-        // 1. Teilnehmer (ExamParticipant) laden
-        $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
-
-        if (!$ep) {
-            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-        }
-
-        // --- ENTSCHEIDUNG: LÖSCHEN ODER SPEICHERN? ---
-
-        // FALL A: LÖSCHEN (ID ist leer oder "-")
-        if (empty($disciplineId) || $disciplineId === '-') {
+        try {
+            $data = json_decode($request->getContent(), true);
             
-            // Logik aus deinem Service adaptiert:
-            // Wir müssen den Proof anhand von Participant + Jahr finden
-            $participant = $ep->getParticipant();
-            $examYear = $ep->getExam()->getYear();
+            $epId = $data['ep_id'] ?? null;
+            $disciplineId = $data['discipline_id'] ?? null;
 
-            $existingProof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-                'participant' => $participant,
-                'examYear' => $examYear
+            if (!$epId) {
+                return new JsonResponse(['error' => 'Keine EP-ID'], 400);
+            }
+
+            $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
+            if (!$ep) {
+                return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+            }
+
+            // --- LÖSCHEN ---
+            if (empty($disciplineId) || $disciplineId === '-') {
+                $participant = $ep->getParticipant();
+                $examYear = $ep->getExam()->getYear();
+
+                $existingProof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+                    'participant' => $participant,
+                    'examYear' => $examYear
+                ]);
+                
+                if ($existingProof) {
+                    $this->em->remove($existingProof);
+                    $this->em->flush();
+                }
+            } 
+            // --- SPEICHERN ---
+            else {
+                $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
+                if ($discipline) {
+                    $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
+                    $this->em->flush();
+                }
+            }
+
+            // Summary update
+            $summary = $this->service->syncSummary($ep);
+
+            return new JsonResponse([
+                'status' => 'ok',
+                'has_swimming' => $summary['has_swimming'] ?? false,
+                'swimming_met_via' => $summary['met_via'] ?? null,
+                'total_points' => $summary['total'] ?? 0,
+                'final_medal' => $summary['medal'] ?? 'none'
             ]);
-            
-            if ($existingProof) {
-                $this->em->remove($existingProof);
-                $this->em->flush();
-            }
 
-        } 
-        // FALL B: SPEICHERN (ID ist vorhanden)
-        else {
-            $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
-
-            if (!$discipline) {
-                return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
-            }
-
-            // Dein Service übernimmt das Erstellen/Updaten
-            $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
-            // Service macht in createSwimmingProofFromDiscipline() schon ein flush(), 
-            // aber sicherheitshalber hier nochmal, falls du das dort mal änderst.
-            $this->em->flush(); 
+        } catch (\Throwable $e) {
+            // Fängt Fehler ab, damit der Server nicht abstürzt, und loggt sie
+            return new JsonResponse(['error' => $e->getMessage()], 500);
         }
-
-        // --- ZUSAMMENFASSUNG UPDATEN ---
-        // Das berechnet Punkte und Medaille neu und gibt uns den aktuellen Status zurück
-        $summary = $this->service->syncSummary($ep);
-
-        // Antwort an das Frontend
-        return new JsonResponse([
-            'status' => 'ok',
-            'has_swimming' => $summary['has_swimming'],     // Kommt jetzt dynamisch aus syncSummary
-            'swimming_met_via' => $summary['met_via'],      // Name der Disziplin oder 'nicht vorhanden'
-            'total_points' => $summary['total'],
-            'final_medal' => $summary['medal']
-        ]);
     }
 }
