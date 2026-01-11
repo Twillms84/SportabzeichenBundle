@@ -32,9 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         // A) LOGIK FÜR SCHWIMM-NACHWEIS (Dropdown)
-        if (type === 'swimming_select') {
-            if (!el.value) return; // Nichts tun, wenn "Bitte wählen"
-            
+        if (type === 'swimming_select') {        
             targetRoute = swimmingRoute;
             payload.discipline_id = el.value;
             // payload.type = 'swimming_manual'; // Nicht zwingend nötig, da eigene Route
