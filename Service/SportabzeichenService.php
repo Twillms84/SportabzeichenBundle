@@ -178,41 +178,45 @@ class SportabzeichenService
     public function createSwimmingProofFromDiscipline(ExamParticipant $ep, Discipline $discipline): void
     {
         $participant = $ep->getParticipant();
-        $examYear = $ep->getExam()->getYear(); 
+        $examYear = (int) $ep->getExam()->getYear(); // Sicherstellen, dass es Int ist
 
-        // 1. Prüfen, ob für das AKTUELLE Jahr schon was da ist
-        // (Verhindert, dass wir Nachweise von 2024 überschreiben oder doppelt anlegen)
+        // Nach bestehendem Eintrag für DIESES Jahr suchen
         $proof = $this->em->getRepository(SwimmingProof::class)->findOneBy([
             'participant' => $participant,
             'examYear' => $examYear
         ]);
 
+        // Wenn KEIN Eintrag für das aktuelle Jahr existiert, neuen anlegen
         if (!$proof) {
-            // Falls kein Eintrag existiert, neuen anlegen
             $proof = new SwimmingProof();
             $proof->setParticipant($participant);
             $proof->setExamYear($examYear);
+            
+            // WICHTIG: Persist nur bei neuen Objekten
             $this->em->persist($proof);
         }
 
-        // 2. Den KLARTEXT-Namen speichern (z.B. "Bronze Abzeichen")
-        // Das sieht im Frontend besser aus als eine ID.
+        // --- Daten aktualisieren (egal ob neu oder alt) ---
+        
+        // Disziplin-Name setzen
         $proof->setRequirementMetVia($discipline->getName());
         
-        // (Die Zeile setExamYear war hier doppelt, habe ich entfernt)
-        
-        // 3. Gültigkeit berechnen
-        $validUntil = (new \DateTime())->setDate((int)$examYear + 4, 12, 31);
+        // Gültigkeit berechnen (Jahr + 4)
+        $validUntil = (new \DateTime())->setDate($examYear + 4, 12, 31);
         $proof->setValidUntil($validUntil);
 
-        // 4. FIX: Bestätigt-Datum setzen (gegen den SQL Fehler)
-        $proof->setConfirmedAt(new \DateTime());
+        // Bestätigt-Datum (verhindert SQL Not Null Fehler)
+        if (!$proof->getConfirmedAt()) {
+            $proof->setConfirmedAt(new \DateTime());
+        }
 
-        // 5. Legacy Support
+        // Legacy Support
         if (method_exists($participant, 'setSwimmingProof')) {
             $participant->setSwimmingProof(true);
         }
 
-        $this->em->flush();
+        // Speichern
+        // Hier würde der Crash passieren, wenn die SQL-Constraint nicht geändert wurde
+        $this->em->flush(); 
     }
 }

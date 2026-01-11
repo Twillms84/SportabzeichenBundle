@@ -25,11 +25,9 @@ class SwimmingProof
     #[ORM\Column(type: 'date')]
     private ?\DateTimeInterface $validUntil = null;
 
-    // String, da es "DISCIPLINE:123" oder "DLRG_GOLD" sein kann
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $requirementMetVia = null;
 
-    // Das neue Feld, wichtig für die Lösch-Logik!
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $examYear = null;
 
