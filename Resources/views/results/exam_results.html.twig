@@ -171,7 +171,7 @@
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="pt-2 border-top mt-2">
                                     
                                     {# 1. BADGE CONTAINER (Wird nur ausgeblendet per CSS, ist aber im HTML) #}
-                                    <div class="swim-badge-container {% if not p.has_swimming %}d-none{% endif %}">
+                                    <div class="swim-badge-container {% if p.swimming_met_via %}d-none{% endif %}">
                                         <div class="text-success small">
                                             <i class="fa fa-check-circle"></i> <strong>Schwimmen: OK</strong><br>
                                             <span class="text-muted js-swim-info" style="font-size: 0.75rem;">
