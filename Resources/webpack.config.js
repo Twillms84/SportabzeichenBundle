@@ -7,7 +7,6 @@ module.exports = {
     entry: {
         'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
         'js/admin_participants': './assets/js/admin_participants.js',
-        'js/exam_results_scoring': './assets/js/exam_results_scoring.js',
         'css/sportabzeichen_results': './assets/css/results.css',
         'css/print_groupcard':'./assets/css/print_groupcard.css',
         'svg/dsa_groupcard':'./assets/svg/dsa_groupcard.svg'
