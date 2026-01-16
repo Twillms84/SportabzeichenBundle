@@ -6,9 +6,9 @@ namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use PulsR\SportabzeichenBundle\Entity\Discipline; // Import nicht vergessen!
+use PulsR\SportabzeichenBundle\Entity\Discipline;
 use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
-use PulsR\SportabzeichenBundle\Entity\SwimmingProof; // Vermutlich heißt deine Entity so?
+use PulsR\SportabzeichenBundle\Entity\SwimmingProof; 
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,7 +21,7 @@ final class SwimmingProofController extends AbstractPageController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly SportabzeichenService $service // Service muss hier rein!
+        private readonly SportabzeichenService $service
     ) {
     }
 
@@ -30,49 +30,65 @@ final class SwimmingProofController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        // ID holen, aber Standardwert null, falls nicht gesetzt
         $epId = $data['ep_id'] ?? null;
         $disciplineId = $data['discipline_id'] ?? null; 
 
-        // 1. Teilnehmer suchen (Muss immer existieren)
+        // 1. ExamParticipant laden
         $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
 
         if (!$ep) {
             return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
         }
 
+        // Stammdaten-Teilnehmer laden (an dem hängen die Schwimmnachweise!)
+        $participant = $ep->getParticipant(); 
+        $currentExamYear = $ep->getExam()->getYear(); // Wir brauchen das Jahr
+
         // --- ENTSCHEIDUNG: LÖSCHEN ODER SPEICHERN? ---
         
-        // Wenn discipline_id leer, 0 oder "-" ist -> LÖSCHEN
         if (empty($disciplineId) || $disciplineId === '-') {
+            // === LÖSCHEN ===
             
-            // WICHTIG: Hier musst du die Entity Klasse für den Schwimmnachweis eintragen.
-            // Ich nenne sie hier "SwimmingProof", prüfe bitte, wie sie bei dir heißt!
-            $existingProof = $this->em->getRepository(\PulsR\SportabzeichenBundle\Entity\SwimmingProof::class)
-                                      ->findOneBy(['examParticipant' => $ep]);
+            // Strategie: Wir löschen nur den Nachweis, der im aktuellen Prüfungsjahr erstellt wurde.
+            // Ein Nachweis von vor 2 Jahren darf hier nicht gelöscht werden, nur weil man im Dropdown "-" wählt.
             
-            if ($existingProof) {
-                $this->em->remove($existingProof);
+            $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+                'participant' => $participant,
+                'examYear' => $currentExamYear // Nur den von diesem Jahr löschen!
+            ]);
+            
+            if ($proofToDelete) {
+                $this->em->remove($proofToDelete);
                 $this->em->flush();
             }
             
-            // Flags für die Antwort
-            $hasSwimming = false;
-            $metVia = null;
+            // Jetzt kommt Issue 3: Checken, ob noch ein ALTER Nachweis da ist (Fallback)
+            // Wir nutzen den Service, um den "besten noch gültigen" Nachweis zu finden.
+            // (Ich gehe davon aus, dass dein Service so eine Methode hat oder wir sie simulieren müssen)
+            $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
+            
+            if ($bestValidProof) {
+                // Es gibt noch einen alten gültigen!
+                $hasSwimming = true;
+                $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
+                // Optional: ValidUntil formatieren
+            } else {
+                // Wirklich nichts mehr da
+                $hasSwimming = false;
+                $metVia = null;
+            }
 
         } else {
-            // --- SPEICHERN ---
+            // === SPEICHERN ===
             
-            // Jetzt suchen wir die Disziplin. Hier darf sie NICHT null sein.
-            $discipline = $this->em->getRepository(\PulsR\SportabzeichenBundle\Entity\Discipline::class)
-                                     ->find((int)$disciplineId);
+            $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
 
             if (!$discipline) {
-                // Das war dein ursprünglicher Fehler: Er landete hier, obwohl er löschen wollte
                 return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
             }
 
-            // Dein Service erstellt den Eintrag (und löscht vermutlich alte vorher?)
+            // Service erstellt neuen Eintrag für dieses Jahr
+            // (Der Service sollte intern prüfen, ob für dieses Jahr schon einer existiert und ihn ggf. updaten)
             $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
             $this->em->flush();
 
@@ -81,6 +97,7 @@ final class SwimmingProofController extends AbstractPageController
         }
 
         // --- UPDATE DER PUNKTE ---
+        // Das SyncSummary berechnet neu, ob "Schwimmen" erfüllt ist für das Abzeichen
         $summary = $this->service->syncSummary($ep);
 
         return new JsonResponse([
