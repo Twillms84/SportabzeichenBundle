@@ -505,4 +505,58 @@ public function saveExamDiscipline(Request $request): JsonResponse
     ]);
 }
 
+#[Route('/exam/swimming/remove-proof', name: 'exam_swimming_remove_proof', methods: ['POST'])]
+    public function removeSwimmingProof(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $epId = $data['ep_id'] ?? null;
+
+        if (!$epId) {
+            return new JsonResponse(['error' => 'Keine ID übergeben'], 400);
+        }
+
+        // Teilnehmer laden
+        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
+        if (!$ep) {
+            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+        }
+
+        // Schwimmnachweis suchen (für diesen Teilnehmer und dieses Prüfungsjahr)
+        // ODER einen manuell gültigen Nachweis
+        $participant = $ep->getParticipant();
+        $examYear = $ep->getExam()->getYear();
+
+        $proofRepo = $this->em->getRepository(SwimmingProof::class);
+        
+        // Wir suchen speziell den Nachweis, der für dieses Jahr gilt oder erstellt wurde
+        $proofs = $proofRepo->findBy(['participant' => $participant]);
+        
+        $deleted = false;
+        foreach ($proofs as $proof) {
+            // Logik: Wir löschen den Nachweis, wenn er im aktuellen Jahr erstellt wurde 
+            // oder explizit für dieses Jahr gilt.
+            // (Alternativ: Man könnte auch nur den "letzten" löschen)
+            if ($proof->getExamYear() == $examYear) {
+                $this->em->remove($proof);
+                $deleted = true;
+            }
+        }
+
+        if ($deleted) {
+            $this->em->flush();
+        }
+
+        // Neuberechnung der Punkte/Medaillen
+        $summary = $this->service->syncSummary($ep);
+
+        return new JsonResponse([
+            'status' => 'ok',
+            'success' => true,
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal'],
+            'has_swimming' => false, // Explizit auf false setzen
+            'swimming_met_via' => null
+        ]);
+    }
+
 }
