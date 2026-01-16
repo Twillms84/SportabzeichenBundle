@@ -80,44 +80,68 @@ input.medal-none { background-image: none !important; }
     vertical-align: middle; 
 }
 
-/* Kompaktes Dropdown für die Schwimm-Auswahl */
+/* --- SCHWIMM-BEREICH LAYOUT --- */
+
+/* 1. Der Haupt-Wrapper als Flexbox */
+.swimming-wrapper {
+    display: flex !important;
+    align-items: center !important;
+    width: 100%; 
+    gap: 4px; /* Abstand zwischen Inhalt und Mülleimer */
+}
+
+/* 2. Die inneren Container (Badge & Dropdown) füllen den Platz */
+.swim-badge-container,
+.swim-dropdown-container {
+    flex-grow: 1;    /* Nimm den verfügbaren Platz ein */
+    min-width: 0;    /* WICHTIG: Verhindert, dass Flexbox bei Textüberlauf platzt */
+    display: flex;   /* Damit Inhalte darin auch mittig sind */
+    align-items: center;
+}
+
+/* 3. Das Select-Feld selbst */
+/* Es soll sich dem Container anpassen, nicht eine starre Breite haben */
 .swimming-select-compact {
-    font-size: 0.8rem !important;        /* Schriftgröße harmonisiert */
-    padding-top: 3px !important;         
-    padding-bottom: 3px !important;
-    padding-left: 6px !important;
-    padding-right: 20px !important;      /* Platz für den Pfeil rechts */
+    width: 100% !important;      /* Fülle den Container aus */
+    max-width: none !important;  /* Keine Obergrenze, regelt der Wrapper */
+    min-height: 26px !important;
+    font-size: 0.85rem !important;
+    padding: 2px 4px !important;
+    border-radius: 3px;
+}
+
+/* 4. Das Badge (Schild) */
+.swim-badge-container .badge {
+    width: 100%;                 /* Badge soll auch breit sein */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;     /* Pünktchen, wenn Text zu lang */
+    font-size: 0.8rem;
+    padding: 5px 2px;
+}
+
+/* 5. Der Mülleimer Button */
+/* Wir ziehen ihn aus den Containern raus, damit er immer gleich steht */
+.btn-delete-swimming {
+    flex-shrink: 0;              /* Darf nicht zusammengedrückt werden */
+    width: 24px;                 /* Feste Breite für Klickfläche */
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     
-    min-height: 28px !important;         /* Etwas griffiger */
-    height: auto !important;
-    line-height: 1.2 !important;
-    
-    /* Breite eingekürzt */
-    width: 95% !important;               /* Nicht mehr volle Breite */
-    max-width: 180px !important;         /* Obergrenze, damit es in der Spalte Luft hat */
-    
-    /* Farben an Standard-Inputs angepasst (statt Gelb) */
-    background-color: #ffffff !important; 
-    border: 1px solid #dee2e6 !important;
-    color: #212529 !important;
-    border-radius: 4px;                  /* Leicht abgerundete Ecken */
-    
-    background-position: right 4px center !important;
+    background: transparent !important;
+    border: none !important;
+    color: #dc3545 !important;
+    opacity: 0.6;
+    transition: all 0.2s;
     cursor: pointer;
 }
 
-/* Wrapper, damit Dropdown/Badge und Mülleimer in einer Zeile bleiben */
-.swimming-wrapper {
-    display: flex !important;
-    align-items: center !important; /* Vertikal mittig */
-    flex-wrap: nowrap !important;   /* Niemals umbrechen */
-    gap: 5px;                       /* Kleiner Abstand zwischen Feld und Icon */
-}
-
-/* Anpassung des Dropdowns, wenn es im Wrapper ist */
-.swimming-wrapper .swimming-select-compact {
-    width: auto !important;         /* Breite flexibel machen, damit Platz für Icon ist */
-    flex-grow: 1;                   /* Den restlichen Platz einnehmen */
+.btn-delete-swimming:hover {
+    opacity: 1;
+    transform: scale(1.15);
+    color: #bd2130 !important;
 }
 
 /* Der Löschen-Button (Mülleimer) */
