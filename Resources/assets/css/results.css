@@ -1,4 +1,6 @@
-/* --- Bestehende Tabellen-Architektur --- */
+/* =========================================
+   1. TABELLEN-GRUNDGERÜST
+   ========================================= */
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
@@ -6,12 +8,15 @@
     border-collapse: collapse;
 }
 
-/* Spaltenbreiten */
-.col-name { width: 220px !important; } /* Etwas breiter für Name + Alter */
+/* Spaltenbreiten fixieren */
+.col-name { width: 220px !important; } /* Platz für Name + Alter */
 .col-class { width: 60px !important; }
 .col-discipline { width: 145px !important; }
 
-/* --- Medaillen-Farben für Inputs/Selects --- */
+
+/* =========================================
+   2. MEDAILLEN-FARBEN (Inputs/Selects)
+   ========================================= */
 select.medal-gold, input.medal-gold { 
     background-color: #ffd700 !important; color: #000 !important; border: 2px solid #b8860b !important; font-weight: bold !important; 
 }
@@ -22,28 +27,16 @@ select.medal-bronze, input.medal-bronze {
     background-color: #cd7f32 !important; color: #fff !important; border: 2px solid #8b4513 !important; font-weight: bold !important; 
 }
 
-/* Standard-Status */
+/* Standard-Status (Keine Medaille) */
 select.medal-none, input.medal-none { 
     background-color: #ffffff !important; color: #212529 !important; border: 1px solid #dee2e6 !important;
 }
 input.medal-none { background-image: none !important; }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    select.medal-none, input.medal-none { 
-        background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
-    }
-    .name-main { color: #dee2e6 !important; }
-    .name-age { color: #adb5bd !important; }
-    .req-hint { color: #adb5bd !important; }
-}
 
-[data-bs-theme="dark"] select.medal-none, 
-[data-bs-theme="dark"] input.medal-none {
-    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
-}
-
-/* Formularelemente */
+/* =========================================
+   3. FORMULARELEMENTE ALLGEMEIN
+   ========================================= */
 .discipline-selector, .form-control-custom {
     font-size: 1.1rem !important; 
     padding: 6px 3px !important; 
@@ -52,7 +45,21 @@ input.medal-none { background-image: none !important; }
     text-align: center !important;
 }
 
-/* --- NAME & ALTER LAYOUT --- */
+/* Einheit hinter dem Input */
+.input-group-text-unit {
+    padding: 2px 4px !important;
+    font-size: 0.9rem !important;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    min-width: 35px;
+    justify-content: center;
+}
+
+
+/* =========================================
+   4. TEILNEHMER-SPALTE (NAME & ALTER)
+   ========================================= */
 .name-container {
     display: flex;          /* Flexbox für Nebeneinander */
     align-items: baseline;  /* Textausrichtung unten bündig */
@@ -80,120 +87,94 @@ input.medal-none { background-image: none !important; }
     vertical-align: middle; 
 }
 
-/* --- SCHWIMM-BEREICH LAYOUT --- */
 
-/* 1. Der Haupt-Wrapper als Flexbox */
+/* =========================================
+   5. SCHWIMM-BEREICH (Optimiertes Layout)
+   ========================================= */
+
+/* Der Haupt-Wrapper */
 .swimming-wrapper {
     display: flex !important;
     align-items: center !important;
     width: 100%; 
-    gap: 4px; /* Abstand zwischen Inhalt und Mülleimer */
+    gap: 4px; /* Abstand zwischen Dropdown und Mülleimer */
 }
 
-/* 2. Die inneren Container (Badge & Dropdown) füllen den Platz */
+/* Die inneren Container (Badge & Dropdown) */
 .swim-badge-container,
 .swim-dropdown-container {
     flex-grow: 1;    /* Nimm den verfügbaren Platz ein */
-    min-width: 0;    /* WICHTIG: Verhindert, dass Flexbox bei Textüberlauf platzt */
-    display: flex;   /* Damit Inhalte darin auch mittig sind */
+    min-width: 0;    /* WICHTIG: Verhindert Layout-Sprengung bei langem Text */
+    display: flex;   
     align-items: center;
 }
 
-/* 3. Das Select-Feld selbst */
-/* Es soll sich dem Container anpassen, nicht eine starre Breite haben */
+/* CRITICAL FIX: Damit d-none auch wirklich wirkt (gegen Flexbox) */
+.swim-badge-container.d-none,
+.swim-dropdown-container.d-none {
+    display: none !important;
+}
+
+/* Das Select-Feld im Schwimmbereich */
 .swimming-select-compact {
     width: 100% !important;      /* Fülle den Container aus */
-    max-width: none !important;  /* Keine Obergrenze, regelt der Wrapper */
-    min-height: 26px !important;
+    max-width: none !important; 
+    min-height: 28px !important;
     font-size: 0.85rem !important;
     padding: 2px 4px !important;
-    border-radius: 3px;
+    border-radius: 4px;
+    
+    /* Standardfarben (Light Mode) */
+    background-color: #ffffff !important; 
+    border: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+    cursor: pointer;
 }
 
-/* 4. Das Badge (Schild) */
+/* Das Badge (Text-Schild) */
 .swim-badge-container .badge {
-    width: 100%;                 /* Badge soll auch breit sein */
+    width: 100%;                 
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;     /* Pünktchen, wenn Text zu lang */
+    text-overflow: ellipsis;     /* "..." bei zu langem Text */
     font-size: 0.8rem;
     padding: 5px 2px;
+    margin-right: 0; /* Margin entfernen, da Wrapper gap nutzt */
 }
 
-/* 5. Der Mülleimer Button */
-/* Wir ziehen ihn aus den Containern raus, damit er immer gleich steht */
+/* Der Mülleimer Button (Reset) */
 .btn-delete-swimming {
-    flex-shrink: 0;              /* Darf nicht zusammengedrückt werden */
-    width: 24px;                 /* Feste Breite für Klickfläche */
+    flex-shrink: 0;              /* Darf NICHT zusammengedrückt werden */
+    width: 24px;                 /* Feste Klickfläche */
     height: 24px;
+    
     display: flex;
     align-items: center;
     justify-content: center;
     
     background: transparent !important;
     border: none !important;
-    color: #dc3545 !important;
+    color: #dc3545 !important;   /* Rot */
     opacity: 0.6;
-    transition: all 0.2s;
-    cursor: pointer;
-}
-
-.btn-delete-swimming:hover {
-    opacity: 1;
-    transform: scale(1.15);
-    color: #bd2130 !important;
-}
-
-/* Der Löschen-Button (Mülleimer) */
-.btn-delete-swimming {
-    background: transparent !important;
-    border: none !important;
-    color: #dc3545 !important;      /* Bootstrap "Danger" Rot */
-    cursor: pointer !important;
-    font-size: 1.0rem !important;   /* Größe passend zur Zeile */
-    padding: 2px 6px !important;    /* Klickfläche etwas vergrößern */
-    opacity: 0.5;                   /* Standardmäßig etwas blasser (weniger aggressiv) */
     transition: all 0.2s ease-in-out;
+    cursor: pointer !important;
+    font-size: 1.0rem !important;
+    padding: 0 !important;
     line-height: 1 !important;
 }
 
 .btn-delete-swimming:hover {
-    opacity: 1.0;                   /* Beim Drüberfahren voll sichtbar */
-    color: #a71d2a !important;      /* Dunkleres Rot beim Hover */
-    transform: scale(1.1);          /* Mini-Zoom Effekt */
+    opacity: 1.0;
+    color: #a71d2a !important;   /* Dunkleres Rot */
+    transform: scale(1.15);      /* Leichter Zoom */
 }
 
-/* Badge Container Anpassung */
-.swim-badge-container {
-    display: flex;
-    align-items: center;
-    width: 100%;
-}
 
-/* Damit das Badge den Platz füllt und das Icon rechts sitzt */
-.swim-badge-container .badge {
-    flex-grow: 1;
-    text-align: center;
-    margin-right: 5px;
-}
-
-/* Dark Mode Anpassung für das Schwimm-Dropdown */
-@media (prefers-color-scheme: dark) {
-    .swimming-select-compact {
-        background-color: #212529 !important;
-        color: #dee2e6 !important;
-        border: 1px solid #495057 !important;
-    }
-}
-
-[data-bs-theme="dark"] .swimming-select-compact {
-    background-color: #212529 !important;
-    color: #dee2e6 !important;
-    border: 1px solid #495057 !important;
-}
-/* --- ANFORDERUNGEN & HELPER --- */
+/* =========================================
+   6. ANFORDERUNGEN & HELPER
+   ========================================= */
 .req-hint { 
-    font-size: 0.9rem !important; /* Anforderungen größer */
+    font-size: 0.9rem !important; 
     display: flex; 
     justify-content: space-between; 
     padding: 2px 4px;
@@ -203,21 +184,10 @@ input.medal-none { background-image: none !important; }
     margin-top: 2px;
 }
 
-/* Farben für B/S/G Text */
+/* Farben für Bronze/Silber/Gold Text */
 .req-val-b { color: #cd7f32; } 
 .req-val-s { color: #666; } 
 .req-val-g { color: #b8860b; } 
-
-/* Einheit hinter dem Input */
-.input-group-text-unit {
-    padding: 2px 4px !important;
-    font-size: 0.9rem !important;
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    color: #6c757d;
-    min-width: 35px;
-    justify-content: center;
-}
 
 /* Sortier-Links im Header */
 a.sort-header {
@@ -228,4 +198,39 @@ a.sort-header {
 }
 a.sort-header:hover {
     background-color: rgba(0,0,0,0.05);
+}
+
+
+/* =========================================
+   7. DARK MODE SUPPORT
+   ========================================= */
+@media (prefers-color-scheme: dark) {
+    /* Inputs Standard */
+    select.medal-none, input.medal-none { 
+        background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+    }
+    
+    /* Texte */
+    .name-main { color: #dee2e6 !important; }
+    .name-age { color: #adb5bd !important; }
+    .req-hint { color: #adb5bd !important; }
+    
+    /* Schwimm-Select */
+    .swimming-select-compact {
+        background-color: #212529 !important;
+        color: #dee2e6 !important;
+        border: 1px solid #495057 !important;
+    }
+}
+
+/* Support für Bootstrap Theme-Attribut [data-bs-theme="dark"] */
+[data-bs-theme="dark"] select.medal-none, 
+[data-bs-theme="dark"] input.medal-none {
+    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+}
+
+[data-bs-theme="dark"] .swimming-select-compact {
+    background-color: #212529 !important;
+    color: #dee2e6 !important;
+    border: 1px solid #495057 !important;
 }
