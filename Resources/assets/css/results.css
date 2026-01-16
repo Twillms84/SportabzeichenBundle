@@ -106,6 +106,53 @@ input.medal-none { background-image: none !important; }
     cursor: pointer;
 }
 
+/* Wrapper, damit Dropdown/Badge und Mülleimer in einer Zeile bleiben */
+.swimming-wrapper {
+    display: flex !important;
+    align-items: center !important; /* Vertikal mittig */
+    flex-wrap: nowrap !important;   /* Niemals umbrechen */
+    gap: 5px;                       /* Kleiner Abstand zwischen Feld und Icon */
+}
+
+/* Anpassung des Dropdowns, wenn es im Wrapper ist */
+.swimming-wrapper .swimming-select-compact {
+    width: auto !important;         /* Breite flexibel machen, damit Platz für Icon ist */
+    flex-grow: 1;                   /* Den restlichen Platz einnehmen */
+}
+
+/* Der Löschen-Button (Mülleimer) */
+.btn-delete-swimming {
+    background: transparent !important;
+    border: none !important;
+    color: #dc3545 !important;      /* Bootstrap "Danger" Rot */
+    cursor: pointer !important;
+    font-size: 1.0rem !important;   /* Größe passend zur Zeile */
+    padding: 2px 6px !important;    /* Klickfläche etwas vergrößern */
+    opacity: 0.5;                   /* Standardmäßig etwas blasser (weniger aggressiv) */
+    transition: all 0.2s ease-in-out;
+    line-height: 1 !important;
+}
+
+.btn-delete-swimming:hover {
+    opacity: 1.0;                   /* Beim Drüberfahren voll sichtbar */
+    color: #a71d2a !important;      /* Dunkleres Rot beim Hover */
+    transform: scale(1.1);          /* Mini-Zoom Effekt */
+}
+
+/* Badge Container Anpassung */
+.swim-badge-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+/* Damit das Badge den Platz füllt und das Icon rechts sitzt */
+.swim-badge-container .badge {
+    flex-grow: 1;
+    text-align: center;
+    margin-right: 5px;
+}
+
 /* Dark Mode Anpassung für das Schwimm-Dropdown */
 @media (prefers-color-scheme: dark) {
     .swimming-select-compact {
