@@ -89,8 +89,67 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Fehler:', e);
             if (el.type === 'text') el.style.backgroundColor = '#ffe6e6';
         }
+    
     });
+document.addEventListener('click', async function(event) {
+        // Prüfen, ob der Klick auf dem Löschen-Button (oder dem Icon darin) war
+        const btn = event.target.closest('.js-delete-swimming');
+        if (!btn) return;
 
+        event.preventDefault(); // Verhindert Springen der Seite
+
+        const epId = btn.getAttribute('data-ep-id');
+        const form = document.getElementById('autosave-form');
+        const deleteRoute = form.getAttribute('data-swimming-delete-route');
+        const csrfToken = form.getAttribute('data-global-token');
+
+        if (!deleteRoute || !epId) return;
+
+        // Kleines visuelles Feedback (Button ausgrauen)
+        btn.style.opacity = '0.5';
+
+        try {
+            const response = await fetch(deleteRoute, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ ep_id: epId, _token: csrfToken })
+            });
+
+            const data = await response.json();
+
+            if (data.status === 'ok' || data.success) {
+                // UI Aktualisieren
+                
+                // 1. Wrapper für diesen Teilnehmer finden
+                const wrapper = document.getElementById('swimming-wrapper-' + epId);
+                if (wrapper) {
+                    const badgeCont = wrapper.querySelector('.swim-badge-container');
+                    const dropCont  = wrapper.querySelector('.swim-dropdown-container');
+                    const select    = wrapper.querySelector('select');
+
+                    // Badge ausblenden
+                    if (badgeCont) badgeCont.classList.add('d-none');
+                    
+                    // Dropdown einblenden und zurücksetzen
+                    if (dropCont) dropCont.classList.remove('d-none');
+                    if (select) select.value = ""; // Dropdown auf "Bitte wählen" setzen
+                }
+
+                // 2. Globales UI Update (Punkte & Medaille neu setzen)
+                // Diese Funktion hast du schon in deinem bestehenden JS Code
+                const row = btn.closest('tr'); // Falls du die Zeile brauchst
+                updateUIWidgets(epId, row, data);
+            }
+        } catch (e) {
+            console.error('Fehler beim Löschen:', e);
+            alert('Fehler beim Entfernen des Nachweises.');
+        } finally {
+            btn.style.opacity = '1';
+        }
+    });
     // --- HELPER FUNCTIONS ---
 
     // Ausgelagerte Farb-Logik für bessere Lesbarkeit
