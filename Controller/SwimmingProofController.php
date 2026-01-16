@@ -108,4 +108,38 @@ final class SwimmingProofController extends AbstractPageController
             'final_medal' => $summary['medal']
         ]);
     }
+
+    #[Route('/exam/swimming/remove-proof', name: 'sportabzeichen_results_exam_swimming_remove_proof', methods: ['POST'])]
+    public function removeSwimmingProof(Request $request): JsonResponse
+    {
+        // 1. Daten holen
+        $data = json_decode($request->getContent(), true);
+        $epId = $data['epId'] ?? null;
+
+        if (!$epId) {
+            return new JsonResponse(['success' => false, 'message' => 'ID fehlt'], 400);
+        }
+
+        // 2. Entity laden
+        $em = $this->getDoctrine()->getManager();
+        $participation = $em->getRepository(ExamParticipation::class)->find($epId);
+
+        if (!$participation) {
+            return new JsonResponse(['success' => false, 'message' => 'Teilnehmer nicht gefunden'], 404);
+        }
+
+        // 3. Schwimm-Daten löschen (auf null setzen)
+        $participation->setSwimmingDiscipline(null);
+        // Falls du weitere Felder hast, die zurückgesetzt werden müssen (z.B. manuelles Datum):
+        // $participation->setSwimmingDate(null); 
+
+        $em->persist($participation);
+        $em->flush();
+
+        // 4. WICHTIG: JSON zurückgeben, kein HTML!
+        return new JsonResponse([
+            'success' => true, 
+            'epId' => $epId
+        ]);
+    }
 }
