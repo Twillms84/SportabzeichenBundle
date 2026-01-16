@@ -168,40 +168,35 @@
                                     </span>
                                 </div>
 
-                                {# --- HIER BEGINNT DER NEUE SCHWIMM-BEREICH --- #}
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
-    
-                                    {# 1. DAS BADGE (wird gezeigt, wenn Nachweis da ist) #}
                                     <div class="swim-badge-container {% if not p.has_swimming %}d-none{% endif %}">
                                         <span class="badge badge-success js-swim-info">
-                                            {{ p.swimming_met_via|default('Nachweis erbracht') }}
+                                            {# Wenn swimming_met_via leer ist, zeigen wir nichts oder einen Platzhalter #}
+                                            {{ p.swimming_met_via ? p.swimming_met_via : 'Erledigt' }}
                                         </span>
-                                        
-                                        {# DER NEUE LÖSCHEN BUTTON #}
-                                        <button type="button" 
-                                                class="btn btn-sm btn-link text-danger p-0 ml-2 js-delete-swimming"
-                                                data-ep-id="{{ p.ep_id }}"
-                                                title="Nachweis entfernen">
-                                            <i class="fas fa-trash-alt"></i> {# Oder 'fa fa-times' #}
-                                        </button>
                                     </div>
 
-                                    {# 2. DAS DROPDOWN (wird gezeigt, wenn KEIN Nachweis da ist) #}
+                                    {# 2. DROPDOWN (Nur anzeigen, wenn has_swimming FALSCH ist) #}
                                     <div class="swim-dropdown-container {% if p.has_swimming %}d-none{% endif %}">
-                                        <select class="form-control form-control-sm" 
+                                        <select class="form-control form-control-sm swimming-select-compact" 
                                                 data-ep-id="{{ p.ep_id }}"
                                                 data-type="swimming_select" 
                                                 data-save="true">
-                                            <option value="">Schwimmnachweis wählen...</option>
+                                            <option value="">Schwimmen wählen...</option>
                                             {% for swimDisc in swimming_disciplines %}
                                                 <option value="{{ swimDisc.id }}">{{ swimDisc.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
 
+                                    {# 3. BUTTON (Immer da) #}
+                                    <button type="button" 
+                                            class="btn-delete-swimming js-delete-swimming"
+                                            data-ep-id="{{ p.ep_id }}"
+                                            title="Zurücksetzen">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
                                 </div>
-                                {# --- ENDE SCHWIMM-BEREICH --- #}
-
                             </div>
                         </td>
 
