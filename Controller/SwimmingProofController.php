@@ -77,53 +77,71 @@ final class SwimmingProofController extends AbstractPageController
     #[Route('/exam/swimming/remove-proof', name: 'exam_swimming_remove_proof', methods: ['POST'])]
     public function removeSwimmingProof(Request $request): JsonResponse
     {
-        // 1. Daten holen
-        $data = json_decode($request->getContent(), true);
-        // ACHTUNG: Im JS schickst du oft 'epId', im Add oben 'ep_id'. 
-        // Ich prüfe beides sicherheitshalber.
-        $epId = $data['epId'] ?? $data['ep_id'] ?? null;
+        try {
+            // 1. Daten sicher auslesen (Body oder Post-Params)
+            $content = $request->getContent();
+            $data = !empty($content) ? json_decode($content, true) : [];
+            
+            // Fallback, falls jQuery $.post genutzt wird statt fetch body
+            $epId = $data['epId'] ?? $request->request->get('epId') ?? null;
 
-        if (!$epId) {
-            return new JsonResponse(['success' => false, 'message' => 'ID fehlt'], 400);
+            if (!$epId) {
+                return new JsonResponse(['success' => false, 'message' => 'ID fehlt'], 400);
+            }
+
+            // 2. Entity laden (HIER WAR DER FEHLER: ExamParticipant statt ExamParticipation)
+            $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
+
+            if (!$ep) {
+                return new JsonResponse(['success' => false, 'message' => 'Teilnehmer nicht gefunden'], 404);
+            }
+
+            // 3. Logik zum Löschen
+            $participant = $ep->getParticipant();
+            $currentExamYear = $ep->getExam()->getYear();
+
+            // Den Nachweis von DIESEM Jahr suchen
+            $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+                'participant' => $participant,
+                'examYear' => $currentExamYear
+            ]);
+            
+            if ($proofToDelete) {
+                $this->em->remove($proofToDelete);
+                $this->em->flush();
+            }
+
+            // 4. Prüfen, ob noch ein alter Nachweis da ist (Fallback für Anzeige)
+            $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
+            
+            // Summary neu berechnen (Punkte update)
+            $summary = $this->service->syncSummary($ep);
+            $this->em->refresh($ep); // Entity neu laden
+
+            // Daten für die GUI vorbereiten
+            $metVia = null;
+            $hasSwimming = false;
+            
+            if ($bestValidProof) {
+                $hasSwimming = true;
+                $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
+            }
+
+            return new JsonResponse([
+                'success' => true, 
+                'epId' => $epId,
+                'swimming_met_via' => $metVia,
+                'has_swimming' => $hasSwimming,
+                'total_points' => $summary['total'] ?? 0,
+                'final_medal' => $summary['medal'] ?? 'none'
+            ]);
+
+        } catch (\Exception $e) {
+            // Fängt den Absturz ab und sendet sauberes JSON mit dem Fehlertext
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Server Fehler: ' . $e->getMessage()
+            ], 500);
         }
-
-        // 2. Entity laden (Hier stand vorher ExamParticipation -> Falsch!)
-        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
-
-        if (!$ep) {
-            return new JsonResponse(['success' => false, 'message' => 'Teilnehmer nicht gefunden'], 404);
-        }
-
-        // 3. Lösch-Logik (Kopie deiner Logik aus addSwimmingProof)
-        $participant = $ep->getParticipant();
-        $currentExamYear = $ep->getExam()->getYear();
-
-        $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-            'participant' => $participant,
-            'examYear' => $currentExamYear
-        ]);
-        
-        if ($proofToDelete) {
-            $this->em->remove($proofToDelete);
-            $this->em->flush();
-        }
-
-        // 4. Prüfen, ob noch ein alter Nachweis da ist (Fallback)
-        $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
-        
-        $metVia = null;
-        if ($bestValidProof) {
-             $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
-        }
-
-        // Summary neu berechnen, da sich Punkte/Status geändert haben könnten
-        $summary = $this->service->syncSummary($ep);
-
-        return new JsonResponse([
-            'success' => true, 
-            'epId' => $epId,
-            'swimming_met_via' => $metVia, // Rückgabe für JS Update
-            'has_swimming' => ($bestValidProof !== null)
-        ]);
     }
 }
