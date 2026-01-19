@@ -109,7 +109,7 @@ final class SwimmingProofController extends AbstractPageController
         ]);
     }
 
-    #[Route('/exam/swimming/remove-proof', name: 'sportabzeichen_results_exam_swimming_remove_proof', methods: ['POST'])]
+    #[Route('/exam/swimming/remove-proof', name: 'exam_swimming_remove_proof', methods: ['POST'])]
     public function removeSwimmingProof(Request $request): JsonResponse
     {
         // 1. Daten holen
