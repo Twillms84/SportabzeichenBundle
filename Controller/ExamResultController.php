@@ -236,46 +236,6 @@ public function saveExamDiscipline(Request $request): JsonResponse
     
     return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
 }
-
-    #[Route('/exam/swimming/add-proof', name: 'exam_swimming_add_proof', methods: ['POST'])]
-    public function addSwimmingProof(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        
-        // Wichtig: Teilnehmer mit Join laden (User-Proxy-Schutz!)
-        $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'u')
-            ->from(ExamParticipant::class, 'ep')
-            ->join('ep.participant', 'p')
-            ->join('p.user', 'u')
-            ->where('ep.id = :id')
-            ->setParameter('id', (int)($data['ep_id'] ?? 0))
-            ->getQuery()
-            ->getOneOrNullResult();
-
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-
-        if (!$ep || !$discipline) {
-            return new JsonResponse(['error' => 'Daten unvollständig'], 400);
-        }
-
-        // Hier wird der Service aufgerufen
-        $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
-        
-        // In der DB speichern
-        $this->em->flush();
-
-        // Alles neu berechnen (Medaille wird jetzt durch has_swimming = true gültig)
-        $summary = $this->service->syncSummary($ep);
-
-        return new JsonResponse([
-            'status' => 'ok',
-            'has_swimming' => true,
-            'swimming_met_via' => $discipline->getName(),
-            'total_points' => $summary['total'],
-            'final_medal' => $summary['medal']
-        ]);
-    }
     /**
      * Speichert die reine Leistung (Update eines Textfeldes)
      */
