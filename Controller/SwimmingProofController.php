@@ -83,8 +83,11 @@ final class SwimmingProofController extends AbstractPageController
             $data = !empty($content) ? json_decode($content, true) : [];
             
             // Fallback, falls jQuery $.post genutzt wird statt fetch body
-            $epId = $data['epId'] ?? $request->request->get('epId') ?? null;
-
+            $epId = $jsonData['epId'] 
+                ?? $jsonData['ep_id'] 
+                ?? $postData['epId'] 
+                ?? $postData['ep_id'] 
+                ?? null;
             if (!$epId) {
                 return new JsonResponse(['success' => false, 'message' => 'ID fehlt'], 400);
             }
