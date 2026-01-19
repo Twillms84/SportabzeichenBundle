@@ -7,7 +7,7 @@ namespace PulsR\SportabzeichenBundle\Controller;
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use PulsR\SportabzeichenBundle\Entity\Discipline;
-use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
+use PulsR\SportabzeichenBundle\Entity\ExamParticipant; // Achte auf den korrekten Namen!
 use PulsR\SportabzeichenBundle\Entity\SwimmingProof; 
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -15,7 +15,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-#[Route('/sportabzeichen/swimming', name: 'sportabzeichen_swimming_')]
+// 1. ROUTE PREFIX ANGEPASST: Damit es zum Twig passt ("sportabzeichen_results_...")
+#[Route('/sportabzeichen/swimming', name: 'sportabzeichen_results_')]
 #[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
 final class SwimmingProofController extends AbstractPageController
 {
@@ -25,6 +26,7 @@ final class SwimmingProofController extends AbstractPageController
     ) {
     }
 
+    // Route wird: sportabzeichen_results_exam_swimming_add_proof
     #[Route('/exam/swimming/add-proof', name: 'exam_swimming_add_proof', methods: ['POST'])]
     public function addSwimmingProof(Request $request): JsonResponse
     {
@@ -33,113 +35,95 @@ final class SwimmingProofController extends AbstractPageController
         $epId = $data['ep_id'] ?? null;
         $disciplineId = $data['discipline_id'] ?? null; 
 
-        // 1. ExamParticipant laden
+        // ExamParticipant laden
         $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
 
         if (!$ep) {
             return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
         }
 
-        // Stammdaten-Teilnehmer laden (an dem hängen die Schwimmnachweise!)
         $participant = $ep->getParticipant(); 
-        $currentExamYear = $ep->getExam()->getYear(); // Wir brauchen das Jahr
+        $currentExamYear = $ep->getExam()->getYear(); 
 
-        // --- ENTSCHEIDUNG: LÖSCHEN ODER SPEICHERN? ---
-        
-        if (empty($disciplineId) || $disciplineId === '-') {
-            // === LÖSCHEN ===
-            
-            // Strategie: Wir löschen nur den Nachweis, der im aktuellen Prüfungsjahr erstellt wurde.
-            // Ein Nachweis von vor 2 Jahren darf hier nicht gelöscht werden, nur weil man im Dropdown "-" wählt.
-            
-            $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
-                'participant' => $participant,
-                'examYear' => $currentExamYear // Nur den von diesem Jahr löschen!
-            ]);
-            
-            if ($proofToDelete) {
-                $this->em->remove($proofToDelete);
-                $this->em->flush();
-            }
-            
-            // Jetzt kommt Issue 3: Checken, ob noch ein ALTER Nachweis da ist (Fallback)
-            // Wir nutzen den Service, um den "besten noch gültigen" Nachweis zu finden.
-            // (Ich gehe davon aus, dass dein Service so eine Methode hat oder wir sie simulieren müssen)
-            $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
-            
-            if ($bestValidProof) {
-                // Es gibt noch einen alten gültigen!
-                $hasSwimming = true;
-                $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
-                // Optional: ValidUntil formatieren
-            } else {
-                // Wirklich nichts mehr da
-                $hasSwimming = false;
-                $metVia = null;
-            }
-
-        } else {
-            // === SPEICHERN ===
-            
+        // Logik: Speichern (Löschen wird hier nicht mehr benötigt, da eigene Route)
+        if (!empty($disciplineId) && $disciplineId !== '-') {
             $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
 
             if (!$discipline) {
                 return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
             }
 
-            // Service erstellt neuen Eintrag für dieses Jahr
-            // (Der Service sollte intern prüfen, ob für dieses Jahr schon einer existiert und ihn ggf. updaten)
+            // Service erstellt neuen Eintrag
             $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
-            $this->em->flush();
-
-            $hasSwimming = true;
-            $metVia = $discipline->getName();
+            $this->em->flush(); // Speichern erzwingen
         }
 
-        // --- UPDATE DER PUNKTE ---
-        // Das SyncSummary berechnet neu, ob "Schwimmen" erfüllt ist für das Abzeichen
+        // Summary neu berechnen
         $summary = $this->service->syncSummary($ep);
+        
+        // Neu laden für aktuelle Daten
+        $this->em->refresh($ep);
 
         return new JsonResponse([
             'status' => 'ok',
-            'has_swimming' => $hasSwimming,
-            'swimming_met_via' => $metVia,
+            'has_swimming' => $ep->hasSwimmingRequirementMet(), // Nutze Helper Methode aus Entity wenn vorhanden
+            'swimming_met_via' => $ep->getSwimmingRequirementMetVia(),
             'total_points' => $summary['total'],
             'final_medal' => $summary['medal']
         ]);
     }
 
+    // Route wird: sportabzeichen_results_exam_swimming_remove_proof
     #[Route('/exam/swimming/remove-proof', name: 'exam_swimming_remove_proof', methods: ['POST'])]
     public function removeSwimmingProof(Request $request): JsonResponse
     {
         // 1. Daten holen
         $data = json_decode($request->getContent(), true);
-        $epId = $data['epId'] ?? null;
+        // ACHTUNG: Im JS schickst du oft 'epId', im Add oben 'ep_id'. 
+        // Ich prüfe beides sicherheitshalber.
+        $epId = $data['epId'] ?? $data['ep_id'] ?? null;
 
         if (!$epId) {
             return new JsonResponse(['success' => false, 'message' => 'ID fehlt'], 400);
         }
 
-        // 2. Entity laden
-        $em = $this->getDoctrine()->getManager();
-        $participation = $em->getRepository(ExamParticipation::class)->find($epId);
+        // 2. Entity laden (Hier stand vorher ExamParticipation -> Falsch!)
+        $ep = $this->em->getRepository(ExamParticipant::class)->find($epId);
 
-        if (!$participation) {
+        if (!$ep) {
             return new JsonResponse(['success' => false, 'message' => 'Teilnehmer nicht gefunden'], 404);
         }
 
-        // 3. Schwimm-Daten löschen (auf null setzen)
-        $participation->setSwimmingDiscipline(null);
-        // Falls du weitere Felder hast, die zurückgesetzt werden müssen (z.B. manuelles Datum):
-        // $participation->setSwimmingDate(null); 
+        // 3. Lösch-Logik (Kopie deiner Logik aus addSwimmingProof)
+        $participant = $ep->getParticipant();
+        $currentExamYear = $ep->getExam()->getYear();
 
-        $em->persist($participation);
-        $em->flush();
+        $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+            'participant' => $participant,
+            'examYear' => $currentExamYear
+        ]);
+        
+        if ($proofToDelete) {
+            $this->em->remove($proofToDelete);
+            $this->em->flush();
+        }
 
-        // 4. WICHTIG: JSON zurückgeben, kein HTML!
+        // 4. Prüfen, ob noch ein alter Nachweis da ist (Fallback)
+        $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
+        
+        $metVia = null;
+        if ($bestValidProof) {
+             $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
+        }
+
+        // Summary neu berechnen, da sich Punkte/Status geändert haben könnten
+        $summary = $this->service->syncSummary($ep);
+
         return new JsonResponse([
             'success' => true, 
-            'epId' => $epId
+            'epId' => $epId,
+            'swimming_met_via' => $metVia, // Rückgabe für JS Update
+            'has_swimming' => ($bestValidProof !== null)
         ]);
     }
 }
