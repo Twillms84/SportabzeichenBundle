@@ -20,31 +20,27 @@ class SportabzeichenService
     /**
      * Zentrale Berechnung der Punkte basierend auf Disziplin und Leistung
      */
-    public function calculateResult(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
-        {
-            // 1. Einheit prüfen
-            // (Stelle sicher, dass der Getter in deiner Entity so heißt, z.B. getUnit() oder getEinheit())
-            $unit = $discipline->getUnit(); 
+   public function calculateResult(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
+    {
+        $unit = $discipline->getUnit(); // Gibt "NONE" zurück
 
-            // 2. Verbands-Logik präzisieren
-            // Wir geben nur pauschal Gold, wenn Verband existiert UND KEINE Maßeinheit da ist.
-            // Turnen hat UNIT_PIECES, fällt hier also durch (FALSE).
-            // DLRG hat UNIT_NONE, wird hier abgefangen (TRUE).
-            $istPauschalVerband = !empty($discipline->getVerband()) && $unit === 'NONE';
+        // FIX: Prüfung auf "NONE" erweitern
+        $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
-            $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
+        // Nur wenn Verband existiert UND Einheit NONE ist -> Pauschal Gold
+        $istPauschalVerband = !empty($discipline->getVerband()) && $isUnitNone;
 
-            // 3. Automatisches Gold nur für pauschale Verbände (DLRG)
-            if ($istPauschalVerband) {
-                return ['points' => 3, 'stufe' => 'gold', 'req' => $req];
-            }
+        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
 
-            // 4. Berechnung für Turnen, Laufen, Schwimmen etc.
-            // Wenn Turnen ausgewählt wurde, aber noch keine Leistung eingetragen ist ($leistung ist null oder 0),
-            // landen wir hier und geben 0 Punkte (none) zurück. Das ist das gewünschte Verhalten (Feld weiß).
-            if ($leistung === null || $leistung <= 0 || !$req) {
-                return ['points' => 0, 'stufe' => 'none', 'req' => $req];
-            }
+        // 1. Automatisch Gold
+        if ($istPauschalVerband) {
+            return ['points' => 3, 'stufe' => 'gold', 'req' => $req];
+        }
+
+        // 2. Leeres Feld / Turnen ohne Eingabe -> 0 Punkte (Weiß)
+        if ($leistung === null || $leistung <= 0 || !$req) {
+            return ['points' => 0, 'stufe' => 'none', 'req' => $req];
+        }
 
             // --- Ab hier normale Berechnung (Turnen, wenn Zahl eingegeben wurde) ---
 

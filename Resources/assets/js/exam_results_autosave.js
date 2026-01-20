@@ -177,22 +177,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const selectedOption = selectEl.options[selectEl.selectedIndex];
         
-        // Daten auslesen
-        const unit = selectedOption.getAttribute('data-unit');       // z.B. 'UNIT_NONE' oder 'UNIT_PIECES'
-        const verbandName = selectedOption.getAttribute('data-verband'); // z.B. 'DLRG' oder '4.2.6.1'
+        const unit = selectedOption.getAttribute('data-unit'); // Hier steht "NONE" drin
+        const verbandName = selectedOption.getAttribute('data-verband');
 
-        // LOGIK: Sperren NUR bei UNIT_NONE
-        if (unit === 'NONE') {
-            // Feld sperren
-            inputEl.value = verbandName || 'Nachweis'; // Fallback Text, falls kein Verbandsname da ist
+        // FIX: Wir prüfen jetzt explizit auf 'NONE' (und zur Sicherheit auch auf 'UNIT_NONE' oder leer)
+        const isUnitNone = (unit === 'NONE' || unit === 'UNIT_NONE' || !unit);
+
+        if (isUnitNone) {
+            // DLRG (NONE) -> Sperren & Verbandsname anzeigen
+            inputEl.value = verbandName || 'Nachweis';
             inputEl.disabled = true;
             inputEl.classList.add('bg-light');
         } else {
-            // Alle anderen Einheiten (Minuten, Meter, Stück/Pieces) -> Eingabe erlauben
+            // Turnen (UNIT_PIECES) -> Freigeben
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
             
-            // Falls da noch der automatische Text drin steht -> leeren
+            // Text leeren, falls vorher ein Verbandsname drin stand
             if (inputEl.value === verbandName || inputEl.value === 'Nachweis') {
                 inputEl.value = '';
             }
