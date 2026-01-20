@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // NEU: Zentrale Funktion für Verbands-Logik
     // Setzt den Namen (z.B. "DLRG") und sperrt das Feld, oder gibt es frei.
     // NEU: Präzisere Prüfung
+    // NEU: Nur sperren, wenn Einheit = UNIT_NONE
     function checkVerbandInput(selectEl) {
         const cell = selectEl.closest('td');
         const inputEl = cell.querySelector('input[type="text"]');
@@ -176,32 +177,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const selectedOption = selectEl.options[selectEl.selectedIndex];
         
-        const verbandName = selectedOption.getAttribute('data-verband');
-        const unit        = selectedOption.getAttribute('data-unit'); // Z.B. 'UNIT_PIECES'
+        // Daten auslesen
+        const unit = selectedOption.getAttribute('data-unit');       // z.B. 'UNIT_NONE' oder 'UNIT_PIECES'
+        const verbandName = selectedOption.getAttribute('data-verband'); // z.B. 'DLRG' oder '4.2.6.1'
 
-        // WICHTIG: 
-        // Wir sperren nur, wenn es einen Verbandseintrag gibt (z.B. "DLRG" oder "4.2.6.1"),
-        // ABER es darf KEINE Zähl-Einheit (Turnen/Seilspringen) sein.
-        // Turnen hat meist UNIT_PIECES oder UNIT_NUMBER.
-        
-        const isCountable = (unit === 'UNIT_PIECES' || unit === 'UNIT_NUMBER');
-
-        if (verbandName && !isCountable) {
-            // Fall: Echtes Verbandsabzeichen (DLRG, etc.)
-            // -> Feld sperren, Name eintragen
-            inputEl.value = verbandName;
+        // LOGIK: Sperren NUR bei UNIT_NONE
+        if (unit === 'UNIT_NONE') {
+            // Feld sperren
+            inputEl.value = verbandName || 'Nachweis'; // Fallback Text, falls kein Verbandsname da ist
             inputEl.disabled = true;
             inputEl.classList.add('bg-light');
-            inputEl.placeholder = '';
         } else {
-            // Fall: Turnen (hat Verbandsnummer, aber UNIT_PIECES) oder normale Disziplin
-            // -> Feld freigeben für Eingabe
+            // Alle anderen Einheiten (Minuten, Meter, Stück/Pieces) -> Eingabe erlauben
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
             
-            // Falls vorher "DLRG" drin stand, machen wir es leer.
-            // Aber wenn da "12" steht (Turnen), lassen wir es stehen.
-            if (inputEl.value === verbandName) {
+            // Falls da noch der automatische Text drin steht -> leeren
+            if (inputEl.value === verbandName || inputEl.value === 'Nachweis') {
                 inputEl.value = '';
             }
         }
