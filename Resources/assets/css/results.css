@@ -234,3 +234,38 @@ a.sort-header:hover {
     color: #dee2e6 !important;
     border: 1px solid #495057 !important;
 }
+[data-bs-theme="dark"] .bg-gold { color: #000 !important; }
+[data-bs-theme="dark"] .bg-silver { color: #000 !important; }
+[data-bs-theme="dark"] .bg-bronze { color: #fff !important; }
+
+/* =========================================
+   8. SPALTEN-VISIBILITÄT (Responsive)
+   ========================================= */
+/* Klasse, die per JS gesetzt wird, um Spalten zu verstecken */
+.col-hidden {
+    display: none !important;
+}
+
+
+/* =========================================
+   9. RESULT BADGES (Punkte & Medaillen)
+   ========================================= */
+.result-badge-box {
+    line-height: 1.1;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Spezifische Medaillen-Farben (Hintergrund) */
+.bg-gold {
+    background-color: #ffd700 !important;
+    border-color: #e6c200 !important;
+}
+.bg-silver {
+    background-color: #e0e0e0 !important;
+    border-color: #cfcfcf !important;
+}
+.bg-bronze {
+    background-color: #cd7f32 !important; /* Bronze */
+    border-color: #b06a28 !important;
+}

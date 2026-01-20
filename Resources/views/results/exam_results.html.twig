@@ -155,17 +155,36 @@
                             
                             <div class="d-flex flex-column gap-1">
                                 {# Punkte & Medaille #}
-                                <div class="d-flex gap-1 align-items-center">
-                                    <span class="badge bg-light text-dark border badge-mini" id="total-points-{{ p.ep_id }}">
-                                        <span class="pts-val fw-bold">{{ p.total_points|default(0) }}</span> Pkt.
-                                    </span>
-                                    
-                                    <span class="badge badge-mini js-medal-badge" 
+                                <div class="d-flex gap-2 align-items-center mt-1 mb-2">
+        
+                                    {# Punkte Badge #}
+                                    <div class="result-badge-box border rounded px-2 py-1 text-center bg-light" title="Gesamtpunkte">
+                                        <div class="small text-uppercase text-muted" style="font-size: 0.65rem;">Punkte</div>
+                                        <div class="fw-bold fs-6" id="total-points-{{ p.ep_id }}">{{ p.total_points|default(0) }}</div>
+                                    </div>
+
+                                    {# Medaille Badge #}
+                                    {% set medalValue = p.final_medal|default('none')|lower %}
+                                    {% set medalLabel = '-' %}
+                                    {% set medalClass = 'bg-light text-muted border' %}
+
+                                    {% if medalValue == 'gold' %}
+                                        {% set medalLabel = 'Gold' %}
+                                        {% set medalClass = 'bg-gold text-dark border-gold' %}
+                                    {% elseif medalValue == 'silver' or medalValue == 'silber' %}
+                                        {% set medalLabel = 'Silber' %}
+                                        {% set medalClass = 'bg-silver text-dark border-silver' %}
+                                    {% elseif medalValue == 'bronze' %}
+                                        {% set medalLabel = 'Bronze' %}
+                                        {% set medalClass = 'bg-bronze text-white border-bronze' %}
+                                    {% endif %}
+
+                                    <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
                                         id="final-medal-{{ p.ep_id }}"
-                                        data-medal="{{ p.final_medal|default('') }}"
-                                        style="display: {{ p.final_medal ? 'inline-block' : 'none' }}">
-                                        {{ p.final_medal }}
-                                    </span>
+                                        style="min-width: 70px;">
+                                        <div class="small text-uppercase opacity-75" style="font-size: 0.65rem;">Medaille</div>
+                                        <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
+                                    </div>
                                 </div>
 
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
