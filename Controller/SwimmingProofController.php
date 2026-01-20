@@ -29,7 +29,6 @@ final class SwimmingProofController extends AbstractPageController
     public function addSwimmingProof(Request $request): JsonResponse
     {
         try {
-            // 1. Payload parsen
             $content = $request->getContent();
             $data = !empty($content) ? json_decode($content, true) : [];
             
@@ -40,26 +39,36 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('Teilnehmer-ID fehlt.');
             }
 
+            // --- FIX: Eager Loading statt find() ---
+            // Wir laden ep, participant (p) UND user (u) gleichzeitig.
+            // Das verhindert den "Missing value for primary key username" Fehler.
             /** @var ExamParticipant|null $ep */
-            $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
+            $ep = $this->em->createQueryBuilder()
+                ->select('ep', 'p', 'u')
+                ->from(ExamParticipant::class, 'ep')
+                ->join('ep.participant', 'p')
+                ->join('p.user', 'u')
+                ->where('ep.id = :id')
+                ->setParameter('id', (int)$epId)
+                ->getQuery()
+                ->getOneOrNullResult();
+            // ---------------------------------------
+
             if (!$ep) {
                 throw new \Exception('Teilnehmer nicht gefunden.');
             }
 
-            // 2. Disziplin laden
+            // Disziplin laden
             if (!empty($disciplineId) && $disciplineId !== '-') {
-                /** @var Discipline|null $discipline */
                 $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
-                
                 if (!$discipline) {
                     throw new \Exception('Disziplin nicht gefunden.');
                 }
 
-                // 3. SERVICE AUFRUF (Hier nutzen wir deine Logik)
-                // Diese Methode erstellt/updated den Proof, setzt ValidUntil etc.
+                // Service-Aufruf (jetzt sicher, da User geladen ist)
                 $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
                 
-                // Falls du zusätzlich am EP die Schwimmdisziplin speichern willst (fürs Dropdown):
+                // Optional: Speichern, welche Disziplin gewählt wurde (falls Feld existiert)
                 if (method_exists($ep, 'setSwimmingDiscipline')) {
                     $ep->setSwimmingDiscipline($discipline);
                     $this->em->persist($ep);
@@ -67,13 +76,12 @@ final class SwimmingProofController extends AbstractPageController
                 }
             }
 
-            // 4. Punkte & Medaillen synchronisieren
+            // Zusammenfassung aktualisieren
             $summary = $this->service->syncSummary($ep);
             
-            // WICHTIG: Entity neu laden, um sicherzustellen, dass Beziehungen aktuell sind
+            // Entity refreshen, um sicherzugehen
             $this->em->refresh($ep);
 
-            // 5. Antwort vorbereiten
             return new JsonResponse([
                 'status' => 'ok',
                 'success' => true,
@@ -84,7 +92,6 @@ final class SwimmingProofController extends AbstractPageController
             ]);
 
         } catch (\Throwable $e) {
-            // Fängt ALLES ab und verhindert die HTML-Fehlerseite
             return new JsonResponse([
                 'status' => 'error',
                 'success' => false,
@@ -107,13 +114,21 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('ID fehlt.');
             }
 
-            /** @var ExamParticipant|null $ep */
-            $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
+            // Auch beim Löschen sicherheitshalber Eager Loading nutzen
+            $ep = $this->em->createQueryBuilder()
+                ->select('ep', 'p', 'u')
+                ->from(ExamParticipant::class, 'ep')
+                ->join('ep.participant', 'p')
+                ->join('p.user', 'u')
+                ->where('ep.id = :id')
+                ->setParameter('id', (int)$epId)
+                ->getQuery()
+                ->getOneOrNullResult();
+
             if (!$ep) {
                 throw new \Exception('Teilnehmer nicht gefunden.');
             }
 
-            // 1. Nachweis löschen
             $participant = $ep->getParticipant();
             $examYear = $ep->getExam()->getYear();
 
@@ -126,19 +141,11 @@ final class SwimmingProofController extends AbstractPageController
                 $this->em->remove($proofToDelete);
             }
 
-            // 2. Auch die Verknüpfung am ExamParticipant lösen (falls vorhanden)
             if (method_exists($ep, 'setSwimmingDiscipline')) {
                 $ep->setSwimmingDiscipline(null);
             }
-            // Falls es Legacy Support Methode gibt
-            if (method_exists($participant, 'setSwimmingProof')) {
-                 // Manche Implementierungen nutzen setSwimmingProof(false) oder null
-                 // Wir lassen es hier sicherheitshalber weg oder setzen es auf false, wenn du sicher bist.
-            }
 
             $this->em->flush();
-
-            // 3. Neu berechnen
             $summary = $this->service->syncSummary($ep);
 
             return new JsonResponse([
