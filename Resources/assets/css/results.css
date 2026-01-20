@@ -1,23 +1,44 @@
 /* =========================================
-   1. TABELLEN-GRUNDGERÜST
+   1. TABELLEN-GRUNDGERÜST & HEADER
    ========================================= */
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: 1.1rem !important; /* Schriftgröße Tabelle allgemein */
-    border-collapse: collapse;
+    font-size: 1.1rem !important;
+    border-collapse: separate; /* Wichtig für Sticky Header */
+    border-spacing: 0;
 }
 
-/* Spaltenbreiten fixieren */
-.col-name {
-    width: 250px;           /* Fixe Breite */
-    max-width: 250px;       /* Darf nicht breiter werden */
-    white-space: nowrap;    /* Kein Umbruch */
-    overflow: hidden;       /* Zu langen Text abschneiden */
-    text-overflow: ellipsis;/* "..." am Ende anzeigen */
+/* Sticky Header Definition (Ersetzt style="z-index: 10") */
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 1020; /* Hoch genug für Bootstrap Navbars */
+    background-color: #f8f9fa; /* table-light Farbe */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Leichter Schatten für Abtrennung */
 }
+
+/* Spaltenbreiten & Verhalten */
+.col-name {
+    width: 250px;           /* Fixe Breite Desktop */
+    min-width: 250px;       /* Darf nicht kleiner werden */
+    max-width: 250px;       /* Darf nicht breiter werden */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;    /* Bessere Ausrichtung bei mehrzeiligem Inhalt */
+}
+
 .col-class { width: 60px !important; }
-.col-discipline { width: 145px !important; }
+.col-discipline { 
+    width: 145px !important;
+    transition: opacity 0.2s ease; /* Soft-Fade beim Ausblenden */
+}
+
+/* SPALTEN AUSBLENDEN (Ersetzt <style> Block) */
+.col-hidden {
+    display: none !important;
+}
 
 
 /* =========================================
@@ -33,7 +54,7 @@ select.medal-bronze, input.medal-bronze {
     background-color: #cd7f32 !important; color: #fff !important; border: 2px solid #8b4513 !important; font-weight: bold !important; 
 }
 
-/* Standard-Status (Keine Medaille) */
+/* Standard-Status */
 select.medal-none, input.medal-none { 
     background-color: #ffffff !important; color: #212529 !important; border: 1px solid #dee2e6 !important;
 }
@@ -41,7 +62,7 @@ input.medal-none { background-image: none !important; }
 
 
 /* =========================================
-   3. FORMULARELEMENTE ALLGEMEIN
+   3. FORMULARELEMENTE 
    ========================================= */
 .discipline-selector, .form-control-custom {
     font-size: 1.1rem !important; 
@@ -51,15 +72,16 @@ input.medal-none { background-image: none !important; }
     text-align: center !important;
 }
 
-/* Einheit hinter dem Input */
+/* Einheit hinter dem Input (Ersetzt style="font-size: 0.7rem") */
 .input-group-text-unit {
     padding: 2px 4px !important;
-    font-size: 0.9rem !important;
+    font-size: 0.75rem !important; /* Optimierte Größe */
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     color: #6c757d;
     min-width: 35px;
     justify-content: center;
+    line-height: 1.5;
 }
 
 
@@ -67,100 +89,112 @@ input.medal-none { background-image: none !important; }
    4. TEILNEHMER-SPALTE (NAME & ALTER)
    ========================================= */
 .name-container {
-    display: flex;          /* Flexbox für Nebeneinander */
-    align-items: baseline;  /* Textausrichtung unten bündig */
-    flex-wrap: nowrap;      /* Kein Umbruch */
-    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    margin-bottom: 0.25rem;
     line-height: 1.2;
+    overflow: hidden; /* Sicherstellen, dass nichts rausragt */
 }
 
 .name-main {
-    font-size: 1.15rem;     /* Name größer */
+    font-size: 1.15rem;
     font-weight: bold;
     color: #000;
     margin-right: 6px;
 }
 
 .name-age {
-    font-size: 1.0rem;      /* Alter gut lesbar */
+    font-size: 1.0rem;
     font-weight: normal;
     color: #555;
     white-space: nowrap;
 }
 
-.badge-mini { 
-    font-size: 0.75rem !important; 
-    vertical-align: middle; 
+/* Mobile Break Helper (Ersetzt <style> Block) */
+.mobile-break {
+    display: none; /* Desktop: aus */
+}
+
+@media (max-width: 768px) {
+    .mobile-break {
+        display: block;
+        font-size: 0.85em;
+        color: #6c757d;
+        line-height: 1.2;
+        font-weight: normal;
+        margin-top: 2px;
+    }
 }
 
 
 /* =========================================
-   5. SCHWIMM-BEREICH (Optimiertes Layout)
+   5. SCHWIMM-BEREICH & BADGES
    ========================================= */
 
-/* Der Haupt-Wrapper */
+/* Haupt-Wrapper */
 .swimming-wrapper {
     display: flex !important;
     align-items: center !important;
     width: 100%; 
-    gap: 4px; /* Abstand zwischen Dropdown und Mülleimer */
+    gap: 4px;
 }
 
-/* Die inneren Container (Badge & Dropdown) */
 .swim-badge-container,
 .swim-dropdown-container {
-    flex-grow: 1;    /* Nimm den verfügbaren Platz ein */
-    min-width: 0;    /* WICHTIG: Verhindert Layout-Sprengung bei langem Text */
-    display: flex;   
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
     align-items: center;
 }
 
-/* CRITICAL FIX: Damit d-none auch wirklich wirkt (gegen Flexbox) */
 .swim-badge-container.d-none,
 .swim-dropdown-container.d-none {
     display: none !important;
 }
 
-/* Das Select-Feld im Schwimmbereich */
+/* Alert Box im Schwimmbereich (Ersetzt style="min-height: 34px") */
+.swim-alert-box {
+    min-height: 34px;
+    width: 100%;
+    margin-bottom: 0.25rem;
+    border: 0;
+    padding: 0.25rem;
+}
+
+/* Text im Schwimmbereich (Ersetzt style="max-width: 130px") */
+.swim-info-text {
+    max-width: 130px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Dropdown */
 .swimming-select-compact {
-    width: 100% !important;      /* Fülle den Container aus */
-    max-width: none !important; 
+    width: 100% !important;
+    max-width: none !important;
     min-height: 28px !important;
     font-size: 0.85rem !important;
     padding: 2px 4px !important;
     border-radius: 4px;
-    
-    /* Standardfarben (Light Mode) */
     background-color: #ffffff !important; 
     border: 1px solid #dee2e6 !important;
     color: #212529 !important;
     cursor: pointer;
 }
 
-/* Das Badge (Text-Schild) */
-.swim-badge-container .badge {
-    width: 100%;                 
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;     /* "..." bei zu langem Text */
-    font-size: 0.8rem;
-    padding: 5px 2px;
-    margin-right: 0; /* Margin entfernen, da Wrapper gap nutzt */
-}
-
-/* Der Mülleimer Button (Reset) */
+/* Delete Button */
 .btn-delete-swimming {
-    flex-shrink: 0;              /* Darf NICHT zusammengedrückt werden */
-    width: 24px;                 /* Feste Klickfläche */
+    flex-shrink: 0;
+    width: 24px;
     height: 24px;
-    
     display: flex;
     align-items: center;
     justify-content: center;
-    
     background: transparent !important;
     border: none !important;
-    color: #dc3545 !important;   /* Rot */
+    color: #dc3545 !important;
     opacity: 0.6;
     transition: all 0.2s ease-in-out;
     cursor: pointer !important;
@@ -168,17 +202,35 @@ input.medal-none { background-image: none !important; }
     padding: 0 !important;
     line-height: 1 !important;
 }
-
 .btn-delete-swimming:hover {
     opacity: 1.0;
-    color: #a71d2a !important;   /* Dunkleres Rot */
-    transform: scale(1.15);      /* Leichter Zoom */
+    color: #a71d2a !important;
+    transform: scale(1.15);
 }
 
 
 /* =========================================
-   6. ANFORDERUNGEN & HELPER
+   6. RESULT BADGES & ANFORDERUNGEN
    ========================================= */
+.result-badge-box {
+    line-height: 1.1;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    min-width: 60px; /* Ersetzt Inline-Style */
+}
+
+/* Kleine Labels (Pkt, Rang) - Ersetzt style="font-size: 0.65rem" */
+.badge-label-small {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    opacity: 0.75;
+}
+
+.bg-gold { background-color: #ffd700 !important; border-color: #e6c200 !important; }
+.bg-silver { background-color: #e0e0e0 !important; border-color: #cfcfcf !important; }
+.bg-bronze { background-color: #cd7f32 !important; border-color: #b06a28 !important; }
+
+/* Anforderungen (B: S: G:) */
 .req-hint { 
     font-size: 0.9rem !important; 
     display: flex; 
@@ -189,13 +241,11 @@ input.medal-none { background-image: none !important; }
     color: #444;
     margin-top: 2px;
 }
-
-/* Farben für Bronze/Silber/Gold Text */
 .req-val-b { color: #cd7f32; } 
 .req-val-s { color: #666; } 
 .req-val-g { color: #b8860b; } 
 
-/* Sortier-Links im Header */
+/* Sortier Header */
 a.sort-header {
     text-decoration: none;
     color: inherit;
@@ -206,110 +256,78 @@ a.sort-header:hover {
     background-color: rgba(0,0,0,0.05);
 }
 
+.view-selector-wrapper {
+    min-width: 250px;
+    max-width: 400px;
+    width: 100%; 
+}
+
 
 /* =========================================
-   7. DARK MODE SUPPORT
+   7. DARK MODE & RESPONSIVE
    ========================================= */
 @media (prefers-color-scheme: dark) {
-    /* Inputs Standard */
     select.medal-none, input.medal-none { 
         background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
     }
-    
-    /* Texte */
     .name-main { color: #dee2e6 !important; }
     .name-age { color: #adb5bd !important; }
     .req-hint { color: #adb5bd !important; }
-    
-    /* Schwimm-Select */
     .swimming-select-compact {
         background-color: #212529 !important;
         color: #dee2e6 !important;
         border: 1px solid #495057 !important;
     }
+    .sticky-header {
+        background-color: #212529; /* Dunkler Header */
+        color: #fff;
+    }
 }
 
-/* Support für Bootstrap Theme-Attribut [data-bs-theme="dark"] */
+/* Bootstrap Theme Attribut */
 [data-bs-theme="dark"] select.medal-none, 
 [data-bs-theme="dark"] input.medal-none {
     background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
 }
-
 [data-bs-theme="dark"] .swimming-select-compact {
-    background-color: #212529 !important;
-    color: #dee2e6 !important;
-    border: 1px solid #495057 !important;
+    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+}
+[data-bs-theme="dark"] .sticky-header {
+    background-color: #212529;
+    color: #fff;
 }
 [data-bs-theme="dark"] .bg-gold { color: #000 !important; }
 [data-bs-theme="dark"] .bg-silver { color: #000 !important; }
 [data-bs-theme="dark"] .bg-bronze { color: #fff !important; }
 
-/* =========================================
-   8. SPALTEN-VISIBILITÄT (Responsive)
-   ========================================= */
-/* Klasse, die per JS gesetzt wird, um Spalten zu verstecken */
-.col-hidden {
-    display: none !important;
-}
-
-
-/* =========================================
-   9. RESULT BADGES (Punkte & Medaillen)
-   ========================================= */
-.result-badge-box {
-    line-height: 1.1;
-    transition: all 0.3s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-}
-
-/* Spezifische Medaillen-Farben (Hintergrund) */
-.bg-gold {
-    background-color: #ffd700 !important;
-    border-color: #e6c200 !important;
-}
-.bg-silver {
-    background-color: #e0e0e0 !important;
-    border-color: #cfcfcf !important;
-}
-.bg-bronze {
-    background-color: #cd7f32 !important; /* Bronze */
-    border-color: #b06a28 !important;
-}
-
-.view-selector-wrapper {
-    min-width: 250px;
-    max-width: 400px;
-    width: 100%; /* Wichtig damit es den Container füllt */
-}
-
-/* --- Mobile Anpassungen (Bildschirme kleiner als 768px) --- */
+/* Mobile Anpassungen */
 @media (max-width: 768px) {
     .view-selector-wrapper {
-        min-width: 100%; /* Volle Breite auf Handy */
+        min-width: 100%;
         max-width: none;
         margin-bottom: 5px;
     }
+    /* Die Schwimmspalte hat im Twig "col-swimming" nicht explizit als Klasse im TH/TD stehen?
+       Falls doch, hier die Breite: */
     .col-swimming {
-        min-width: 50px !important;  /* Ganz schmal */
+        min-width: 50px !important;
         max-width: 50px !important;
         text-align: center;
         padding: 0.25rem !important;
     }
-    
-    /* Auf Handy das Dropdown kleiner machen */
-    .col-swimming select {
-        font-size: 0.8rem;
-        padding: 0;
+    .col-name {
+        width: 140px;      /* Namen schmaler auf Handy */
+        min-width: 140px;
+        max-width: 140px;
     }
-    
-    /* Optional: Titel etwas kleiner auf Handy */
     h4 {
         font-size: 1.2rem;
         margin-bottom: 0;
     }
+    /* Sticky Header etwas anpassen, falls nötig */
+    .sticky-header {
+        z-index: 100;
+    }
 }
 
-/* Select2 Container Anpassung für Responsive Design */
-.select2-container {
-    width: 100% !important; /* Erzwingt, dass Select2 den Wrapper füllt */
-}
+.select2-container { width: 100% !important; }

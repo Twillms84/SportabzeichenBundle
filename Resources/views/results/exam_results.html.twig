@@ -7,14 +7,24 @@
     {{ parent() }}
     <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
     
-    {# WICHTIG: Das hier sorgt dafür, dass die Spalten wirklich ausgeblendet werden #}
+    {# WICHTIG: Inline-Styles für Funktionalität #}
     <style>
         .col-hidden {
             display: none !important;
         }
-        /* Optional: Leichter Fade-Effekt für Spalten */
         .col-discipline {
             transition: opacity 0.2s ease;
+        }
+        
+        /* Mobile Break Helper für den Namen */
+        @media (max-width: 768px) {
+            .mobile-break {
+                display: block;
+                font-size: 0.85em;
+                color: #6c757d;
+                line-height: 1.2;
+                font-weight: normal;
+            }
         }
     </style>
 {% endblock %}
@@ -36,12 +46,12 @@
     {# --- HEADER (Responsive) --- #}
     <div class="row g-2 align-items-center mb-3">
         
-        {# 1. TITEL (Nimmt auf Handy volle Breite ein, auf Desktop nur so viel wie nötig) #}
+        {# 1. TITEL #}
         <div class="col-12 col-md-auto">
             <h4 class="mb-0">🏅 {{ exam.name }} <small class="text-muted">({{ exam.year }})</small></h4>
         </div>
 
-        {# 2. FILTER (Nimmt auf Desktop den restlichen Platz, auf Handy neue Zeile) #}
+        {# 2. FILTER (Select2) #}
         <div class="col-12 col-md">
             <div class="view-selector-wrapper">
                 <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen...'|trans }}">
@@ -54,12 +64,8 @@
             </div>
         </div>
 
-        {# 3. BUTTONS (Auf Handy rechtsbündig oder volle Breite, je nach Geschmack) #}
+        {# 3. BUTTONS #}
         <div class="col-12 col-md-auto d-flex gap-2 justify-content-between justify-content-md-end">
-            
-            {# Button Text auf Handy verstecken (optional), um Platz zu sparen? 
-               Hier lasse ich den Text drin, aber mache die Buttons klein (btn-sm) #}
-            
             <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
                class="btn btn-default btn-sm flex-fill flex-md-grow-0" target="_blank">
                 {{ icon('print')|raw }} <span class="d-inline d-md-inline">{{ 'Drucken'|trans }}</span>
@@ -84,8 +90,8 @@
             <table class="table table-sm table-bordered table-results-compact align-middle table-hover">
                 <thead class="table-light text-center align-middle sticky-top" style="z-index: 10;">
                     <tr>
-                        {# SPALTE: TEILNEHMER (Sortierbar) #}
-                        <th class="col-name text-start" style="min-width: 200px;">
+                        {# SPALTE: TEILNEHMER (Sticky & Sortierbar) #}
+                        <th class="col-name text-start shadow-sm">
                             {% set currentSort = app.request.query.get('sort', 'lastname') %}
                             {% set currentOrder = app.request.query.get('order', 'asc') %}
                             
@@ -114,7 +120,6 @@
                         {# SPALTEN: DISZIPLINEN KÖPFE #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                {# WICHTIG: col-cat-{{ category }} für JS Toggle #}
                                 <th class="col-discipline col-cat-{{ category }}">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
@@ -125,15 +130,18 @@
                     {% set epResults = results[p.ep_id] ?? {} %}
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
-                        {# 1. TEILNEHMER INFOS #}
+                        {# 1. TEILNEHMER INFOS (Sticky Column) #}
                         <td class="col-name py-2">
-                            <div class="name-container">
-                                <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
-                                <span class="name-age text-muted">({{ p.age_year }})</span>
+                            {# NAME: Optimiert für Mobile #}
+                            <div class="name-container text-truncate">
+                                <span class="fw-bold">{{ p.nachname }}</span>
+                                <span class="d-none d-md-inline">, {{ p.vorname }}</span>
+                                <span class="mobile-break">{{ p.vorname }}</span>
                             </div>
                             
-                            <div class="small text-muted mb-2">
-                                Klasse: <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
+                            <div class="small text-muted mb-2 text-truncate">
+                                <span class="d-none d-md-inline">Klasse:</span> <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
+                                <span class="d-none d-md-inline"> | {{ p.age_year }} J.</span>
                             </div>
                             
                             <div class="d-flex flex-column gap-1">
@@ -142,7 +150,7 @@
         
                                     {# Punkte Badge #}
                                     <div class="result-badge-box border rounded px-2 py-1 text-center bg-light" title="Gesamtpunkte">
-                                        <div class="small text-uppercase text-muted" style="font-size: 0.65rem;">Punkte</div>
+                                        <div class="badge-label-small text-muted">Pkt</div>
                                         <div class="fw-bold fs-6" id="total-points-{{ p.ep_id }}">{{ p.total_points|default(0) }}</div>
                                     </div>
 
@@ -162,42 +170,56 @@
                                         {% set medalClass = 'bg-bronze text-white border-bronze' %}
                                     {% endif %}
 
-                                    <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
-                                         id="final-medal-{{ p.ep_id }}"
-                                         style="min-width: 70px;">
-                                        <div class="small text-uppercase opacity-75" style="font-size: 0.65rem;">Medaille</div>
+                                    <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" id="...">
+                                        <div class="badge-label-small text-uppercase opacity-75">Rang</div>
                                         <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
                                     </div>
                                 </div>
 
-                                {# Schwimmen Bereich #}
+                                {# SCHWIMMEN BEREICH #}
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
-                                    <div class="swim-badge-container {% if not p.has_swimming %}d-none{% endif %}">
-                                        <span class="badge badge-success js-swim-info">
-                                            {{ p.swimming_met_via ? p.swimming_met_via : 'Erledigt' }}
-                                        </span>
+                                    
+                                    {% set hasSwimming = p.has_swimming %}
+                                    {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}
+
+                                    {# A) Wenn Nachweis da ist (Badge/Tooltip) #}
+                                    <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}"
+                                         title="{{ swimInfo }}"
+                                         data-bs-toggle="tooltip">
+                                        
+                                        <div class="alert alert-success d-flex align-items-center justify-content-center p-1 m-0 mb-1 border-0" 
+                                             style="min-height: 34px;">
+                                            
+                                            {# Icon #}
+                                            <span class="fs-5 me-md-2">🏊</span>
+                                            
+                                            {# Text (Nur Desktop) #}
+                                            <span class="js-swim-info small lh-1 d-none d-md-block text-start text-truncate" style="max-width: 130px;">
+                                                {{ swimInfo }}
+                                            </span>
+                                            
+                                            {# Delete #}
+                                            <button type="button" 
+                                                    class="btn btn-link btn-sm text-danger p-0 ms-1 js-delete-swimming" 
+                                                    data-ep-id="{{ p.ep_id }}" 
+                                                    title="{{ 'Löschen'|trans }}">
+                                                {{ icon('trash')|raw }}
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    {# Dropdown für Schwimmen #}
-                                    <div class="swim-dropdown-container {% if p.has_swimming %}d-none{% endif %}">
+                                    {# B) Dropdown für Schwimmen #}
+                                    <div class="swim-dropdown-container {{ hasSwimming ? 'd-none' : '' }}">
                                         <select class="form-control form-control-sm swimming-select-compact" 
                                                 data-ep-id="{{ p.ep_id }}"
                                                 data-type="swimming_select" 
                                                 data-save="true">
-                                            <option value="">Schwimmen wählen...</option>
+                                            <option value="">Schwimmen...</option>
                                             {% for swimDisc in swimming_disciplines %}
                                                 <option value="{{ swimDisc.id }}">{{ swimDisc.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
-
-                                    {# Delete Button #}
-                                    <button type="button" 
-                                            class="btn-delete-swimming js-delete-swimming"
-                                            data-ep-id="{{ p.ep_id }}"
-                                            title="Zurücksetzen">
-                                        {{ icon('trash')|raw }}
-                                    </button>
                                 </div>
                             </div>
                         </td>
@@ -206,7 +228,6 @@
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                {# WICHTIG: col-cat-{{ category }} muss auch hier sein #}
                                 <td class="p-1 col-discipline col-cat-{{ category }}">
                                     
                                     {# --- LOGIK START: Optionen sammeln --- #}
@@ -288,7 +309,6 @@
                                                    data-type="leistung" 
                                                    data-kategorie="{{ category }}">
 
-                                            {# WICHTIG: Klassen 'js-unit-label' und 'input-group-text-unit' für JS hinzugefügt #}
                                             <span class="input-group-text px-1 text-muted js-unit-label input-group-text-unit" style="font-size: 0.7rem;">
                                                 {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
                                                 {{ currentUnit }}
