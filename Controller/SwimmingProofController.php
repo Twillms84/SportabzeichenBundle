@@ -29,69 +29,68 @@ final class SwimmingProofController extends AbstractPageController
     public function addSwimmingProof(Request $request): JsonResponse
     {
         try {
-            // 1. Daten holen
+            // 1. Payload parsen
             $content = $request->getContent();
             $data = !empty($content) ? json_decode($content, true) : [];
             
-            // IDs sicher auslesen
             $epId = $data['ep_id'] ?? $data['epId'] ?? null;
             $disciplineId = $data['discipline_id'] ?? $data['disciplineId'] ?? null;
 
             if (!$epId) {
-                throw new \Exception('Teilnehmer-ID (ep_id) fehlt.');
+                throw new \Exception('Teilnehmer-ID fehlt.');
             }
 
-            // 2. Entity laden
+            /** @var ExamParticipant|null $ep */
             $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
             if (!$ep) {
-                throw new \Exception('Teilnehmer nicht gefunden ID: ' . $epId);
+                throw new \Exception('Teilnehmer nicht gefunden.');
             }
 
-            // 3. Speichern
+            // 2. Disziplin laden
             if (!empty($disciplineId) && $disciplineId !== '-') {
+                /** @var Discipline|null $discipline */
                 $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
+                
                 if (!$discipline) {
-                    throw new \Exception('Disziplin nicht gefunden ID: ' . $disciplineId);
+                    throw new \Exception('Disziplin nicht gefunden.');
                 }
 
-                // Dieser Aufruf muss im Service existieren!
+                // 3. SERVICE AUFRUF (Hier nutzen wir deine Logik)
+                // Diese Methode erstellt/updated den Proof, setzt ValidUntil etc.
                 $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
-                $this->em->flush();
+                
+                // Falls du zusätzlich am EP die Schwimmdisziplin speichern willst (fürs Dropdown):
+                if (method_exists($ep, 'setSwimmingDiscipline')) {
+                    $ep->setSwimmingDiscipline($discipline);
+                    $this->em->persist($ep);
+                    $this->em->flush();
+                }
             }
 
-            // 4. Punkte berechnen
+            // 4. Punkte & Medaillen synchronisieren
             $summary = $this->service->syncSummary($ep);
+            
+            // WICHTIG: Entity neu laden, um sicherzustellen, dass Beziehungen aktuell sind
             $this->em->refresh($ep);
 
-            // 5. Status ermitteln (Manuell, ohne Helper-Methoden, um Abstürze zu vermeiden)
-            $hasSwimming = false;
-            $metVia = null;
-
-            // Prüfen: Wurde eine Schwimm-Disziplin direkt am EP gesetzt?
-            if ($ep->getSwimmingDiscipline()) {
-                $hasSwimming = true;
-                $metVia = $ep->getSwimmingDiscipline()->getName();
-            } 
-            // Alternativ: Prüfen ob via Service/Altbestand etwas gefunden wird (optional)
-            // $validProof = $this->service->getValidSwimmingProof($ep->getParticipant(), $ep->getExam()->getYear());
-            // if ($validProof) { ... }
-
+            // 5. Antwort vorbereiten
             return new JsonResponse([
                 'status' => 'ok',
                 'success' => true,
-                'has_swimming' => $hasSwimming,
-                'swimming_met_via' => $metVia,
+                'has_swimming' => $summary['has_swimming'] ?? false,
+                'swimming_met_via' => $summary['met_via'] ?? ($discipline ? $discipline->getName() : 'Manuell'),
                 'total_points' => $summary['total'] ?? 0,
                 'final_medal' => $summary['medal'] ?? 'none'
             ]);
 
         } catch (\Throwable $e) {
-            // \Throwable fängt ALLES, auch Syntax-Errors oder Type-Errors
+            // Fängt ALLES ab und verhindert die HTML-Fehlerseite
             return new JsonResponse([
                 'status' => 'error',
                 'success' => false,
-                'message' => 'Server Error: ' . $e->getMessage(),
-                'trace' => $e->getTraceAsString() // Hilft beim Debuggen
+                'message' => 'Fehler: ' . $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
@@ -108,48 +107,45 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('ID fehlt.');
             }
 
+            /** @var ExamParticipant|null $ep */
             $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
             if (!$ep) {
                 throw new \Exception('Teilnehmer nicht gefunden.');
             }
 
-            // Löschen
+            // 1. Nachweis löschen
             $participant = $ep->getParticipant();
-            $currentExamYear = $ep->getExam()->getYear();
+            $examYear = $ep->getExam()->getYear();
 
             $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
                 'participant' => $participant,
-                'examYear' => $currentExamYear
+                'examYear' => $examYear
             ]);
             
             if ($proofToDelete) {
                 $this->em->remove($proofToDelete);
-                $this->em->flush();
             }
-            
-            // Disziplin Verknüpfung am EP lösen
-            $ep->setSwimmingDiscipline(null);
-            $this->em->persist($ep);
+
+            // 2. Auch die Verknüpfung am ExamParticipant lösen (falls vorhanden)
+            if (method_exists($ep, 'setSwimmingDiscipline')) {
+                $ep->setSwimmingDiscipline(null);
+            }
+            // Falls es Legacy Support Methode gibt
+            if (method_exists($participant, 'setSwimmingProof')) {
+                 // Manche Implementierungen nutzen setSwimmingProof(false) oder null
+                 // Wir lassen es hier sicherheitshalber weg oder setzen es auf false, wenn du sicher bist.
+            }
+
             $this->em->flush();
 
-            // Status neu berechnen
+            // 3. Neu berechnen
             $summary = $this->service->syncSummary($ep);
-            
-            // Prüfen ob Altbestand da ist
-            $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
-            
-            $metVia = null;
-            $hasSwimming = false;
-            if ($bestValidProof) {
-                $hasSwimming = true;
-                $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
-            }
 
             return new JsonResponse([
                 'success' => true, 
                 'epId' => $epId,
-                'swimming_met_via' => $metVia,
-                'has_swimming' => $hasSwimming,
+                'swimming_met_via' => $summary['met_via'] ?? null,
+                'has_swimming' => $summary['has_swimming'] ?? false,
                 'total_points' => $summary['total'] ?? 0,
                 'final_medal' => $summary['medal'] ?? 'none'
             ]);
