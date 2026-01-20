@@ -175,42 +175,39 @@ final class ExamResultController extends AbstractPageController
     {
         $data = json_decode($request->getContent(), true);
         
-        // Eager Loading: Wir laden ep, participant (p), user (u) und exam (ex) in einem Rutsch
+        // ... (Eager Loading EP Code bleibt gleich) ...
+        // ... (Discipline Loading Code bleibt gleich) ...
+        
         $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'u', 'ex')
-            ->from(ExamParticipant::class, 'ep')
-            ->join('ep.participant', 'p')
-            ->join('p.user', 'u')
-            ->join('ep.exam', 'ex')
-            ->where('ep.id = :id')
-            ->setParameter('id', (int)($data['ep_id'] ?? 0))
-            ->getQuery()
-            ->getOneOrNullResult();
+             ->select('ep', 'p', 'u', 'ex')
+             ->from(ExamParticipant::class, 'ep')
+             ->join('ep.participant', 'p')
+             ->join('p.user', 'u')
+             ->join('ep.exam', 'ex')
+             ->where('ep.id = :id')
+             ->setParameter('id', (int)($data['ep_id'] ?? 0))
+             ->getQuery()
+             ->getOneOrNullResult();
 
-        if (!$ep) {
-            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-        }
+        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
 
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        if (!$discipline) {
-            return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
-        }
+        if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        // 1. Bereinigung der alten Disziplin in dieser Kategorie
+        // 1. Bereinigung
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
+                // Alten Schwimmnachweis ggf. entfernen, falls er an dieser Disziplin hing
                 $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
                 $this->em->remove($existingRes);
             }
         }
-        // Flush hier wichtig, um Platz für das neue Result zu machen (Unique Constraints)
         $this->em->flush(); 
 
-        // 2. Berechnung & Speicherung
+        // 2. Calculation
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
         
-        // getGenderString greift jetzt auf den fertig geladenen User zu
         $pData = $this->service->calculateResult(
             $discipline, 
             (int)$ep->getExam()->getYear(), 
@@ -223,17 +220,13 @@ final class ExamResultController extends AbstractPageController
         $newResult->setExamParticipant($ep);
         $newResult->setDiscipline($discipline);
 
-        // FIX: Unterscheidung zwischen DLRG (NONE) und Turnen (PIECES)
-        // Nur wenn die Unit wirklich 'NONE' ist, setzen wir pauschal 1.0.
-        // Turnen hat einen Verband, aber eine echte Unit -> Eingabe verwenden.
+        // FIX: Konsistente Prüfung wie im Service und JS
         $unit = $discipline->getUnit();
         $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
         
         if ($isUnitNone) {
-            // DLRG: Automatisch 1.0 (Gold)
-            $newResult->setLeistung(1.0);
+            $newResult->setLeistung(1.0); // Gold erzwingen
         } else {
-            // Turnen / Laufen: Echte Eingabe (oder 0.0 wenn leer)
             $newResult->setLeistung($leistung ?? 0.0);
         }
 
@@ -241,11 +234,16 @@ final class ExamResultController extends AbstractPageController
         $newResult->setStufe($pData['stufe']);
         $this->em->persist($newResult);
 
-        // 3. Schwimm-Proof Update (Automatischer Haken durch Disziplin)
-        $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? false);
+        // 3. Schwimm-Proof Update
+        // WICHTIG: Service prüft jetzt $discipline->isSwimming()
+        $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? null);
 
         $this->em->flush();
         
+        // Refresh nötig, damit syncSummary den neuen Schwimmnachweis findet?
+        // Meistens nicht, aber falls doch:
+        // $this->em->refresh($ep->getParticipant());
+
         return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
     }
 
