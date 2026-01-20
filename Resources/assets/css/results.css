@@ -289,6 +289,18 @@ a.sort-header:hover {
         max-width: none;
         margin-bottom: 5px;
     }
+    .col-swimming {
+        min-width: 50px !important;  /* Ganz schmal */
+        max-width: 50px !important;
+        text-align: center;
+        padding: 0.25rem !important;
+    }
+    
+    /* Auf Handy das Dropdown kleiner machen */
+    .col-swimming select {
+        font-size: 0.8rem;
+        padding: 0;
+    }
     
     /* Optional: Titel etwas kleiner auf Handy */
     h4 {
