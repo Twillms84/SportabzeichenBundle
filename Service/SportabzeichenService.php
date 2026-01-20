@@ -21,36 +21,54 @@ class SportabzeichenService
      * Zentrale Berechnung der Punkte basierend auf Disziplin und Leistung
      */
     public function calculateResult(Discipline $discipline, int $year, string $gender, int $age, ?float $leistung): array
-    {
-        $istVerband = !empty($discipline->getVerband());
-        $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
+        {
+            // 1. Einheit prüfen
+            // (Stelle sicher, dass der Getter in deiner Entity so heißt, z.B. getUnit() oder getEinheit())
+            $unit = $discipline->getUnit(); 
 
-        if ($istVerband) {
-            return ['points' => 3, 'stufe' => 'gold', 'req' => $req];
-        }
+            // 2. Verbands-Logik präzisieren
+            // Wir geben nur pauschal Gold, wenn Verband existiert UND KEINE Maßeinheit da ist.
+            // Turnen hat UNIT_PIECES, fällt hier also durch (FALSE).
+            // DLRG hat UNIT_NONE, wird hier abgefangen (TRUE).
+            $istPauschalVerband = !empty($discipline->getVerband()) && $unit === 'UNIT_NONE';
 
-        if ($leistung === null || $leistung <= 0 || !$req) {
-            return ['points' => 0, 'stufe' => 'none', 'req' => $req];
-        }
+            $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
 
-        $calc = strtoupper($discipline->getBerechnungsart() ?? 'GREATER');
-        $vG = (float)$req->getGold();
-        $vS = (float)$req->getSilver();
-        $vB = (float)$req->getBronze();
-        
-        $p = 0; $s = 'none';
-        if ($calc === 'SMALLER') {
-            if ($leistung <= $vG && $vG > 0) { $p = 3; $s = 'gold'; }
-            elseif ($leistung <= $vS && $vS > 0) { $p = 2; $s = 'silber'; }
-            elseif ($leistung <= $vB && $vB > 0) { $p = 1; $s = 'bronze'; }
-        } else {
-            if ($leistung >= $vG) { $p = 3; $s = 'gold'; }
-            elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
-            elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
+            // 3. Automatisches Gold nur für pauschale Verbände (DLRG)
+            if ($istPauschalVerband) {
+                return ['points' => 3, 'stufe' => 'gold', 'req' => $req];
+            }
+
+            // 4. Berechnung für Turnen, Laufen, Schwimmen etc.
+            // Wenn Turnen ausgewählt wurde, aber noch keine Leistung eingetragen ist ($leistung ist null oder 0),
+            // landen wir hier und geben 0 Punkte (none) zurück. Das ist das gewünschte Verhalten (Feld weiß).
+            if ($leistung === null || $leistung <= 0 || !$req) {
+                return ['points' => 0, 'stufe' => 'none', 'req' => $req];
+            }
+
+            // --- Ab hier normale Berechnung (Turnen, wenn Zahl eingegeben wurde) ---
+
+            $calc = strtoupper($discipline->getBerechnungsart() ?? 'GREATER');
+            $vG = (float)$req->getGold();
+            $vS = (float)$req->getSilver();
+            $vB = (float)$req->getBronze();
+            
+            $p = 0; $s = 'none';
+            
+            if ($calc === 'SMALLER') {
+                // Logik für Zeiten (Laufen, Radfahren, Schwimmen auf Zeit)
+                if ($leistung <= $vG && $vG > 0) { $p = 3; $s = 'gold'; }
+                elseif ($leistung <= $vS && $vS > 0) { $p = 2; $s = 'silber'; }
+                elseif ($leistung <= $vB && $vB > 0) { $p = 1; $s = 'bronze'; }
+            } else {
+                // Logik für Mengen/Weiten (Werfen, Springen, TURNEN)
+                if ($leistung >= $vG) { $p = 3; $s = 'gold'; }
+                elseif ($leistung >= $vS) { $p = 2; $s = 'silber'; }
+                elseif ($leistung >= $vB) { $p = 1; $s = 'bronze'; }
+            }
+            
+            return ['points' => $p, 'stufe' => $s, 'req' => $req];
         }
-        
-        return ['points' => $p, 'stufe' => $s, 'req' => $req];
-    }
 
     /**
      * Aktualisiert den Schwimmnachweis basierend auf der erbrachten Disziplin
