@@ -33,51 +33,41 @@
 
 <div class="container-fluid mt-3">
     
-    {# --- HEADER --- #}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>🏅 {{ exam.name }} ({{ exam.year }})</h4>
+    {# --- HEADER (Responsive) --- #}
+    <div class="row g-2 align-items-center mb-3">
         
-        <div class="d-flex gap-2 align-items-center">
-            
-            {# Ansicht: Spalten Filter #}
+        {# 1. TITEL (Nimmt auf Handy volle Breite ein, auf Desktop nur so viel wie nötig) #}
+        <div class="col-12 col-md-auto">
+            <h4 class="mb-0">🏅 {{ exam.name }} <small class="text-muted">({{ exam.year }})</small></h4>
+        </div>
+
+        {# 2. FILTER (Nimmt auf Desktop den restlichen Platz, auf Handy neue Zeile) #}
+        <div class="col-12 col-md">
             <div class="view-selector-wrapper">
                 <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen...'|trans }}">
                     {% for category in disciplines|keys %}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                            {# 'selected' sorgt dafür, dass standardmäßig alle an sind #}
                             <option value="{{ category }}" selected>{{ category }}</option>
                         {% endif %}
                     {% endfor %}
                 </select>
             </div>
+        </div>
 
-            {# Filter: Klasse #}
-            {% if classes|length > 0 %}
-                <form method="get" class="d-flex gap-1 align-items-center">
-                    <input type="hidden" name="sort" value="{{ app.request.query.get('sort') }}">
-                    <input type="hidden" name="order" value="{{ app.request.query.get('order') }}">
-                    
-                    <select name="class" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
-                        <option value="">Alle Klassen</option>
-                        {% for c in classes %}
-                            <option value="{{ c }}" {% if c == selectedClass %}selected{% endif %}>
-                                {{ c }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </form>
-            {% endif %}
+        {# 3. BUTTONS (Auf Handy rechtsbündig oder volle Breite, je nach Geschmack) #}
+        <div class="col-12 col-md-auto d-flex gap-2 justify-content-between justify-content-md-end">
             
-            {# Button: Drucken #}
+            {# Button Text auf Handy verstecken (optional), um Platz zu sparen? 
+               Hier lasse ich den Text drin, aber mache die Buttons klein (btn-sm) #}
+            
             <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
-               class="btn btn-default btn-sm" 
-               target="_blank" 
-               title="Gruppenprüfkarte drucken">
-                {{ icon('print')|raw }} Drucken
+               class="btn btn-default btn-sm flex-fill flex-md-grow-0" target="_blank">
+                {{ icon('print')|raw }} <span class="d-inline d-md-inline">{{ 'Drucken'|trans }}</span>
             </a>
             
-            <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-outline-secondary btn-sm">
-                {{ icon('arrow-left')|raw }} Zurück
+            <a href="{{ path('sportabzeichen_exams_dashboard') }}" 
+               class="btn btn-outline-secondary btn-sm flex-fill flex-md-grow-0">
+                {{ icon('arrow-left')|raw }} {{ 'Zurück'|trans }}
             </a>
         </div>
     </div>

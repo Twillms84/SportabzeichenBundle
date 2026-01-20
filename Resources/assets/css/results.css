@@ -275,3 +275,29 @@ a.sort-header:hover {
     background-color: #cd7f32 !important; /* Bronze */
     border-color: #b06a28 !important;
 }
+
+.view-selector-wrapper {
+    min-width: 250px;
+    max-width: 400px;
+    width: 100%; /* Wichtig damit es den Container füllt */
+}
+
+/* --- Mobile Anpassungen (Bildschirme kleiner als 768px) --- */
+@media (max-width: 768px) {
+    .view-selector-wrapper {
+        min-width: 100%; /* Volle Breite auf Handy */
+        max-width: none;
+        margin-bottom: 5px;
+    }
+    
+    /* Optional: Titel etwas kleiner auf Handy */
+    h4 {
+        font-size: 1.2rem;
+        margin-bottom: 0;
+    }
+}
+
+/* Select2 Container Anpassung für Responsive Design */
+.select2-container {
+    width: 100% !important; /* Erzwingt, dass Select2 den Wrapper füllt */
+}
