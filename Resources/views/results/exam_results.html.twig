@@ -117,6 +117,11 @@
                             </a>
                         </th>
 
+                        {# NEUE SPALTE: SCHWIMMEN #}
+                        <th class="col-swimming-status text-center">
+                            🏊
+                        </th>
+
                         {# SPALTEN: DISZIPLINEN KÖPFE #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
@@ -173,56 +178,62 @@
                                     <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" id="...">
                                         <div class="badge-label-small text-uppercase opacity-75">Rang</div>
                                         <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
+                                        {% if p.has_swimming %}
+                                            <span class="swim-status-icon swim-status-ok" title="Schwimmnachweis erbracht" data-bs-toggle="tooltip">
+                                                🏊
+                                            </span>
+                                        {% else %}
+                                            <span class="swim-status-icon swim-status-missing" title="Schwimmnachweis fehlt" data-bs-toggle="tooltip">
+                                                🏊
+                                            </span>
+                                        {% endif %}
                                     </div>
-                                </div>
+                                </div>    
+                            </div>
+                        </td>
 
-                                {# SCHWIMMEN BEREICH #}
+                        {# NEUE SPALTE: LOGIK #}
+                            <td class="col-swimming-status align-middle p-2 text-center">
+                                
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
-                                    
                                     {% set hasSwimming = p.has_swimming %}
                                     {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}
 
-                                    {# A) Wenn Nachweis da ist (Badge/Tooltip) #}
-                                    <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}"
-                                         title="{{ swimInfo }}"
-                                         data-bs-toggle="tooltip">
-                                        
-                                        <div class="alert alert-success d-flex align-items-center justify-content-center p-1 m-0 mb-1 border-0" 
-                                             style="min-height: 34px;">
+                                    {# A) ANZEIGE: Wenn Nachweis da ist #}
+                                    <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}">
+                                        <div class="d-flex flex-column align-items-center justify-content-center">
                                             
-                                            {# Icon #}
-                                            <span class="fs-5 me-md-2">🏊</span>
-                                            
-                                            {# Text (Nur Desktop) #}
-                                            <span class="js-swim-info small lh-1 d-none d-md-block text-start text-truncate" style="max-width: 130px;">
+                                            {# Info Text klein #}
+                                            <small class="js-swim-info text-success fw-bold d-block text-truncate w-100 mb-1" title="{{ swimInfo }}">
                                                 {{ swimInfo }}
-                                            </span>
-                                            
-                                            {# Delete #}
+                                            </small>
+
+                                            {# Löschen Button #}
                                             <button type="button" 
-                                                    class="btn btn-link btn-sm text-danger p-0 ms-1 js-delete-swimming" 
+                                                    class="btn btn-outline-danger btn-sm py-0 px-2 js-delete-swimming" 
                                                     data-ep-id="{{ p.ep_id }}" 
-                                                    title="{{ 'Löschen'|trans }}">
-                                                {{ icon('trash')|raw }}
+                                                    style="font-size: 0.75rem;">
+                                                {{ icon('trash')|raw }} Entfernen
                                             </button>
                                         </div>
                                     </div>
 
-                                    {# B) Dropdown für Schwimmen #}
+                                    {# B) EINGABE: Dropdown wenn kein Nachweis #}
                                     <div class="swim-dropdown-container {{ hasSwimming ? 'd-none' : '' }}">
-                                        <select class="form-control form-control-sm swimming-select-compact" 
+                                        <select class="form-select form-select-sm swimming-select-compact" 
                                                 data-ep-id="{{ p.ep_id }}"
                                                 data-type="swimming_select" 
                                                 data-save="true">
-                                            <option value="">Schwimmen...</option>
+                                            <option value="" selected disabled class="text-muted">-- Nachweis --</option>
+                                            {# Simplerer Look: "Nicht notwendig" (z.B. <12 Jahre) könnte man hier auch abfangen #}
                                             {% for swimDisc in swimming_disciplines %}
                                                 <option value="{{ swimDisc.id }}">{{ swimDisc.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
                                 </div>
-                            </div>
-                        </td>
+
+                            </td>
 
                         {# 2. DISZIPLINEN (Loop über Kategorien) #}
                         {% for category, items in disciplines %}

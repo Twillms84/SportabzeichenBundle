@@ -346,3 +346,16 @@ a.sort-header:hover {
 }
 
 .select2-container { width: 100% !important; }
+
+.col-swimming-status {
+    width: 160px; /* Genug Platz für Dropdown oder Badge */
+    min-width: 160px;
+    background-color: #f8f9fa; /* Leicht abgesetzt */
+}
+/* Das Icon im Namen */
+.swim-status-icon {
+    font-size: 1.2rem;
+    cursor: help;
+}
+.swim-status-ok { color: #198754; } /* Grün */
+.swim-status-missing { color: #dee2e6; } /* Sehr helles Grau */
