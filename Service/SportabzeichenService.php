@@ -30,7 +30,7 @@ class SportabzeichenService
             // Wir geben nur pauschal Gold, wenn Verband existiert UND KEINE Maßeinheit da ist.
             // Turnen hat UNIT_PIECES, fällt hier also durch (FALSE).
             // DLRG hat UNIT_NONE, wird hier abgefangen (TRUE).
-            $istPauschalVerband = !empty($discipline->getVerband()) && $unit === 'UNIT_NONE';
+            $istPauschalVerband = !empty($discipline->getVerband()) && $unit === 'NONE';
 
             $req = $this->em->getRepository(Requirement::class)->findMatchingRequirement($discipline, $year, $gender, $age);
 
