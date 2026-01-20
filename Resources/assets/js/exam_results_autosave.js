@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const verbandName = selectedOption.getAttribute('data-verband'); // z.B. 'DLRG' oder '4.2.6.1'
 
         // LOGIK: Sperren NUR bei UNIT_NONE
-        if (unit === 'UNIT_NONE') {
+        if (unit === 'NONE') {
             // Feld sperren
             inputEl.value = verbandName || 'Nachweis'; // Fallback Text, falls kein Verbandsname da ist
             inputEl.disabled = true;
