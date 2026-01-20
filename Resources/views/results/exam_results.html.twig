@@ -40,32 +40,16 @@
         <div class="d-flex gap-2 align-items-center">
             
             {# Ansicht: Spalten Filter #}
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    {{ icon('eye')|raw }} Ansicht
-                </button>
-                <ul class="dropdown-menu">
-                    <li class="dropdown-header">Spalten anzeigen</li>
+            <div class="d-inline-block me-2" style="min-width: 250px; max-width: 400px;">
+                <select id="columnSelector" class="form-control select2" multiple="multiple" data-placeholder="Ansicht wählen...">
                     {% for category in disciplines|keys %}
-                        {# Schwimmen ignorieren wir hier evtl. oder behandeln es separat #}
+                        {# Schwimmen ausschließen #}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                            <li>
-                                <div class="dropdown-item">
-                                    <div class="form-check">
-                                        <input class="form-check-input js-col-toggle" type="checkbox" 
-                                               value="{{ category }}" 
-                                               id="check-{{ category }}" 
-                                               data-category="{{ category }}"
-                                               checked>
-                                        <label class="form-check-label" for="check-{{ category }}">
-                                            {{ category }}
-                                        </label>
-                                    </div>
-                                </div>
-                            </li>
+                            {# 'selected' sorgt dafür, dass am Anfang alle sichtbar sind #}
+                            <option value="{{ category }}" selected>{{ category }}</option>
                         {% endif %}
                     {% endfor %}
-                </ul>
+                </select>
             </div>
 
             {# Filter: Klasse #}
