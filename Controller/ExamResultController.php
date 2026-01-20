@@ -374,20 +374,20 @@ public function saveExamDiscipline(Request $request): JsonResponse
                 ep.total_points, 
                 ep.final_medal, 
                 ep.participant_id,
-                (SELECT sp.confirmed_at 
-                 FROM sportabzeichen_swimming_proofs sp 
-                 WHERE sp.participant_id = ep.participant_id 
-                   AND (
-                       sp.exam_year = :year 
-                       OR sp.valid_until >= :yearEnd
-                   )
-                 ORDER BY sp.confirmed_at DESC LIMIT 1
-                ) as swimming_date
+                (SELECT sp.exam_year 
+                FROM sportabzeichen_swimming_proofs sp 
+                WHERE sp.participant_id = ep.participant_id 
+                AND (
+                    sp.exam_year = :year 
+                    OR sp.valid_until >= :yearEnd
+                )
+                ORDER BY sp.confirmed_at DESC LIMIT 1
+                ) as swimming_proof_year
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
             WHERE ep.exam_id = :examId 
-              AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
+            AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
         ";
         
         $params = [
@@ -423,8 +423,8 @@ public function saveExamDiscipline(Request $request): JsonResponse
             $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
             
             // Schwimmen: Has Swimming ist true, wenn wir ein Datum gefunden haben
-            $p['has_swimming'] = !empty($p['swimming_date']);
-            $p['swimming_year'] = $p['swimming_date'] ? (new \DateTime($p['swimming_date']))->format('y') : '';
+           $p['has_swimming'] = !empty($p['swimming_proof_year']);
+           $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
             // Ergebnisse laden
             $resultsRaw = $conn->fetchAllAssociative("
