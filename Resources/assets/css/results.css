@@ -154,24 +154,29 @@ input.medal-none { background-image: none !important; }
 /* Badge Container (Erledigt) */
 .swim-badge-container {
     display: flex;
+    height: auto;            /* Höhe flexibel machen */
+    padding: 6px 4px;        /* Etwas mehr Padding vertikal */
     align-items: center;
     justify-content: space-between;
     width: 100%;
     background-color: #d1e7dd; /* Hellgrün */
     border: 1px solid #a3cfbb;
     color: #0f5132;
-    padding: 4px 8px;
     border-radius: 6px;
     animation: fadeIn 0.2s ease-in;
 }
 
 .swim-info-text {
-    font-size: 0.85rem;
+    font-size: 0.75rem;      /* Etwas kleiner, damit mehr reinpasst */
     font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-right: 5px;
+    line-height: 1.1;        /* Engerer Zeilenabstand */
+    
+    /* WICHTIG für Umbruch: */
+    white-space: normal;     /* Umbrüche erlauben */
+    text-align: center;
+    word-wrap: break-word;   /* Lange Wörter notfalls umbrechen */
+    max-width: 140px;        /* Damit es nicht an den Rand klatscht */
+    margin-bottom: 2px;
 }
 
 /* Delete Button */
