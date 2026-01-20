@@ -345,126 +345,151 @@ public function saveExamDiscipline(Request $request): JsonResponse
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request): Response
     {
-    $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-    $selectedClass = $request->query->get('class');
-    
-    $conn = $this->em->getConnection();
-
-    // 1. Prüfungsdaten laden
-    $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
-    if (!$exam) {
-        throw $this->createNotFoundException('Prüfung nicht gefunden.');
-    }
-
-    // 2. Teilnehmer laden
-    // Wir holen sp.confirmed_at als 'swimming_date'
-    $sql = "
-        SELECT 
-            ep.id as ep_id, 
-            u.lastname, 
-            u.firstname, 
-            p.geburtsdatum, 
-            p.geschlecht, 
-            ep.age_year, 
-            ep.total_points, 
-            ep.final_medal, 
-            ep.participant_id,
-            (SELECT sp.confirmed_at FROM sportabzeichen_swimming_proofs sp 
-             WHERE sp.participant_id = ep.participant_id AND sp.valid_until >= CURRENT_DATE 
-             ORDER BY sp.confirmed_at DESC LIMIT 1) as swimming_date
-        FROM sportabzeichen_exam_participants ep
-        JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-        JOIN users u ON u.importid = p.import_id
-        WHERE ep.exam_id = ? 
-          AND ep.final_medal IN ('bronze', 'silber', 'gold')
-    ";
-    
-    $params = [$examId];
-    if ($selectedClass) {
-        $sql .= " AND u.auxinfo = ?";
-        $params[] = $selectedClass;
-    }
-    $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
-
-    // Mappings
-    $unitMap = [
-        'UNIT_MINUTES' => 'min', 
-        'UNIT_SECONDS' => 's', 
-        'UNIT_METERS' => 'm',
-        'UNIT_CENTIMETERS' => 'cm', 
-        'UNIT_HOURS' => 'h', 
-        'UNIT_NUMBER' => 'x'
-    ];
-    $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
-
-    $enrichedParticipants = [];
-    
-    // 3. Daten aufbereiten
-    foreach ($participants as $p) {
-        // A. Basis-Mappings
-        $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
-        $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+        $selectedClass = $request->query->get('class');
         
-        // B. Schwimm-Logik (Hier lag der Fehler)
-        // Wir berechnen has_swimming einfach daraus, ob ein Datum gefunden wurde
-        $p['has_swimming'] = !empty($p['swimming_date']);
-        $p['swimming_year'] = $p['swimming_date'] ? (new \DateTime($p['swimming_date']))->format('y') : '';
+        $conn = $this->em->getConnection();
 
-        // C. Disziplin-Ergebnisse laden
-        $resultsRaw = $conn->fetchAllAssociative("
-            SELECT r.auswahlnummer, res.leistung, res.points, d.kategorie, d.einheit
-            FROM sportabzeichen_exam_results res
-            JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
-            JOIN sportabzeichen_exam_participants ep ON ep.id = res.ep_id
-            JOIN sportabzeichen_exams ex ON ex.id = ep.exam_id
-            JOIN sportabzeichen_participants part ON part.id = ep.participant_id
-            LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
-                AND r.jahr = ex.exam_year 
-                AND r.geschlecht = (CASE WHEN part.geschlecht = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
-                AND ep.age_year BETWEEN r.age_min AND r.age_max
-            WHERE res.ep_id = ?
-            ORDER BY CASE d.kategorie 
-                WHEN 'Ausdauer' THEN 1 WHEN 'Kraft' THEN 2 
-                WHEN 'Schnelligkeit' THEN 3 WHEN 'Koordination' THEN 4 ELSE 5 END
-        ", [$p['ep_id']]);
+        // 1. Prüfungsdaten laden
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
+        if (!$exam) {
+            throw $this->createNotFoundException('Prüfung nicht gefunden.');
+        }
 
-        // Raster befüllen
-        $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
-        foreach ($resultsRaw as $res) {
-            if (isset($catMap[$res['kategorie']])) {
-                $idx = $catMap[$res['kategorie']];
-                $einheit = $unitMap[$res['einheit']] ?? '';
-                
-                // Deutsche Zahlenformatierung
-                $p['disciplines'][$idx] = [
-                    'nr'  => $res['auswahlnummer'],
-                    'res' => str_replace('.', ',', (string)$res['leistung']) . ' ' . $einheit,
-                    'pts' => $res['points']
-                ];
+        $examYear = (int)$exam['exam_year'];
+        // Wir definieren das Ende des Prüfungsjahres als Stichtag für die Gültigkeit
+        $examYearEnd = $examYear . '-12-31';
+
+        // 2. Teilnehmer laden
+        // FIX 1: Im Sub-Select vergleichen wir mit dem Prüfungsjahr, NICHT mit heute (CURRENT_DATE)
+        // Das behebt Fall 1 (Vorjahresnachweis, der heute vllt. schon abgelaufen wäre, aber damals galt)
+        $sql = "
+            SELECT 
+                ep.id as ep_id, 
+                u.lastname, 
+                u.firstname, 
+                p.geburtsdatum, 
+                p.geschlecht, 
+                ep.age_year, 
+                ep.total_points, 
+                ep.final_medal, 
+                ep.participant_id,
+                (SELECT sp.confirmed_at 
+                 FROM sportabzeichen_swimming_proofs sp 
+                 WHERE sp.participant_id = ep.participant_id 
+                   AND (
+                       sp.exam_year = :year 
+                       OR sp.valid_until >= :yearEnd
+                   )
+                 ORDER BY sp.confirmed_at DESC LIMIT 1
+                ) as swimming_date
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_participants p ON p.id = ep.participant_id
+            JOIN users u ON u.importid = p.import_id
+            WHERE ep.exam_id = :examId 
+              AND ep.final_medal IN ('bronze', 'silber', 'gold')
+        ";
+        
+        $params = [
+            'examId' => $examId,
+            'year' => $examYear,
+            'yearEnd' => $examYearEnd
+        ];
+
+        if ($selectedClass) {
+            $sql .= " AND u.auxinfo = :cls";
+            $params['cls'] = $selectedClass;
+        }
+        
+        $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
+
+        // Mappings
+        $unitMap = [
+            'UNIT_MINUTES' => 'min', 
+            'UNIT_SECONDS' => 's', 
+            'UNIT_METERS' => 'm',
+            'UNIT_CENTIMETERS' => 'cm', 
+            'UNIT_HOURS' => 'h', 
+            'UNIT_NUMBER' => 'x',
+            'UNIT_NONE' => '' // Explizit aufnehmen
+        ];
+        $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
+
+        $enrichedParticipants = [];
+        
+        // 3. Daten aufbereiten
+        foreach ($participants as $p) {
+            $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
+            $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
+            
+            // Schwimmen: Has Swimming ist true, wenn wir ein Datum gefunden haben
+            $p['has_swimming'] = !empty($p['swimming_date']);
+            $p['swimming_year'] = $p['swimming_date'] ? (new \DateTime($p['swimming_date']))->format('y') : '';
+
+            // Ergebnisse laden
+            $resultsRaw = $conn->fetchAllAssociative("
+                SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, d.kategorie, d.einheit, d.name as d_name
+                FROM sportabzeichen_exam_results res
+                JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
+                LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
+                    AND r.jahr = :year
+                    AND r.geschlecht = (CASE WHEN :gender = 'MALE' THEN 'MALE' ELSE 'FEMALE' END)
+                    AND :age BETWEEN r.age_min AND r.age_max
+                WHERE res.ep_id = :epId
+                ORDER BY d.kategorie ASC
+            ", [
+                'epId' => $p['ep_id'],
+                'year' => $examYear,
+                'gender' => $p['geschlecht'],
+                'age' => $p['age_year']
+            ]);
+
+            $p['disciplines'] = array_fill(1, 4, ['nr' => '', 'res' => '', 'pts' => '']);
+            
+            foreach ($resultsRaw as $res) {
+                if (isset($catMap[$res['kategorie']])) {
+                    $idx = $catMap[$res['kategorie']];
+                    $einheit = $unitMap[$res['einheit']] ?? '';
+                    
+                    // FIX 2: Anzeige für Verbandsabzeichen (Fall 2)
+                    // Wenn keine numerische Leistung da ist, aber Punkte vergeben wurden (z.B. Verband)
+                    $displayLeistung = str_replace('.', ',', (string)$res['leistung']);
+                    
+                    if (empty($displayLeistung) && $res['points'] > 0) {
+                        // Zeige stattdessen den Status oder "Anerkannt"
+                        // $res['stufe'] enthält meist 'gold', 'silber' etc.
+                        $displayLeistung = ucfirst($res['stufe'] ?? 'Ok'); 
+                    } else {
+                        $displayLeistung .= ' ' . $einheit;
+                    }
+
+                    $p['disciplines'][$idx] = [
+                        'nr'  => $res['auswahlnummer'] ?? '-', // Fallback, falls Requirement fehlt (z.B. bei reinem Verband)
+                        'res' => $displayLeistung,
+                        'pts' => $res['points']
+                    ];
+                }
+            }
+            $enrichedParticipants[] = $p;
+        }
+
+        // 4. Batches bilden (10 pro Seite)
+        $batches = array_chunk($enrichedParticipants, 10);
+        
+        if (count($batches) > 0) {
+            $lastIndex = count($batches) - 1;
+            while (count($batches[$lastIndex]) < 10) {
+                $batches[$lastIndex][] = null;
             }
         }
-        $enrichedParticipants[] = $p;
-    }
 
-    // 4. Batches bilden (10 pro Seite)
-    $batches = array_chunk($enrichedParticipants, 10);
-    
-    if (count($batches) > 0) {
-        $lastIndex = count($batches) - 1;
-        while (count($batches[$lastIndex]) < 10) {
-            $batches[$lastIndex][] = null;
-        }
+        return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
+            'batches' => $batches,
+            'exam' => $exam,
+            'exam_year_short' => substr((string)$examYear, -2),
+            'selectedClass' => $selectedClass,
+            'today' => new \DateTime(),
+        ]);
     }
-
-    // 5. Rendern
-    return $this->render('@PulsRSportabzeichen/exams/print_groupcard.html.twig', [
-        'batches' => $batches,
-        'exam' => $exam,
-        'exam_year_short' => substr((string)$exam['exam_year'], -2), // "26"
-        'selectedClass' => $selectedClass,
-        'today' => new \DateTime(),
-        'userNumber' => '', 
-    ]);
-}
 
 }
