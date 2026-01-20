@@ -7,8 +7,8 @@ namespace PulsR\SportabzeichenBundle\Controller;
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use PulsR\SportabzeichenBundle\Entity\Discipline;
-use PulsR\SportabzeichenBundle\Entity\ExamParticipant; // WICHTIG!
-use PulsR\SportabzeichenBundle\Entity\SwimmingProof; 
+use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
+use PulsR\SportabzeichenBundle\Entity\SwimmingProof;
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,59 +29,52 @@ final class SwimmingProofController extends AbstractPageController
     public function addSwimmingProof(Request $request): JsonResponse
     {
         try {
-            // 1. Daten auslesen
-            $data = json_decode($request->getContent(), true);
+            // 1. Daten holen
+            $content = $request->getContent();
+            $data = !empty($content) ? json_decode($content, true) : [];
             
-            // Robustes Auslesen (ep_id oder epId)
+            // IDs sicher auslesen
             $epId = $data['ep_id'] ?? $data['epId'] ?? null;
-            $disciplineId = $data['discipline_id'] ?? $data['disciplineId'] ?? null; 
+            $disciplineId = $data['discipline_id'] ?? $data['disciplineId'] ?? null;
 
             if (!$epId) {
-                throw new \Exception('EP ID fehlt.');
+                throw new \Exception('Teilnehmer-ID (ep_id) fehlt.');
             }
 
-            // 2. Teilnehmer laden
-            /** @var ExamParticipant|null $ep */
+            // 2. Entity laden
             $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
-
             if (!$ep) {
-                throw new \Exception('Teilnehmer nicht gefunden.');
+                throw new \Exception('Teilnehmer nicht gefunden ID: ' . $epId);
             }
 
-            // 3. Logik: Speichern
-            // Wir prüfen, ob eine gültige Disziplin-ID übergeben wurde (und nicht nur der Platzhalter "-")
+            // 3. Speichern
             if (!empty($disciplineId) && $disciplineId !== '-') {
                 $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
-
                 if (!$discipline) {
-                    throw new \Exception('Disziplin nicht gefunden.');
+                    throw new \Exception('Disziplin nicht gefunden ID: ' . $disciplineId);
                 }
 
-                // Service erstellt neuen Eintrag
-                // Der Service muss existieren und diese Methode haben!
+                // Dieser Aufruf muss im Service existieren!
                 $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
                 $this->em->flush();
             }
 
-            // 4. Update & Rückgabe
-            // Summary neu berechnen
+            // 4. Punkte berechnen
             $summary = $this->service->syncSummary($ep);
             $this->em->refresh($ep);
 
-            // Daten holen
+            // 5. Status ermitteln (Manuell, ohne Helper-Methoden, um Abstürze zu vermeiden)
             $hasSwimming = false;
             $metVia = null;
-            
-            // Prüfen, ob durch diese Aktion oder Altbestand Schwimmen erfüllt ist
-            // (Hier nutzen wir Helper-Methoden der Entity, falls vorhanden, sonst manuell)
-            if (method_exists($ep, 'hasSwimmingRequirementMet')) {
-                $hasSwimming = $ep->hasSwimmingRequirementMet();
-                $metVia = $ep->getSwimmingRequirementMetVia();
-            } else {
-                // Fallback, falls Helper fehlt: Einfacher Check
-                $hasSwimming = ($ep->getSwimmingDiscipline() !== null);
-                $metVia = $hasSwimming ? $ep->getSwimmingDiscipline()->getName() : null;
-            }
+
+            // Prüfen: Wurde eine Schwimm-Disziplin direkt am EP gesetzt?
+            if ($ep->getSwimmingDiscipline()) {
+                $hasSwimming = true;
+                $metVia = $ep->getSwimmingDiscipline()->getName();
+            } 
+            // Alternativ: Prüfen ob via Service/Altbestand etwas gefunden wird (optional)
+            // $validProof = $this->service->getValidSwimmingProof($ep->getParticipant(), $ep->getExam()->getYear());
+            // if ($validProof) { ... }
 
             return new JsonResponse([
                 'status' => 'ok',
@@ -92,12 +85,13 @@ final class SwimmingProofController extends AbstractPageController
                 'final_medal' => $summary['medal'] ?? 'none'
             ]);
 
-        } catch (\Exception $e) {
-            // Fängt Fehler 500 ab und gibt sauberes JSON zurück
+        } catch (\Throwable $e) {
+            // \Throwable fängt ALLES, auch Syntax-Errors oder Type-Errors
             return new JsonResponse([
-                'status' => 'error', 
+                'status' => 'error',
                 'success' => false,
-                'message' => 'Fehler beim Speichern: ' . $e->getMessage()
+                'message' => 'Server Error: ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString() // Hilft beim Debuggen
             ], 500);
         }
     }
@@ -106,25 +100,20 @@ final class SwimmingProofController extends AbstractPageController
     public function removeSwimmingProof(Request $request): JsonResponse
     {
         try {
-            // 1. Daten sicher auslesen
             $content = $request->getContent();
-            $jsonData = !empty($content) ? json_decode($content, true) : [];
-            $postData = $request->request->all();
-
-            $epId = $jsonData['epId'] ?? $jsonData['ep_id'] ?? $postData['epId'] ?? $postData['ep_id'] ?? null;
+            $data = !empty($content) ? json_decode($content, true) : [];
+            $epId = $data['epId'] ?? $data['ep_id'] ?? null;
 
             if (!$epId) {
                 throw new \Exception('ID fehlt.');
             }
 
-            // 2. Entity laden
             $ep = $this->em->getRepository(ExamParticipant::class)->find((int)$epId);
-
             if (!$ep) {
                 throw new \Exception('Teilnehmer nicht gefunden.');
             }
 
-            // 3. Logik zum Löschen
+            // Löschen
             $participant = $ep->getParticipant();
             $currentExamYear = $ep->getExam()->getYear();
 
@@ -137,25 +126,26 @@ final class SwimmingProofController extends AbstractPageController
                 $this->em->remove($proofToDelete);
                 $this->em->flush();
             }
+            
+            // Disziplin Verknüpfung am EP lösen
+            $ep->setSwimmingDiscipline(null);
+            $this->em->persist($ep);
+            $this->em->flush();
 
-            // 4. Fallback prüfen (Altbestand)
+            // Status neu berechnen
+            $summary = $this->service->syncSummary($ep);
+            
+            // Prüfen ob Altbestand da ist
             $bestValidProof = $this->service->getValidSwimmingProof($participant, $currentExamYear);
             
-            // Summary neu berechnen
-            $summary = $this->service->syncSummary($ep);
-            $this->em->refresh($ep);
-
-            // GUI Daten vorbereiten
             $metVia = null;
             $hasSwimming = false;
-            
             if ($bestValidProof) {
                 $hasSwimming = true;
                 $metVia = $bestValidProof->getRequirementMetVia() . ' (Altbestand)';
             }
 
             return new JsonResponse([
-                'status' => 'ok',
                 'success' => true, 
                 'epId' => $epId,
                 'swimming_met_via' => $metVia,
@@ -164,11 +154,10 @@ final class SwimmingProofController extends AbstractPageController
                 'final_medal' => $summary['medal'] ?? 'none'
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return new JsonResponse([
-                'status' => 'error',
                 'success' => false,
-                'message' => 'Fehler beim Löschen: ' . $e->getMessage()
+                'message' => 'Lösch-Fehler: ' . $e->getMessage()
             ], 500);
         }
     }
