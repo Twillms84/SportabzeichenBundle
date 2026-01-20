@@ -9,7 +9,13 @@
 }
 
 /* Spaltenbreiten fixieren */
-.col-name { width: 220px !important; } /* Platz für Name + Alter */
+.col-name {
+    width: 250px;           /* Fixe Breite */
+    max-width: 250px;       /* Darf nicht breiter werden */
+    white-space: nowrap;    /* Kein Umbruch */
+    overflow: hidden;       /* Zu langen Text abschneiden */
+    text-overflow: ellipsis;/* "..." am Ende anzeigen */
+}
 .col-class { width: 60px !important; }
 .col-discipline { width: 145px !important; }
 

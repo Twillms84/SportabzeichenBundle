@@ -1,26 +1,50 @@
 document.addEventListener('DOMContentLoaded', function() {
-
+    
     // =========================================================
-    // 1. SPALTEN FILTER (NEU: Select2 / Combobox Logic)
+    // 1. ANSICHT FILTER (Select2)
     // =========================================================
     
-    // Da IServ Select2 (jQuery) nutzt, verwenden wir hier $ für den Selektor
-    const $colSelector = $('#columnSelector');
+    // Wir nutzen jQuery, da Select2 darauf basiert
+    const $viewSelector = $('#viewSelector');
 
-    if ($colSelector.length) {
+    if ($viewSelector.length) {
         
-        // A) Status aus LocalStorage wiederherstellen
-        const savedState = localStorage.getItem('sportabzeichen_view_cols');
-        
-        if (savedState) {
+        // Event Listener für Änderungen
+        $viewSelector.on('change', function() {
+            // Hole alle ausgewählten Kategorien als Array
+            // Wenn leer (alles abgewählt), ist val() null -> daher '|| []'
+            const selectedCategories = $(this).val() || [];
+            
+            // Wir iterieren über ALLE Optionen in der Liste (nicht nur die ausgewählten)
+            // um zu entscheiden, was wir zeigen und was wir verstecken.
+            $('#viewSelector option').each(function() {
+                const category = $(this).val();
+                
+                // Native JS Selektor für Performance
+                const cells = document.querySelectorAll('.col-cat-' + category);
+                
+                if (selectedCategories.includes(category)) {
+                    // Kategorie ist ausgewählt -> ANZEIGEN
+                    cells.forEach(cell => cell.classList.remove('col-hidden'));
+                } else {
+                    // Kategorie ist NICHT ausgewählt -> VERSTECKEN
+                    cells.forEach(cell => cell.classList.add('col-hidden'));
+                }
+            });
+
+            // Optional: Speichern in LocalStorage, damit es beim Reload so bleibt
+            localStorage.setItem('sportabzeichen_view_selection', JSON.stringify(selectedCategories));
+        });
+
+        // Beim Laden der Seite: Gespeicherten Zustand wiederherstellen?
+        const savedSelection = localStorage.getItem('sportabzeichen_view_selection');
+        if (savedSelection) {
             try {
-                const selectedCols = JSON.parse(savedState);
-                // Setze die Werte in der Multiselect-Box und triggere das Update
-                $colSelector.val(selectedCols).trigger('change'); 
-            } catch (e) {
-                console.error('Fehler beim Laden der Ansicht:', e);
-            }
+                // Setze die Werte im Select2 und feuere das Change-Event
+                $viewSelector.val(JSON.parse(savedSelection)).trigger('change');
+            } catch(e) { console.error(e); }
         }
+    }
 
         // B) Change Listener (feuert bei Auswahl & Abwahl)
         $colSelector.on('change', function() {
