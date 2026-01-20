@@ -306,6 +306,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
         }
 
         $this->em->flush();
+        $this->em->refresh($ep);
 
         return $this->generateSummaryResponse($ep, $points, $stufe);
     }
