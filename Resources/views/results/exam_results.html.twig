@@ -310,22 +310,26 @@
 
 
                                         {# --- TEIL 2: Die Hint-Zeile (Werte + Einheit) --- #}
-                                        <div class="req-hint">
-                                            {# Wrapper für B/S/G Werte (Links) #}
-                                            <div class="req-values-wrapper js-req-values">
-                                                {# Hier steht deine Logik für Bronze/Silber/Gold Werte #}
-                                                {# Beispiel (vereinfacht, nutze deinen existierenden Code hier): #}
-                                                <span class="req-val-b">B: {{ req.bronze }}</span>
-                                                <span class="req-val-s">S: {{ req.silver }}</span>
-                                                <span class="req-val-g">G: {{ req.gold }}</span>
-                                            </div>
+                                            <div class="req-hint">
+                                                {# Wrapper für B/S/G Werte (Links) #}
+                                                <div class="req-values-wrapper js-req-values">
+                                                    {% if selectedReq %}
+                                                        <span class="req-val-b">B: {{ selectedReq.bronze }}</span>
+                                                        <span class="req-val-s">S: {{ selectedReq.silver }}</span>
+                                                        <span class="req-val-g">G: {{ selectedReq.gold }}</span>
+                                                    {% else %}
+                                                        <span class="text-muted small">-</span>
+                                                    {% endif %}
+                                                </div>
 
-                                            {# Die Einheit (Rechts) - WICHTIG: Klasse js-unit-label behalten für JS Updates #}
-                                            <div class="req-unit js-unit-label">
-                                                {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
-                                                {{ currentUnit }}
+                                                {# Die Einheit (Rechts) #}
+                                                <div class="req-unit js-unit-label">
+                                                    {% if selectedReq %}
+                                                        {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? selectedReq.discipline.unit %}
+                                                        {{ currentUnit }}
+                                                    {% endif %}
+                                                </div>
                                             </div>
-                                        </div>
                                     </div>
                                 </td>
                             {% endif %}
