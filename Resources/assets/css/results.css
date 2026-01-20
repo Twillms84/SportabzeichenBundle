@@ -4,54 +4,67 @@
 .table-results-compact {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: 1.1rem !important;
+    font-size: 1.05rem !important;
     border-collapse: separate; /* Wichtig für Sticky Header */
     border-spacing: 0;
 }
 
-/* Sticky Header Definition (Ersetzt style="z-index: 10") */
+/* Sticky Header Definition */
 .sticky-header {
     position: sticky;
     top: 0;
     z-index: 1020; /* Hoch genug für Bootstrap Navbars */
     background-color: #f8f9fa; /* table-light Farbe */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Leichter Schatten für Abtrennung */
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); /* Schönerer Schatten */
+    border-bottom: 1px solid #dee2e6;
 }
 
 /* Spaltenbreiten & Verhalten */
 .col-name {
-    width: 250px;           /* Fixe Breite Desktop */
-    min-width: 250px;       /* Darf nicht kleiner werden */
-    max-width: 250px;       /* Darf nicht breiter werden */
+    width: 220px;           /* Etwas kompakter als 250px */
+    min-width: 220px;
+    max-width: 220px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    vertical-align: top;    /* Bessere Ausrichtung bei mehrzeiligem Inhalt */
+    vertical-align: middle !important;
 }
 
-.col-class { width: 60px !important; }
+.col-class { width: 60px !important; vertical-align: middle !important; }
 .col-discipline { 
     width: 145px !important;
-    transition: opacity 0.2s ease; /* Soft-Fade beim Ausblenden */
+    transition: opacity 0.2s ease;
+    vertical-align: top;
 }
 
-/* SPALTEN AUSBLENDEN (Ersetzt <style> Block) */
+/* SPALTEN AUSBLENDEN (Wichtig für den JS-Filter) */
 .col-hidden {
     display: none !important;
 }
 
-
 /* =========================================
-   2. MEDAILLEN-FARBEN (Inputs/Selects)
+   2. MEDAILLEN-FARBEN (Modernisiert)
    ========================================= */
-select.medal-gold, input.medal-gold { 
-    background-color: #ffd700 !important; color: #000 !important; border: 2px solid #b8860b !important; font-weight: bold !important; 
+/* Gold: Wärmer, besserer Kontrast */
+select.medal-gold, input.medal-gold, .bg-gold { 
+    background-color: #ffdc2e !important; 
+    color: #4a3b00 !important; 
+    border: 1px solid #cca300 !important; 
+    font-weight: 600 !important; 
 }
-select.medal-silber, input.medal-silber { 
-    background-color: #e0e0e0 !important; color: #000 !important; border: 2px solid #a0a0a0 !important; font-weight: bold !important; 
+/* Silber: Kühles Grau */
+select.medal-silber, input.medal-silber, .bg-silver { 
+    background-color: #e9ecef !important; 
+    color: #495057 !important; 
+    border: 1px solid #adb5bd !important; 
+    font-weight: 600 !important; 
 }
-select.medal-bronze, input.medal-bronze { 
-    background-color: #cd7f32 !important; color: #fff !important; border: 2px solid #8b4513 !important; font-weight: bold !important; 
+/* Bronze: Kupferton */
+select.medal-bronze, input.medal-bronze, .bg-bronze { 
+    background-color: #d98a4e !important; 
+    color: #fff !important; 
+    border: 1px solid #a65e26 !important; 
+    font-weight: 600 !important; 
 }
 
 /* Standard-Status */
@@ -60,22 +73,21 @@ select.medal-none, input.medal-none {
 }
 input.medal-none { background-image: none !important; }
 
-
 /* =========================================
    3. FORMULARELEMENTE 
    ========================================= */
 .discipline-selector, .form-control-custom {
-    font-size: 1.1rem !important; 
-    padding: 6px 3px !important; 
+    font-size: 1.0rem !important; 
+    padding: 4px 2px !important; 
     height: auto !important; 
     width: 100% !important; 
     text-align: center !important;
 }
 
-/* Einheit hinter dem Input (Ersetzt style="font-size: 0.7rem") */
+/* Einheit hinter dem Input */
 .input-group-text-unit {
     padding: 2px 4px !important;
-    font-size: 0.75rem !important; /* Optimierte Größe */
+    font-size: 0.75rem !important;
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     color: #6c757d;
@@ -84,192 +96,148 @@ input.medal-none { background-image: none !important; }
     line-height: 1.5;
 }
 
-
 /* =========================================
    4. TEILNEHMER-SPALTE (NAME & ALTER)
    ========================================= */
 .name-container {
     display: flex;
-    align-items: baseline;
-    flex-wrap: nowrap;
-    margin-bottom: 0.25rem;
+    flex-direction: column; /* Namen oben, Alter darunter */
     line-height: 1.2;
-    overflow: hidden; /* Sicherstellen, dass nichts rausragt */
+    justify-content: center;
+    height: 100%;
 }
 
 .name-main {
-    font-size: 1.15rem;
-    font-weight: bold;
-    color: #000;
-    margin-right: 6px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #212529;
 }
 
 .name-age {
-    font-size: 1.0rem;
-    font-weight: normal;
-    color: #555;
-    white-space: nowrap;
+    font-size: 0.9rem;
+    color: #6c757d;
 }
-
-/* Mobile Break Helper (Ersetzt <style> Block) */
-.mobile-break {
-    display: none; /* Desktop: aus */
-}
-
-@media (max-width: 768px) {
-    .mobile-break {
-        display: block;
-        font-size: 0.85em;
-        color: #6c757d;
-        line-height: 1.2;
-        font-weight: normal;
-        margin-top: 2px;
-    }
-}
-
 
 /* =========================================
-   5. SCHWIMM-BEREICH & BADGES
+   5. SCHWIMM-BEREICH (Optimiertes Layout)
    ========================================= */
+.col-swimming {
+    width: 180px !important;
+    vertical-align: middle !important;
+}
 
 /* Haupt-Wrapper */
 .swimming-wrapper {
-    display: flex !important;
-    align-items: center !important;
-    width: 100%; 
-    gap: 4px;
-}
-
-.swim-badge-container,
-.swim-dropdown-container {
-    flex-grow: 1;
-    min-width: 0;
+    position: relative;
+    width: 100%;
+    height: 38px; /* Fixe Höhe verhindert Springen */
     display: flex;
     align-items: center;
+    justify-content: center;
 }
 
-.swim-badge-container.d-none,
-.swim-dropdown-container.d-none {
-    display: none !important;
-}
-
-/* Alert Box im Schwimmbereich (Ersetzt style="min-height: 34px") */
-.swim-alert-box {
-    min-height: 34px;
+.swim-dropdown-container {
     width: 100%;
-    margin-bottom: 0.25rem;
-    border: 0;
-    padding: 0.25rem;
+    animation: fadeIn 0.2s ease-in;
 }
 
-/* Text im Schwimmbereich (Ersetzt style="max-width: 130px") */
+.swimming-select-compact {
+    width: 100% !important;
+    font-size: 0.9rem !important;
+    padding: 4px 8px !important;
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+/* Badge Container (Erledigt) */
+.swim-badge-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background-color: #d1e7dd; /* Hellgrün */
+    border: 1px solid #a3cfbb;
+    color: #0f5132;
+    padding: 4px 8px;
+    border-radius: 6px;
+    animation: fadeIn 0.2s ease-in;
+}
+
 .swim-info-text {
-    max-width: 130px;
+    font-size: 0.85rem;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* Dropdown */
-.swimming-select-compact {
-    width: 100% !important;
-    max-width: none !important;
-    min-height: 28px !important;
-    font-size: 0.85rem !important;
-    padding: 2px 4px !important;
-    border-radius: 4px;
-    background-color: #ffffff !important; 
-    border: 1px solid #dee2e6 !important;
-    color: #212529 !important;
-    cursor: pointer;
+    margin-right: 5px;
 }
 
 /* Delete Button */
 .btn-delete-swimming {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
+    background: transparent;
+    border: none;
+    color: #842029;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: none !important;
-    color: #dc3545 !important;
-    opacity: 0.6;
-    transition: all 0.2s ease-in-out;
-    cursor: pointer !important;
-    font-size: 1.0rem !important;
-    padding: 0 !important;
-    line-height: 1 !important;
 }
 .btn-delete-swimming:hover {
-    opacity: 1.0;
-    color: #a71d2a !important;
-    transform: scale(1.15);
+    background-color: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
 }
 
+.d-none { display: none !important; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 /* =========================================
    6. RESULT BADGES & ANFORDERUNGEN
    ========================================= */
 .result-badge-box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 65px;
+    padding: 4px 0;
+    border-radius: 6px;
+    border-width: 1px;
+    border-style: solid;
     line-height: 1.1;
-    transition: all 0.3s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    min-width: 60px; /* Ersetzt Inline-Style */
+    font-weight: bold;
 }
 
-/* Kleine Labels (Pkt, Rang) - Ersetzt style="font-size: 0.65rem" */
 .badge-label-small {
     font-size: 0.65rem;
     text-transform: uppercase;
-    opacity: 0.75;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
 }
-
-.bg-gold { background-color: #ffd700 !important; border-color: #e6c200 !important; }
-.bg-silver { background-color: #e0e0e0 !important; border-color: #cfcfcf !important; }
-.bg-bronze { background-color: #cd7f32 !important; border-color: #b06a28 !important; }
 
 /* Anforderungen (B: S: G:) */
 .req-hint { 
-    font-size: 0.9rem !important; 
+    font-size: 0.85rem !important; 
     display: flex; 
-    justify-content: space-between; /* Schiebt Werte nach links, Einheit nach rechts */
-    align-items: center;            /* Vertikal mittig */
+    justify-content: space-between; 
+    align-items: center;
     padding: 2px 4px;
     font-weight: 600;
     white-space: nowrap;
-    color: #444;
+    color: #555;
     margin-top: 2px;
 }
-
-/* Container für die Werte (B/S/G), damit sie zusammenbleiben */
-.req-values-wrapper {
-    display: flex;
-    gap: 8px; /* Kleiner Abstand zwischen den Werten */
-}
-
-/* Die Einheit rechts */
-.req-unit {
-    color: #888;          /* Etwas dezenter */
-    font-weight: normal;  /* Nicht fett */
-    font-style: italic;   /* Optional: kursiv zur Unterscheidung */
-    margin-left: 10px;    /* Abstand zu den Werten */
-}
+.req-values-wrapper { display: flex; gap: 8px; }
+.req-unit { color: #888; font-weight: normal; font-style: italic; margin-left: 10px; }
 .req-val-b { color: #cd7f32; } 
 .req-val-s { color: #666; } 
 .req-val-g { color: #b8860b; } 
-
-/* Sortier Header */
-a.sort-header {
-    text-decoration: none;
-    color: inherit;
-    display: block;
-    width: 100%;
-}
-a.sort-header:hover {
-    background-color: rgba(0,0,0,0.05);
-}
 
 .view-selector-wrapper {
     min-width: 250px;
@@ -277,85 +245,52 @@ a.sort-header:hover {
     width: 100%; 
 }
 
-
 /* =========================================
    7. DARK MODE & RESPONSIVE
    ========================================= */
-@media (prefers-color-scheme: dark) {
-    select.medal-none, input.medal-none { 
-        background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+@media (max-width: 768px) {
+    .view-selector-wrapper { min-width: 100%; max-width: none; margin-bottom: 5px; }
+    .col-name { width: 140px !important; min-width: 140px; max-width: 140px; }
+    .col-swimming { width: 50px !important; min-width: 50px; max-width: 50px; padding: 2px !important; }
+    
+    /* Mobil: Schwimmen nur als Icon */
+    .swim-info-text { display: none; }
+    .swim-badge-container { 
+        justify-content: center; padding: 2px; background: transparent; border: none; 
     }
-    .name-main { color: #dee2e6 !important; }
-    .name-age { color: #adb5bd !important; }
-    .req-hint { color: #adb5bd !important; }
-    .swimming-select-compact {
-        background-color: #212529 !important;
-        color: #dee2e6 !important;
-        border: 1px solid #495057 !important;
+    .swim-badge-container::before {
+        content: "✓"; font-size: 1.4rem; color: #198754; font-weight: bold;
     }
-    .sticky-header {
-        background-color: #212529; /* Dunkler Header */
-        color: #fff;
-    }
+    .btn-delete-swimming { display: none; /* Löschen mobil evtl. ausblenden oder anders lösen */ }
+    
+    .sticky-header { z-index: 100; }
 }
 
-/* Bootstrap Theme Attribut */
+@media (prefers-color-scheme: dark) {
+    body { background-color: #212529; color: #f8f9fa; }
+    select.medal-none, input.medal-none { 
+        background-color: #2b3035 !important; color: #dee2e6 !important; border-color: #495057 !important;
+    }
+    .sticky-header { background-color: #343a40; border-bottom-color: #495057; }
+    .name-main { color: #f8f9fa; }
+    .name-age, .req-hint { color: #adb5bd; }
+    
+    /* Dark Mode Schwimmen */
+    .swim-badge-container { background-color: #051b11; border-color: #0f5132; color: #75b798; }
+    .swimming-select-compact { background-color: #2b3035; color: #dee2e6; border-color: #495057; }
+    .bg-gold { color: #000 !important; }
+    .bg-silver { color: #000 !important; }
+    .bg-bronze { color: #fff !important; }
+}
+
+/* Bootstrap Theme Attribut Support */
 [data-bs-theme="dark"] select.medal-none, 
 [data-bs-theme="dark"] input.medal-none {
-    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+    background-color: #2b3035 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
 }
 [data-bs-theme="dark"] .swimming-select-compact {
-    background-color: #212529 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
+    background-color: #2b3035 !important; color: #dee2e6 !important; border: 1px solid #495057 !important;
 }
 [data-bs-theme="dark"] .sticky-header {
-    background-color: #212529;
-    color: #fff;
+    background-color: #343a40; color: #fff;
 }
-[data-bs-theme="dark"] .bg-gold { color: #000 !important; }
-[data-bs-theme="dark"] .bg-silver { color: #000 !important; }
-[data-bs-theme="dark"] .bg-bronze { color: #fff !important; }
-
-/* Mobile Anpassungen */
-@media (max-width: 768px) {
-    .view-selector-wrapper {
-        min-width: 100%;
-        max-width: none;
-        margin-bottom: 5px;
-    }
-    /* Die Schwimmspalte hat im Twig "col-swimming" nicht explizit als Klasse im TH/TD stehen?
-       Falls doch, hier die Breite: */
-    .col-swimming {
-        min-width: 50px !important;
-        max-width: 50px !important;
-        text-align: center;
-        padding: 0.25rem !important;
-    }
-    .col-name {
-        width: 140px;      /* Namen schmaler auf Handy */
-        min-width: 140px;
-        max-width: 140px;
-    }
-    h4 {
-        font-size: 1.2rem;
-        margin-bottom: 0;
-    }
-    /* Sticky Header etwas anpassen, falls nötig */
-    .sticky-header {
-        z-index: 100;
-    }
-}
-
-.select2-container { width: 100% !important; }
-
-.col-swimming-status {
-    width: 160px; /* Genug Platz für Dropdown oder Badge */
-    min-width: 160px;
-    background-color: #f8f9fa; /* Leicht abgesetzt */
-}
-/* Das Icon im Namen */
-.swim-status-icon {
-    font-size: 1.2rem;
-    cursor: help;
-}
-.swim-status-ok { color: #198754; } /* Grün */
-.swim-status-missing { color: #dee2e6; } /* Sehr helles Grau */
