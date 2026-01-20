@@ -408,7 +408,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
             'UNIT_CENTIMETERS' => 'cm', 
             'UNIT_HOURS' => 'h', 
             'UNIT_NUMBER' => 'x',
-            'UNIT_NONE' => ''
+            'NONE' => ''
         ];
         $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
