@@ -177,22 +177,30 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedOption = selectEl.options[selectEl.selectedIndex];
         
         const verbandName = selectedOption.getAttribute('data-verband');
-        const calcType    = selectedOption.getAttribute('data-calc'); // Das ist neu!
+        const unit        = selectedOption.getAttribute('data-unit'); // Z.B. 'UNIT_PIECES'
 
-        // WICHTIG: Wir sperren nur, wenn der Berechnungstyp explizit 'VERBAND' ist.
-        // Das verhindert, dass Turnen (4.2.6.1) gesperrt wird.
-        if (calcType === 'VERBAND' && verbandName) {
+        // WICHTIG: 
+        // Wir sperren nur, wenn es einen Verbandseintrag gibt (z.B. "DLRG" oder "4.2.6.1"),
+        // ABER es darf KEINE Zähl-Einheit (Turnen/Seilspringen) sein.
+        // Turnen hat meist UNIT_PIECES oder UNIT_NUMBER.
+        
+        const isCountable = (unit === 'UNIT_PIECES' || unit === 'UNIT_NUMBER');
+
+        if (verbandName && !isCountable) {
+            // Fall: Echtes Verbandsabzeichen (DLRG, etc.)
+            // -> Feld sperren, Name eintragen
             inputEl.value = verbandName;
             inputEl.disabled = true;
             inputEl.classList.add('bg-light');
+            inputEl.placeholder = '';
         } else {
-            // Bei Turnen oder anderen Disziplinen:
-            // Input freigeben und NICHT überschreiben (damit man 12 Stück eintragen kann)
+            // Fall: Turnen (hat Verbandsnummer, aber UNIT_PIECES) oder normale Disziplin
+            // -> Feld freigeben für Eingabe
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
             
-            // Falls versehentlich der Verbandsname da drin stand, leeren wir es, 
-            // aber nur wenn es genau dem Verbandsnamen entspricht.
+            // Falls vorher "DLRG" drin stand, machen wir es leer.
+            // Aber wenn da "12" steht (Turnen), lassen wir es stehen.
             if (inputEl.value === verbandName) {
                 inputEl.value = '';
             }
