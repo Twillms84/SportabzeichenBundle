@@ -46,39 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-        // B) Change Listener (feuert bei Auswahl & Abwahl)
-        $colSelector.on('change', function() {
-            // Hole Array der ausgewählten Werte (z.B. ['Ausdauer', 'Kraft'])
-            // Fallback auf leeres Array, falls alles abgewählt ist
-            const selectedCategories = $(this).val() || [];
-
-            // Speichern für den nächsten Besuch
-            localStorage.setItem('sportabzeichen_view_cols', JSON.stringify(selectedCategories));
-
-            // UI Update: Wir gehen ALLE verfügbaren Optionen durch
-            $('#columnSelector option').each(function() {
-                const category = $(this).val();
-                
-                // Alle Tabellenzellen (th und td) dieser Kategorie suchen
-                // Wir nutzen hier natives JS für Performance
-                const cells = document.querySelectorAll('.col-cat-' + category);
-                
-                if (selectedCategories.includes(category)) {
-                    // Ist ausgewählt -> Anzeigen
-                    cells.forEach(cell => cell.classList.remove('col-hidden'));
-                } else {
-                    // Ist NICHT ausgewählt -> Ausblenden
-                    cells.forEach(cell => cell.classList.add('col-hidden'));
-                }
-            });
-        });
-        
-        // Initial einmal ausführen, damit die Tabelle zum Start stimmt
-        // (falls LocalStorage leer war, nimmt er die Standard-Auswahl aus dem HTML)
-        $colSelector.trigger('change');
-    }
-
-
     // =========================================================
     // 2. AUTOSAVE FORMULAR LOGIK (Unverändert)
     // =========================================================
