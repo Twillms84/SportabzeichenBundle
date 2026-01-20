@@ -114,7 +114,7 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('ID fehlt.');
             }
 
-            // Auch beim Löschen sicherheitshalber Eager Loading nutzen
+            // Eager Loading (wie gehabt)
             $ep = $this->em->createQueryBuilder()
                 ->select('ep', 'p', 'u')
                 ->from(ExamParticipant::class, 'ep')
@@ -132,20 +132,37 @@ final class SwimmingProofController extends AbstractPageController
             $participant = $ep->getParticipant();
             $examYear = $ep->getExam()->getYear();
 
+            /** @var SwimmingProof|null $proofToDelete */
             $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
                 'participant' => $participant,
                 'examYear' => $examYear
             ]);
             
+            // --- NEU: Prüfung auf Herkunft des Nachweises ---
             if ($proofToDelete) {
+                $via = $proofToDelete->getRequirementMetVia();
+                
+                // Wenn der Nachweis automatisch durch eine Disziplin (z.B. Ausdauer) kam,
+                // beginnt der String mit "DISCIPLINE:". Dann darf hier nicht gelöscht werden.
+                if ($via && str_starts_with($via, 'DISCIPLINE:')) {
+                    return new JsonResponse([
+                        'success' => false,
+                        'message' => 'Dieser Nachweis ist an eine Disziplin gebunden und kann nur über die Leistungstabelle entfernt werden.'
+                    ], 400); // 400 Bad Request verhindert, dass das JS das UI updatet
+                }
+
                 $this->em->remove($proofToDelete);
             }
+            // ------------------------------------------------
 
+            // Verknüpfung am ExamParticipant lösen
             if (method_exists($ep, 'setSwimmingDiscipline')) {
                 $ep->setSwimmingDiscipline(null);
             }
 
             $this->em->flush();
+            
+            // Neu berechnen
             $summary = $this->service->syncSummary($ep);
 
             return new JsonResponse([
