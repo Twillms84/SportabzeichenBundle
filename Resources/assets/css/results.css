@@ -234,12 +234,27 @@ input.medal-none { background-image: none !important; }
 .req-hint { 
     font-size: 0.9rem !important; 
     display: flex; 
-    justify-content: space-between; 
+    justify-content: space-between; /* Schiebt Werte nach links, Einheit nach rechts */
+    align-items: center;            /* Vertikal mittig */
     padding: 2px 4px;
     font-weight: 600;
     white-space: nowrap;
     color: #444;
     margin-top: 2px;
+}
+
+/* Container für die Werte (B/S/G), damit sie zusammenbleiben */
+.req-values-wrapper {
+    display: flex;
+    gap: 8px; /* Kleiner Abstand zwischen den Werten */
+}
+
+/* Die Einheit rechts */
+.req-unit {
+    color: #888;          /* Etwas dezenter */
+    font-weight: normal;  /* Nicht fett */
+    font-style: italic;   /* Optional: kursiv zur Unterscheidung */
+    margin-left: 10px;    /* Abstand zu den Werten */
 }
 .req-val-b { color: #cd7f32; } 
 .req-val-s { color: #666; } 

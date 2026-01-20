@@ -299,27 +299,32 @@
                                             {% endif %}
                                         </select>
 
-                                        {# INPUT FELD & EINHEIT #}
-                                        <div class="input-group input-group-sm">
-                                            <input type="text" 
-                                                   class="form-control form-control-custom {{ mClass }}"
-                                                   value="{{ resObj ? resObj.leistung : '' }}"
-                                                   data-save 
-                                                   data-ep-id="{{ p.ep_id }}" 
-                                                   data-type="leistung" 
-                                                   data-kategorie="{{ category }}">
+                                        {# --- TEIL 1: Das Input Feld (jetzt ohne Input-Group Wrapper) --- #}
+                                        <input type="text" 
+                                            class="form-control form-control-custom {{ mClass }}"
+                                            value="{{ resObj ? resObj.leistung : '' }}"
+                                            data-save 
+                                            data-ep-id="{{ p.ep_id }}" 
+                                            data-type="leistung" 
+                                            data-kategorie="{{ category }}">
 
-                                            <span class="input-group-text px-1 text-muted js-unit-label input-group-text-unit" style="font-size: 0.7rem;">
+
+                                        {# --- TEIL 2: Die Hint-Zeile (Werte + Einheit) --- #}
+                                        <div class="req-hint">
+                                            {# Wrapper für B/S/G Werte (Links) #}
+                                            <div class="req-values-wrapper js-req-values">
+                                                {# Hier steht deine Logik für Bronze/Silber/Gold Werte #}
+                                                {# Beispiel (vereinfacht, nutze deinen existierenden Code hier): #}
+                                                <span class="req-val-b">B: {{ req.bronze }}</span>
+                                                <span class="req-val-s">S: {{ req.silver }}</span>
+                                                <span class="req-val-g">G: {{ req.gold }}</span>
+                                            </div>
+
+                                            {# Die Einheit (Rechts) - WICHTIG: Klasse js-unit-label behalten für JS Updates #}
+                                            <div class="req-unit js-unit-label">
                                                 {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
                                                 {{ currentUnit }}
-                                            </span>
-                                        </div>
-
-                                        {# HINTS (Bronze/Silber/Gold) #}
-                                        <div class="req-hint">
-                                            <span class="req-val-b" title="Bronze">B:<span class="js-val-b">{{ selectedReq ? selectedReq.bronze : '-' }}</span></span>
-                                            <span class="req-val-s" title="Silber">S:<span class="js-val-s">{{ selectedReq ? selectedReq.silver : '-' }}</span></span>
-                                            <span class="req-val-g" title="Gold">G:<span class="js-val-g">{{ selectedReq ? selectedReq.gold : '-' }}</span></span>
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
