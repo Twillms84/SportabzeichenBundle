@@ -357,12 +357,9 @@ public function saveExamDiscipline(Request $request): JsonResponse
         }
 
         $examYear = (int)$exam['exam_year'];
-        // Wir definieren das Ende des Prüfungsjahres als Stichtag für die Gültigkeit
         $examYearEnd = $examYear . '-12-31';
 
-        // 2. Teilnehmer laden
-        // FIX 1: Im Sub-Select vergleichen wir mit dem Prüfungsjahr, NICHT mit heute (CURRENT_DATE)
-        // Das behebt Fall 1 (Vorjahresnachweis, der heute vllt. schon abgelaufen wäre, aber damals galt)
+        // 2. Teilnehmer laden (inkl. Fix für Jahr und Schreibweise 'silver')
         $sql = "
             SELECT 
                 ep.id as ep_id, 
@@ -375,19 +372,19 @@ public function saveExamDiscipline(Request $request): JsonResponse
                 ep.final_medal, 
                 ep.participant_id,
                 (SELECT sp.exam_year 
-                FROM sportabzeichen_swimming_proofs sp 
-                WHERE sp.participant_id = ep.participant_id 
-                AND (
-                    sp.exam_year = :year 
-                    OR sp.valid_until >= :yearEnd
-                )
-                ORDER BY sp.confirmed_at DESC LIMIT 1
+                 FROM sportabzeichen_swimming_proofs sp 
+                 WHERE sp.participant_id = ep.participant_id 
+                   AND (
+                       sp.exam_year = :year 
+                       OR sp.valid_until >= :yearEnd
+                   )
+                 ORDER BY sp.confirmed_at DESC LIMIT 1
                 ) as swimming_proof_year
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
             WHERE ep.exam_id = :examId 
-            AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
+              AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
         ";
         
         $params = [
@@ -411,7 +408,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
             'UNIT_CENTIMETERS' => 'cm', 
             'UNIT_HOURS' => 'h', 
             'UNIT_NUMBER' => 'x',
-            'UNIT_NONE' => '' // Explizit aufnehmen
+            'UNIT_NONE' => ''
         ];
         $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
@@ -422,13 +419,15 @@ public function saveExamDiscipline(Request $request): JsonResponse
             $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
             $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
             
-            // Schwimmen: Has Swimming ist true, wenn wir ein Datum gefunden haben
-           $p['has_swimming'] = !empty($p['swimming_proof_year']);
-           $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
+            // Schwimm-Jahr Logik
+            $p['has_swimming'] = !empty($p['swimming_proof_year']);
+            $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
             // Ergebnisse laden
+            // NEU: d.verband hinzugefügt
             $resultsRaw = $conn->fetchAllAssociative("
-                SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, d.kategorie, d.einheit, d.name as d_name
+                SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
+                       d.kategorie, d.einheit, d.name as d_name, d.verband
                 FROM sportabzeichen_exam_results res
                 JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
                 LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
@@ -449,23 +448,34 @@ public function saveExamDiscipline(Request $request): JsonResponse
             foreach ($resultsRaw as $res) {
                 if (isset($catMap[$res['kategorie']])) {
                     $idx = $catMap[$res['kategorie']];
-                    $einheit = $unitMap[$res['einheit']] ?? '';
                     
-                    // FIX 2: Anzeige für Verbandsabzeichen (Fall 2)
-                    // Wenn keine numerische Leistung da ist, aber Punkte vergeben wurden (z.B. Verband)
-                    $displayLeistung = str_replace('.', ',', (string)$res['leistung']);
+                    // --- NEUE LOGIK START ---
                     
-                    if (empty($displayLeistung) && $res['points'] > 0) {
-                        // Zeige stattdessen den Status oder "Anerkannt"
-                        // $res['stufe'] enthält meist 'gold', 'silber' etc.
-                        $displayLeistung = ucfirst($res['stufe'] ?? 'Ok'); 
+                    if (!empty($res['verband'])) {
+                        // FALL 1: Verbandsabzeichen
+                        // Ziffer = A
+                        // Ergebnis = Name des Verbands (z.B. "DLRG", "Fußball")
+                        $displayNr = 'A';
+                        $displayRes = $res['verband'];
                     } else {
-                        $displayLeistung .= ' ' . $einheit;
+                        // FALL 2: Normale Disziplin
+                        $einheit = $unitMap[$res['einheit']] ?? '';
+                        $displayNr = $res['auswahlnummer'] ?? '-';
+                        
+                        $valStr = str_replace('.', ',', (string)$res['leistung']);
+                        
+                        // Kleine Kosmetik: Wenn 0 aber Punkte da sind -> Status anzeigen (Fallback)
+                        if ((empty($valStr) || $valStr === '0') && $res['points'] > 0) {
+                             $displayRes = ucfirst($res['stufe'] ?? 'Ok');
+                        } else {
+                             $displayRes = $valStr . ' ' . $einheit;
+                        }
                     }
+                    // --- NEUE LOGIK ENDE ---
 
                     $p['disciplines'][$idx] = [
-                        'nr'  => $res['auswahlnummer'] ?? '-', // Fallback, falls Requirement fehlt (z.B. bei reinem Verband)
-                        'res' => $displayLeistung,
+                        'nr'  => $displayNr,
+                        'res' => $displayRes,
                         'pts' => $res['points']
                     ];
                 }
@@ -473,9 +483,8 @@ public function saveExamDiscipline(Request $request): JsonResponse
             $enrichedParticipants[] = $p;
         }
 
-        // 4. Batches bilden (10 pro Seite)
+        // 4. Batches bilden
         $batches = array_chunk($enrichedParticipants, 10);
-        
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
             while (count($batches[$lastIndex]) < 10) {

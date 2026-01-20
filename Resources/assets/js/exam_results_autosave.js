@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     
     // =========================================================
-    // 1. ANSICHT FILTER (Select2) - MIT BUGFIX
+    // 1. ANSICHT FILTER (Select2)
     // =========================================================
     const $viewSelector = $('#viewSelector');
 
@@ -9,13 +9,8 @@ document.addEventListener('DOMContentLoaded', function() {
         $viewSelector.on('change', function() {
             const selectedCategories = $(this).val() || [];
             
-            // Debugging (optional): console.log('Ausgewählt:', selectedCategories);
-
             $('#viewSelector option').each(function() {
                 const category = $(this).val();
-                
-                // BUGFIX: Wir suchen nach .col-cat-[category]
-                // Stelle sicher, dass deine TH und TD diese Klasse im HTML haben!
                 const cells = document.querySelectorAll('.col-cat-' + category);
                 
                 if (selectedCategories.includes(category)) {
@@ -25,11 +20,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            // Speichern in LocalStorage
             localStorage.setItem('sportabzeichen_view_selection', JSON.stringify(selectedCategories));
         });
 
-        // Restore Selection beim Laden
         const savedSelection = localStorage.getItem('sportabzeichen_view_selection');
         if (savedSelection) {
             try {
@@ -43,22 +36,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // =========================================================
     const form = document.getElementById('autosave-form');
     
-    // Wenn Formular nicht da ist, abbrechen (z.B. auf anderen Seiten)
     if (!form) return; 
 
-    // Routen lesen
     const disciplineRoute = form.getAttribute('data-discipline-route'); 
     const resultRoute = form.getAttribute('data-result-route');
     const swimmingRoute = form.getAttribute('data-swimming-route'); 
     const swimmingDeleteRoute = form.getAttribute('data-swimming-delete-route');
     const csrfToken = form.getAttribute('data-global-token');
 
-    // Initiale Hinweise setzen
+    // --- INITIALISIERUNG BEI SEITENAUFRUF ---
     document.querySelectorAll('.js-discipline-select').forEach(select => {
         updateRequirementHints(select);
+        // NEU: Prüfen, ob Verband vorgewählt ist (zum Sperren des Feldes)
+        checkVerbandInput(select);
     });
 
-    // --- CHANGE LISTENER (Speichern) ---
+    // --- CHANGE LISTENER (Speichern & UI Logik) ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;
@@ -91,13 +84,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (el.tagName === 'SELECT') {
                 updateRequirementHints(el);
+                // NEU: Sofort Verbandsnamen eintragen und sperren
+                checkVerbandInput(el); 
             }
 
             payload.discipline_id = selectEl.value;
+            // Wir nehmen den Wert aus dem Input (der jetzt ggf. schon "DLRG" enthält)
             payload.leistung = inputEl ? inputEl.value : '';
 
             // UI Feedback (kurz ausgrauen)
-            if (inputEl) inputEl.style.opacity = '0.5';
+            if (inputEl && !inputEl.disabled) inputEl.style.opacity = '0.5';
         }
 
         try {
@@ -132,8 +128,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- CLICK LISTENER (Schwimmen Löschen) ---
     document.addEventListener('click', async function(event) {
-        // Wir suchen den Button (auch wenn man auf das Icon klickt)
-        const btn = event.target.closest('.btn-delete-swimming'); // Klasse angepasst an CSS!
+        const btn = event.target.closest('.btn-delete-swimming');
         if (!btn) return;
 
         event.preventDefault();
@@ -171,28 +166,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // 3. HELPER FUNCTIONS
     // =========================================================
 
+    // NEU: Zentrale Funktion für Verbands-Logik
+    // Setzt den Namen (z.B. "DLRG") und sperrt das Feld, oder gibt es frei.
+    function checkVerbandInput(selectEl) {
+        const cell = selectEl.closest('td');
+        const inputEl = cell.querySelector('input[type="text"]');
+        if (!inputEl) return;
+
+        const selectedOption = selectEl.options[selectEl.selectedIndex];
+        // Das neue Attribut aus dem HTML/Twig auslesen
+        const verbandName = selectedOption.getAttribute('data-verband');
+
+        if (verbandName) {
+            // Es ist ein Verband: Name eintragen und Feld sperren
+            inputEl.value = verbandName;
+            inputEl.disabled = true;
+            inputEl.classList.add('bg-light'); // Optional: optisches Feedback
+        } else {
+            // Kein Verband: Feld freigeben
+            // Wir leeren das Feld NICHT automatisch, falls der User sich verklickt hat,
+            // außer es steht noch ein alter Verbandsname drin (optional, hier einfach enable)
+            inputEl.disabled = false;
+            inputEl.classList.remove('bg-light');
+        }
+    }
+
     // Farben und Medaillenklassen setzen (Disziplinen)
     function handleDisciplineColors(data, cell, row, kat, el) {
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
         const isSelect = (el.tagName === 'SELECT');
 
-        // Verbandslogik
-        if (data.points === 3 && data.stufe === 'gold' && isSelect) {
-            const selectedOption = selectEl.options[selectEl.selectedIndex];
-            if (selectedOption && selectedOption.getAttribute('data-calc') === 'VERBAND') {
-                if(inputEl) {
-                    inputEl.value = ''; 
-                    inputEl.disabled = true;
-                    inputEl.placeholder = 'Verband';
-                }
-            }
-        } else if (isSelect && inputEl) {
-            inputEl.disabled = false;
-            inputEl.placeholder = '';
-        }
-
-        // Klassen aktualisieren
+        // Klassen aktualisieren (Farben)
         const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
         [selectEl, inputEl].forEach(element => {
             if(element) {
@@ -201,11 +206,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // WICHTIG: Nach dem Speichern sicherstellen, dass Verbands-Felder korrekt bleiben
+        if (isSelect) {
+            checkVerbandInput(selectEl);
+        }
+
         // Konflikte bereinigen (andere Felder der gleichen Kategorie leeren)
         if (isSelect && kat) {
             row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
                 if (otherEl.closest('td') !== cell) {
-                    if (otherEl.tagName === 'INPUT') otherEl.value = '';
+                    if (otherEl.tagName === 'INPUT') {
+                        otherEl.value = '';
+                        otherEl.disabled = false; // Andere Felder wieder freigeben
+                        otherEl.classList.remove('bg-light');
+                    }
                     otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                     otherEl.classList.add('medal-none');
                 }
@@ -213,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // UPDATE UI (Medaillen, Punkte, Schwimmen) - OPTIMIERT
+    // UPDATE UI (Medaillen, Punkte, Schwimmen)
     function updateUIWidgets(epId, row, data) {
         
         // A. Gesamtpunkte
@@ -245,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // C. Schwimm-Bereich (Layout Anpassung)
+        // C. Schwimm-Bereich
         const wrapper = document.getElementById('swimming-wrapper-' + epId);
         if (wrapper) {
             const badgeCont = wrapper.querySelector('.swim-badge-container');
@@ -256,17 +270,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasSwimming = (data.has_swimming === true);
 
             if (hasSwimming) {
-                // Anzeigen: Badge / Verstecken: Dropdown
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont)  dropCont.classList.add('d-none');
-                
-                // Text Update
                 if(infoText && data.swimming_met_via) {
                     infoText.textContent = data.swimming_met_via;
-                    infoText.title = data.swimming_met_via; // Tooltip
+                    infoText.title = data.swimming_met_via;
                 }
             } else {
-                // Anzeigen: Dropdown / Verstecken: Badge
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont)  dropCont.classList.remove('d-none');
                 if(select)    select.value = ""; 
@@ -281,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!parentTd || !opt) return;
 
         const labels = {
-            b: parentTd.querySelector('.req-val-b'), // Selektoren angepasst an HTML/CSS
+            b: parentTd.querySelector('.req-val-b'),
             s: parentTd.querySelector('.req-val-s'),
             g: parentTd.querySelector('.req-val-g'),
             unit: parentTd.querySelector('.req-unit')
@@ -295,13 +305,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const input = parentTd.querySelector('input[data-type="leistung"]');
 
         if (!opt.value) {
-            // Leere Anzeige
             Object.values(labels).forEach(l => l && (l.textContent = (l === labels.unit ? '' : '-')));
             if(input) input.disabled = true;
             return;
         }
 
-        if(input) input.disabled = (opt.getAttribute('data-calc') === 'VERBAND');
+        // Hier nur Hinweise updaten. Disable/Enable übernimmt jetzt checkVerbandInput!
         
         if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
         if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';

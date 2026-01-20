@@ -18,6 +18,8 @@
     'UNIT_MINUTES': 'Min.',
     'UNIT_HOURS': 'Std.',
     'UNIT_NUMBER': 'Anz.'
+    'UNIT_PIECES': 'Wert'
+    'NONE': 'Verband'
 } %}
 
 <div class="container-fluid mt-3">
@@ -262,6 +264,10 @@
                                                             {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
                                                             data-unit="{{ cleanUnit }}"
                                                             data-calc="{{ req.discipline.calculation_type|default('') }}"
+                                                            
+                                                            {# NEU: Hier den Verbandsnamen hinterlegen #}
+                                                            data-verband="{{ req.discipline.verband|default('') }}" 
+                                                            
                                                             data-bronze="{{ req.bronze }}"
                                                             data-silber="{{ req.silver }}"
                                                             data-gold="{{ req.gold }}">
