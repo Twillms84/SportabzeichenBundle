@@ -387,7 +387,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
             JOIN users u ON u.importid = p.import_id
             WHERE ep.exam_id = :examId 
-              AND ep.final_medal IN ('bronze', 'silber', 'gold')
+              AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
         ";
         
         $params = [
