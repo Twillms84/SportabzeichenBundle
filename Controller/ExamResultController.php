@@ -43,7 +43,6 @@ final class ExamResultController extends AbstractPageController
     /**
      * Hauptansicht der Ergebnisse für eine Prüfung
      */
-
     #[Route('/exam/{id}', name: 'index', methods: ['GET'])]
     public function index(Exam $exam, Request $request): Response
     {
@@ -172,70 +171,84 @@ final class ExamResultController extends AbstractPageController
      * AJAX-Speicherung einer Disziplinwahl + Leistung
      */
     #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
-public function saveExamDiscipline(Request $request): JsonResponse
-{
-    $data = json_decode($request->getContent(), true);
-    
-    // Eager Loading: Wir laden ep, participant (p), user (u) und exam (ex) in einem Rutsch
-    $ep = $this->em->createQueryBuilder()
-        ->select('ep', 'p', 'u', 'ex')
-        ->from(ExamParticipant::class, 'ep')
-        ->join('ep.participant', 'p')
-        ->join('p.user', 'u')
-        ->join('ep.exam', 'ex')
-        ->where('ep.id = :id')
-        ->setParameter('id', (int)($data['ep_id'] ?? 0))
-        ->getQuery()
-        ->getOneOrNullResult();
+    public function saveExamDiscipline(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        
+        // Eager Loading: Wir laden ep, participant (p), user (u) und exam (ex) in einem Rutsch
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p', 'u', 'ex')
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->join('p.user', 'u')
+            ->join('ep.exam', 'ex')
+            ->where('ep.id = :id')
+            ->setParameter('id', (int)($data['ep_id'] ?? 0))
+            ->getQuery()
+            ->getOneOrNullResult();
 
-    if (!$ep) {
-        return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-    }
-
-    $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-    if (!$discipline) {
-        return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
-    }
-
-    // 1. Bereinigung der alten Disziplin in dieser Kategorie
-    $currentCat = $discipline->getCategory();
-    foreach ($ep->getResults() as $existingRes) {
-        if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-            $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
-            $this->em->remove($existingRes);
+        if (!$ep) {
+            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
         }
+
+        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+        if (!$discipline) {
+            return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+        }
+
+        // 1. Bereinigung der alten Disziplin in dieser Kategorie
+        $currentCat = $discipline->getCategory();
+        foreach ($ep->getResults() as $existingRes) {
+            if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
+                $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
+                $this->em->remove($existingRes);
+            }
+        }
+        // Flush hier wichtig, um Platz für das neue Result zu machen (Unique Constraints)
+        $this->em->flush(); 
+
+        // 2. Berechnung & Speicherung
+        $leistung = $this->formatLeistung($data['leistung'] ?? null);
+        
+        // getGenderString greift jetzt auf den fertig geladenen User zu
+        $pData = $this->service->calculateResult(
+            $discipline, 
+            (int)$ep->getExam()->getYear(), 
+            $this->getGenderString($ep), 
+            (int)$ep->getAgeYear(), 
+            $leistung
+        );
+
+        $newResult = new ExamResult();
+        $newResult->setExamParticipant($ep);
+        $newResult->setDiscipline($discipline);
+
+        // FIX: Unterscheidung zwischen DLRG (NONE) und Turnen (PIECES)
+        // Nur wenn die Unit wirklich 'NONE' ist, setzen wir pauschal 1.0.
+        // Turnen hat einen Verband, aber eine echte Unit -> Eingabe verwenden.
+        $unit = $discipline->getUnit();
+        $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
+        
+        if ($isUnitNone) {
+            // DLRG: Automatisch 1.0 (Gold)
+            $newResult->setLeistung(1.0);
+        } else {
+            // Turnen / Laufen: Echte Eingabe (oder 0.0 wenn leer)
+            $newResult->setLeistung($leistung ?? 0.0);
+        }
+
+        $newResult->setPoints($pData['points']);
+        $newResult->setStufe($pData['stufe']);
+        $this->em->persist($newResult);
+
+        // 3. Schwimm-Proof Update (Automatischer Haken durch Disziplin)
+        $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? false);
+
+        $this->em->flush();
+        
+        return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
     }
-    // Flush hier wichtig, um Platz für das neue Result zu machen (Unique Constraints)
-    $this->em->flush(); 
 
-    // 2. Berechnung & Speicherung
-    $leistung = $this->formatLeistung($data['leistung'] ?? null);
-    
-    // getGenderString greift jetzt auf den fertig geladenen User zu
-    $pData = $this->service->calculateResult(
-        $discipline, 
-        (int)$ep->getExam()->getYear(), 
-        $this->getGenderString($ep), 
-        (int)$ep->getAgeYear(), 
-        $leistung
-    );
-
-    $newResult = new ExamResult();
-    $newResult->setExamParticipant($ep);
-    $newResult->setDiscipline($discipline);
-    // Verbands-Disziplinen (z.B. Schwimmabzeichen) bekommen pauschal 1.0 Leistung
-    $newResult->setLeistung(!empty($discipline->getVerband()) ? 1.0 : ($leistung ?? 0.0));
-    $newResult->setPoints($pData['points']);
-    $newResult->setStufe($pData['stufe']);
-    $this->em->persist($newResult);
-
-    // 3. Schwimm-Proof Update (Automatischer Haken durch Disziplin)
-    $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? false);
-
-    $this->em->flush();
-    
-    return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
-}
     /**
      * Speichert die reine Leistung (Update eines Textfeldes)
      */
@@ -266,6 +279,15 @@ public function saveExamDiscipline(Request $request): JsonResponse
         }
 
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
+
+        // FIX: Sicherheitshalber auch hier prüfen, falls Frontend 'disabled' Feld nicht sendet
+        $unit = $discipline->getUnit();
+        $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
+        
+        if ($isUnitNone) {
+            $leistung = 1.0; // Erzwinge Gold-Wert bei DLRG, egal was reinkommt
+        }
+
         $result = $this->em->getRepository(ExamResult::class)->findOneBy([
             'examParticipant' => $ep, 
             'discipline' => $discipline
@@ -449,16 +471,20 @@ public function saveExamDiscipline(Request $request): JsonResponse
                 if (isset($catMap[$res['kategorie']])) {
                     $idx = $catMap[$res['kategorie']];
                     
-                    // --- NEUE LOGIK START ---
+                    // --- NEUE LOGIK START (KORRIGIERT) ---
                     
-                    if (!empty($res['verband'])) {
-                        // FALL 1: Verbandsabzeichen
+                    // Wir brauchen auch hier den Check auf NONE
+                    $unit = $res['einheit']; // Kommt aus dem SQL Select
+                    $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
+
+                    if (!empty($res['verband']) && $isUnitNone) {
+                        // FALL 1: ECHTES Verbandsabzeichen (DLRG, etc.)
                         // Ziffer = A
-                        // Ergebnis = Name des Verbands (z.B. "DLRG", "Fußball")
+                        // Ergebnis = Name des Verbands
                         $displayNr = 'A';
                         $displayRes = $res['verband'];
                     } else {
-                        // FALL 2: Normale Disziplin
+                        // FALL 2: Normale Disziplin ODER Turnen (hat Verband, aber auch Einheit)
                         $einheit = $unitMap[$res['einheit']] ?? '';
                         $displayNr = $res['auswahlnummer'] ?? '-';
                         
@@ -500,5 +526,4 @@ public function saveExamDiscipline(Request $request): JsonResponse
             'today' => new \DateTime(),
         ]);
     }
-
 }
