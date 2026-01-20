@@ -6,6 +6,17 @@
 {% block stylesheets %}
     {{ parent() }}
     <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
+    
+    {# WICHTIG: Das hier sorgt dafür, dass die Spalten wirklich ausgeblendet werden #}
+    <style>
+        .col-hidden {
+            display: none !important;
+        }
+        /* Optional: Leichter Fade-Effekt für Spalten */
+        .col-discipline {
+            transition: opacity 0.2s ease;
+        }
+    </style>
 {% endblock %}
 
 {% block content %}
@@ -19,14 +30,6 @@
     'UNIT_HOURS': 'Std.',
     'UNIT_NUMBER': 'Anz.'
 } %}
-
-{# Prüfen, ob Schwimmen existiert (um Spalte/Schalter anzuzeigen) #}
-{% set hasSwimmingCategory = false %}
-{% for cat in disciplines|keys %}
-    {% if cat|upper in ['SWIMMING', 'SCHWIMMEN'] %}
-        {% set hasSwimmingCategory = true %}
-    {% endif %}
-{% endfor %}
 
 <div class="container-fluid mt-3">
     
@@ -43,10 +46,12 @@
                 </button>
                 <ul class="dropdown-menu">
                     {% for category in disciplines|keys %}
+                        {# Schwimmen ignorieren wir hier, da es eine Sonderrolle hat #}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                             <li>
                                 <div class="dropdown-item">
                                     <div class="form-check">
+                                        {# WICHTIG: data-category muss exakt zum Klassennamen unten passen #}
                                         <input class="form-check-input js-col-toggle" type="checkbox" 
                                                value="{{ category }}" 
                                                id="check-{{ category }}" 
@@ -64,7 +69,6 @@
             {# Filter: Klasse #}
             {% if classes|length > 0 %}
                 <form method="get" class="d-flex gap-1 align-items-center">
-                    {# Sortierung beibehalten #}
                     <input type="hidden" name="sort" value="{{ app.request.query.get('sort') }}">
                     <input type="hidden" name="order" value="{{ app.request.query.get('order') }}">
                     
@@ -130,9 +134,10 @@
                             </a>
                         </th>
 
-                        {# SPALTEN: DISZIPLINEN #}
+                        {# SPALTEN: DISZIPLINEN KÖPFE #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
+                                {# WICHTIG: col-cat-{{ category }} für JS Toggle #}
                                 <th class="col-discipline col-cat-{{ category }}">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
@@ -143,6 +148,7 @@
                     {% set epResults = results[p.ep_id] ?? {} %}
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
+                        {# 1. TEILNEHMER INFOS #}
                         <td class="col-name py-2">
                             <div class="name-container">
                                 <span class="name-main fw-bold">{{ p.vorname }} {{ p.nachname }}</span>
@@ -180,22 +186,22 @@
                                     {% endif %}
 
                                     <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
-                                        id="final-medal-{{ p.ep_id }}"
-                                        style="min-width: 70px;">
+                                         id="final-medal-{{ p.ep_id }}"
+                                         style="min-width: 70px;">
                                         <div class="small text-uppercase opacity-75" style="font-size: 0.65rem;">Medaille</div>
                                         <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
                                     </div>
                                 </div>
 
+                                {# Schwimmen Bereich #}
                                 <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
                                     <div class="swim-badge-container {% if not p.has_swimming %}d-none{% endif %}">
                                         <span class="badge badge-success js-swim-info">
-                                            {# Wenn swimming_met_via leer ist, zeigen wir nichts oder einen Platzhalter #}
                                             {{ p.swimming_met_via ? p.swimming_met_via : 'Erledigt' }}
                                         </span>
                                     </div>
 
-                                    {# 2. DROPDOWN (Nur anzeigen, wenn has_swimming FALSCH ist) #}
+                                    {# Dropdown für Schwimmen #}
                                     <div class="swim-dropdown-container {% if p.has_swimming %}d-none{% endif %}">
                                         <select class="form-control form-control-sm swimming-select-compact" 
                                                 data-ep-id="{{ p.ep_id }}"
@@ -208,7 +214,7 @@
                                         </select>
                                     </div>
 
-                                    {# 3. BUTTON (Immer da) #}
+                                    {# Delete Button #}
                                     <button type="button" 
                                             class="btn-delete-swimming js-delete-swimming"
                                             data-ep-id="{{ p.ep_id }}"
@@ -219,55 +225,54 @@
                             </div>
                         </td>
 
-                        {# 3. DISZIPLINEN (Iteriert über Kategorien) #}
+                        {# 2. DISZIPLINEN (Loop über Kategorien) #}
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                {# --- LOGIK: Optionen sammeln (Fix für "Key does not exist") --- #}
-                                {% set options = [] %}
-                                {% set pGender = p.geschlecht %} 
-                                
-                                {# Wir iterieren über Disziplinen -> Requirements #}
-                                {% for discipline in items %}
-                                    {% if discipline.requirements is defined %}
-                                        {% for req in discipline.requirements %}
-                                            {# Prüfen: Passt das Requirement zu Geschlecht und Alter? #}
-                                            {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                                {# Merge: Discipline-Info in req speichern für Zugriff #}
-                                                {% set combo = req|merge({'discipline': discipline}) %}
-                                                {% set options = options|merge([combo]) %}
-                                            {% endif %}
-                                        {% endfor %}
-                                    {% endif %}
-                                {% endfor %}
-
-                                {# --- LOGIK: Welches Ergebnis anzeigen? --- #}
-                                {% set selectedReq = null %}
-                                {% set resObj = null %}
-
-                                {# Prüfen ob Ergebnis existiert #}
-                                {% for req in options %}
-                                    {% if epResults[req.discipline.id] is defined %}
-                                        {% set selectedReq = req %}
-                                        {% set resObj = epResults[req.discipline.id] %}
-                                    {% endif %}
-                                {% endfor %}
-
-                                {# Fallback: Erste Option wählen #}
-                                {% if selectedReq is null and options|length > 0 %}
-                                    {% set selectedReq = options[0] %}
-                                {% endif %}
-                                
-                                {# CSS Klasse für Medaille #}
-                                {% set mClass = 'medal-none' %}
-                                {% if resObj %}
-                                    {% if resObj.points == 3 %}{% set mClass = 'medal-gold' %}
-                                    {% elseif resObj.points == 2 %}{% set mClass = 'medal-silber' %}
-                                    {% elseif resObj.points == 1 %}{% set mClass = 'medal-bronze' %}
-                                    {% endif %}
-                                {% endif %}
-
+                                {# WICHTIG: col-cat-{{ category }} muss auch hier sein #}
                                 <td class="p-1 col-discipline col-cat-{{ category }}">
+                                    
+                                    {# --- LOGIK START: Optionen sammeln --- #}
+                                    {% set options = [] %}
+                                    {% set pGender = p.geschlecht %} 
+                                    
+                                    {% for discipline in items %}
+                                        {% if discipline.requirements is defined %}
+                                            {% for req in discipline.requirements %}
+                                                {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
+                                                    {% set combo = req|merge({'discipline': discipline}) %}
+                                                    {% set options = options|merge([combo]) %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# --- LOGIK: Aktuelles Ergebnis finden --- #}
+                                    {% set selectedReq = null %}
+                                    {% set resObj = null %}
+
+                                    {% for req in options %}
+                                        {% if epResults[req.discipline.id] is defined %}
+                                            {% set selectedReq = req %}
+                                            {% set resObj = epResults[req.discipline.id] %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {# Fallback: Erste Option #}
+                                    {% if selectedReq is null and options|length > 0 %}
+                                        {% set selectedReq = options[0] %}
+                                    {% endif %}
+                                    
+                                    {# CSS Klasse für Input Farbe #}
+                                    {% set mClass = 'medal-none' %}
+                                    {% if resObj %}
+                                        {% if resObj.points == 3 %}{% set mClass = 'medal-gold' %}
+                                        {% elseif resObj.points == 2 %}{% set mClass = 'medal-silber' %}
+                                        {% elseif resObj.points == 1 %}{% set mClass = 'medal-bronze' %}
+                                        {% endif %}
+                                    {% endif %}
+                                    {# --- LOGIK ENDE --- #}
+
                                     <div class="d-flex flex-column">
                                         
                                         {# SELECT BOX #}
@@ -281,12 +286,12 @@
                                                 <option value="">--</option>
                                             {% else %}
                                                 {% for req in options %}
-                                                    {# Key-Check: 'unit' (aus error log) oder 'einheit' (legacy) #}
                                                     {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
                                                     
                                                     <option value="{{ req.discipline.id }}" 
                                                             {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
                                                             data-unit="{{ cleanUnit }}"
+                                                            data-calc="{{ req.discipline.calculation_type|default('') }}"
                                                             data-bronze="{{ req.bronze }}"
                                                             data-silber="{{ req.silver }}"
                                                             data-gold="{{ req.gold }}">
@@ -306,14 +311,14 @@
                                                    data-type="leistung" 
                                                    data-kategorie="{{ category }}">
 
-                                            {# WICHTIG: Das Unit-Span muss da sein, sonst könnte JS abstürzen #}
-                                            <span class="input-group-text px-1 text-muted" style="font-size: 0.7rem;">
+                                            {# WICHTIG: Klassen 'js-unit-label' und 'input-group-text-unit' für JS hinzugefügt #}
+                                            <span class="input-group-text px-1 text-muted js-unit-label input-group-text-unit" style="font-size: 0.7rem;">
                                                 {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? '' %}
                                                 {{ currentUnit }}
                                             </span>
                                         </div>
 
-                                        {# HINTS (B/S/G) #}
+                                        {# HINTS (Bronze/Silber/Gold) #}
                                         <div class="req-hint">
                                             <span class="req-val-b" title="Bronze">B:<span class="js-val-b">{{ selectedReq ? selectedReq.bronze : '-' }}</span></span>
                                             <span class="req-val-s" title="Silber">S:<span class="js-val-s">{{ selectedReq ? selectedReq.silver : '-' }}</span></span>
