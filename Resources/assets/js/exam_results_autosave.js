@@ -1,48 +1,66 @@
 document.addEventListener('DOMContentLoaded', function() {
+
+    // =========================================================
+    // 1. SPALTEN FILTER (NEU: Select2 / Combobox Logic)
+    // =========================================================
     
-    // =========================================================
-    // 1. SPALTEN FILTER (ANSICHT)
-    // =========================================================
-    const colToggles = document.querySelectorAll('.js-col-toggle');
+    // Da IServ Select2 (jQuery) nutzt, verwenden wir hier $ für den Selektor
+    const $colSelector = $('#columnSelector');
 
-    function toggleColumn(category, isVisible) {
-        // Sucht alle Zellen (TH und TD) dieser Kategorie
-        const cells = document.querySelectorAll(`.col-cat-${category}`);
-        cells.forEach(cell => {
-            if (isVisible) {
-                cell.classList.remove('col-hidden');
-            } else {
-                cell.classList.add('col-hidden');
-            }
-        });
-        // Speichern für UX
-        localStorage.setItem('sportabzeichen_col_' + category, isVisible);
-    }
-
-    // Initialisierung der Filter
-    colToggles.forEach(toggle => {
-        const category = toggle.dataset.category;
+    if ($colSelector.length) {
         
-        // Gespeicherten Status laden
-        const savedState = localStorage.getItem('sportabzeichen_col_' + category);
-        if (savedState !== null) {
-            const isChecked = savedState === 'true';
-            toggle.checked = isChecked;
-            toggleColumn(category, isChecked);
+        // A) Status aus LocalStorage wiederherstellen
+        const savedState = localStorage.getItem('sportabzeichen_view_cols');
+        
+        if (savedState) {
+            try {
+                const selectedCols = JSON.parse(savedState);
+                // Setze die Werte in der Multiselect-Box und triggere das Update
+                $colSelector.val(selectedCols).trigger('change'); 
+            } catch (e) {
+                console.error('Fehler beim Laden der Ansicht:', e);
+            }
         }
 
-        // Event Listener
-        toggle.addEventListener('change', function() {
-            toggleColumn(category, this.checked);
+        // B) Change Listener (feuert bei Auswahl & Abwahl)
+        $colSelector.on('change', function() {
+            // Hole Array der ausgewählten Werte (z.B. ['Ausdauer', 'Kraft'])
+            // Fallback auf leeres Array, falls alles abgewählt ist
+            const selectedCategories = $(this).val() || [];
+
+            // Speichern für den nächsten Besuch
+            localStorage.setItem('sportabzeichen_view_cols', JSON.stringify(selectedCategories));
+
+            // UI Update: Wir gehen ALLE verfügbaren Optionen durch
+            $('#columnSelector option').each(function() {
+                const category = $(this).val();
+                
+                // Alle Tabellenzellen (th und td) dieser Kategorie suchen
+                // Wir nutzen hier natives JS für Performance
+                const cells = document.querySelectorAll('.col-cat-' + category);
+                
+                if (selectedCategories.includes(category)) {
+                    // Ist ausgewählt -> Anzeigen
+                    cells.forEach(cell => cell.classList.remove('col-hidden'));
+                } else {
+                    // Ist NICHT ausgewählt -> Ausblenden
+                    cells.forEach(cell => cell.classList.add('col-hidden'));
+                }
+            });
         });
-    });
+        
+        // Initial einmal ausführen, damit die Tabelle zum Start stimmt
+        // (falls LocalStorage leer war, nimmt er die Standard-Auswahl aus dem HTML)
+        $colSelector.trigger('change');
+    }
 
 
     // =========================================================
-    // 2. AUTOSAVE FORMULAR LOGIK
+    // 2. AUTOSAVE FORMULAR LOGIK (Unverändert)
     // =========================================================
     const form = document.getElementById('autosave-form');
-    if (!form) return;
+    // Abbrechen, wenn Formular nicht existiert (z.B. auf anderen Seiten)
+    if (!form) return; 
 
     // Routen aus dem Formular-Tag lesen
     const disciplineRoute = form.getAttribute('data-discipline-route'); 
@@ -157,9 +175,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok' || data.success) {
-                // UI Reset für Schwimmbereich wird in updateUIWidgets behandelt
-                // oder wir machen hier einen manuellen Reset, falls nötig.
-                // updateUIWidgets ist robuster:
                 const row = btn.closest('tr');
                 updateUIWidgets(epId, row, data);
             }
@@ -227,20 +242,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // A. Gesamtpunkte
         const totalBadge = document.getElementById('total-points-' + epId);
         if (totalBadge && data.total_points !== undefined) {
-            totalBadge.textContent = data.total_points; // Achtung: Wenn HTML Struktur im Badge geändert wurde, ggf. inneren Span suchen!
-            // Falls du <div id="..."><span class="pts-val">...</span></div> hast:
-            // const valSpan = totalBadge.querySelector('.pts-val');
-            // if(valSpan) valSpan.textContent = data.total_points;
-            // else totalBadge.textContent = data.total_points;
+            totalBadge.textContent = data.total_points;
         }
 
-        // B. Medaille (NEUES DESIGN)
+        // B. Medaille
         const medalBadge = document.getElementById('final-medal-' + epId);
         if (medalBadge) {
             const medal = data.final_medal ? String(data.final_medal).toLowerCase() : 'none';
             const labelEl = medalBadge.querySelector('.medal-label');
 
-            // Reset Klassen (Basis-Klasse behalten)
             medalBadge.className = 'result-badge-box rounded px-2 py-1 text-center js-medal-badge';
 
             if (medal === 'gold') {
@@ -253,7 +263,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 medalBadge.classList.add('bg-bronze', 'text-white', 'border-bronze');
                 if(labelEl) labelEl.textContent = 'Bronze';
             } else {
-                // Keine Medaille
                 medalBadge.classList.add('bg-light', 'text-muted', 'border');
                 if(labelEl) labelEl.textContent = '-';
             }
@@ -267,7 +276,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const infoText  = wrapper.querySelector('.js-swim-info');
             const select    = wrapper.querySelector('select');
 
-            // Wenn has_swimming true ist ODER swimming_met_via Daten enthält
             const hasSwimming = (data.has_swimming === true);
 
             if (hasSwimming) {
@@ -278,10 +286,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     infoText.textContent = data.swimming_met_via;
                 }
             } else {
-                // Zurücksetzen
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont)  dropCont.classList.remove('d-none');
-                if(select)    select.value = ""; // Dropdown reset
+                if(select)    select.value = ""; 
             }
         }
     }
@@ -298,9 +305,8 @@ document.addEventListener('DOMContentLoaded', function() {
             b: parentTd.querySelector('.js-val-b'),
             s: parentTd.querySelector('.js-val-s'),
             g: parentTd.querySelector('.js-val-g'),
-            unit: parentTd.querySelector('.input-group-text-unit') // Achte auf Klasse!
+            unit: parentTd.querySelector('.input-group-text-unit')
         };
-        // Fallback falls Unit Label anders heißt
         if (!labels.unit) labels.unit = parentTd.querySelector('.js-unit-label');
 
         const input = parentTd.querySelector('input[data-type="leistung"]');
@@ -317,9 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
         if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
         
-        // Einheit (Unit) aktualisieren
         if(labels.unit) {
-            // Mapping kann hier oder im Twig passieren. Wenn im Twig data-unit="m" steht:
             labels.unit.textContent = opt.getAttribute('data-unit') || '';
         }
     }
