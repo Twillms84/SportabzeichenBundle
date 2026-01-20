@@ -270,9 +270,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasSwimming = (data.has_swimming === true);
 
             if (hasSwimming) {
-                if(badgeCont) badgeCont.classList.remove('d-none');
-                if(dropCont)  dropCont.classList.add('d-none');
+                if(badgeCont) {
+                    badgeCont.classList.remove('d-none');
+                    
+                    // NEU: Update des Tooltips für Mobile (title Attribut am Container)
+                    if (data.swimming_met_via) {
+                        badgeCont.setAttribute('title', data.swimming_met_via);
+                        // Falls du Bootstrap Tooltips per JS initialisierst, hier ggf. refresh
+                    }
+                }
+                if(dropCont) dropCont.classList.add('d-none');
                 
+                // Update Text für Desktop
                 if(infoText && data.swimming_met_via) {
                     infoText.textContent = data.swimming_met_via;
                 }
