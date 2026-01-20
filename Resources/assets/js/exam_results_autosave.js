@@ -168,26 +168,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // NEU: Zentrale Funktion für Verbands-Logik
     // Setzt den Namen (z.B. "DLRG") und sperrt das Feld, oder gibt es frei.
+    // NEU: Präzisere Prüfung
     function checkVerbandInput(selectEl) {
         const cell = selectEl.closest('td');
         const inputEl = cell.querySelector('input[type="text"]');
         if (!inputEl) return;
 
         const selectedOption = selectEl.options[selectEl.selectedIndex];
-        // Das neue Attribut aus dem HTML/Twig auslesen
+        
         const verbandName = selectedOption.getAttribute('data-verband');
+        const calcType    = selectedOption.getAttribute('data-calc'); // Das ist neu!
 
-        if (verbandName) {
-            // Es ist ein Verband: Name eintragen und Feld sperren
+        // WICHTIG: Wir sperren nur, wenn der Berechnungstyp explizit 'VERBAND' ist.
+        // Das verhindert, dass Turnen (4.2.6.1) gesperrt wird.
+        if (calcType === 'VERBAND' && verbandName) {
             inputEl.value = verbandName;
             inputEl.disabled = true;
-            inputEl.classList.add('bg-light'); // Optional: optisches Feedback
+            inputEl.classList.add('bg-light');
         } else {
-            // Kein Verband: Feld freigeben
-            // Wir leeren das Feld NICHT automatisch, falls der User sich verklickt hat,
-            // außer es steht noch ein alter Verbandsname drin (optional, hier einfach enable)
+            // Bei Turnen oder anderen Disziplinen:
+            // Input freigeben und NICHT überschreiben (damit man 12 Stück eintragen kann)
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
+            
+            // Falls versehentlich der Verbandsname da drin stand, leeren wir es, 
+            // aber nur wenn es genau dem Verbandsnamen entspricht.
+            if (inputEl.value === verbandName) {
+                inputEl.value = '';
+            }
         }
     }
 
