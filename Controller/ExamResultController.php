@@ -343,7 +343,7 @@ public function saveExamDiscipline(Request $request): JsonResponse
     }
 
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
-    public function printGroupcard(int $examId, Request $request, Connection $conn): Response
+    public function printGroupcard(int $examId, Request $request): Response
     {
     $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
     $selectedClass = $request->query->get('class');
