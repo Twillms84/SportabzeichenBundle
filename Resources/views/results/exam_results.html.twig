@@ -41,23 +41,25 @@
             
             {# Ansicht: Spalten Filter #}
             <div class="dropdown">
-                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                     {{ icon('eye')|raw }} Ansicht
                 </button>
                 <ul class="dropdown-menu">
+                    <li class="dropdown-header">Spalten anzeigen</li>
                     {% for category in disciplines|keys %}
-                        {# Schwimmen ignorieren wir hier, da es eine Sonderrolle hat #}
+                        {# Schwimmen ignorieren wir hier evtl. oder behandeln es separat #}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                             <li>
                                 <div class="dropdown-item">
                                     <div class="form-check">
-                                        {# WICHTIG: data-category muss exakt zum Klassennamen unten passen #}
                                         <input class="form-check-input js-col-toggle" type="checkbox" 
                                                value="{{ category }}" 
                                                id="check-{{ category }}" 
-                                               data-category="{{ category }}" 
+                                               data-category="{{ category }}"
                                                checked>
-                                        <label class="form-check-label" for="check-{{ category }}">{{ category }}</label>
+                                        <label class="form-check-label" for="check-{{ category }}">
+                                            {{ category }}
+                                        </label>
                                     </div>
                                 </div>
                             </li>
