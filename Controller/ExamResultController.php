@@ -86,7 +86,8 @@ final class ExamResultController extends AbstractPageController
             
             // Schwimmstatus prüfen (Gültigkeit oder aktuelles Jahr)
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
-                if ($proof->getExamYear() == $exam->getYear() || $proof->getValidUntil() >= $today) {
+                // Check: Prüfung im gleichen Jahr ODER noch gültig
+                if ($proof->getExamYear() == $exam->getYear() || ($proof->getValidUntil() && $proof->getValidUntil() >= $today)) {
                     $hasSwimming = true;
                     $metVia = $proof->getRequirementMetVia(); 
                     if ($swimmingExpiry === null || $proof->getValidUntil() > $swimmingExpiry) {
@@ -192,8 +193,7 @@ final class ExamResultController extends AbstractPageController
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                // Wenn das alte Ergebnis ein Schwimmnachweis war, setzen wir ihn sicherheitshalber auf 0 zurück,
-                // bevor wir das neue speichern.
+                // Wenn das alte Ergebnis ein Schwimmnachweis war, setzen wir ihn auf 0 (Löschen)
                 if ($existingRes->getDiscipline()->isSwimmingCategory()) {
                     $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
                 }
@@ -216,8 +216,7 @@ final class ExamResultController extends AbstractPageController
 
         if ($isVerband) {
             // FALL A: Verbandsabzeichen (DLRG, Schwimmabzeichen etc.)
-            // Wir gehen davon aus: Wenn es ausgewählt wurde, ist es Gold/Bestanden (3 Punkte).
-            // Wir ignorieren calculateResult, da es für "NONE" keine Tabellen gibt.
+            // Wenn ausgewählt, ist es Gold/Bestanden (3 Punkte).
             $points = 3; 
             $stufe = 'GOLD';
         } else {
@@ -252,26 +251,16 @@ final class ExamResultController extends AbstractPageController
         $this->em->persist($newResult);
 
         // -----------------------------------------------------------
-        // 4. Schwimm-Proof Update (FIXED)
+        // 4. Schwimm-Proof Update (KORRIGIERT)
         // -----------------------------------------------------------
         if ($discipline->isSwimmingCategory()) {
-            
-            // Datum bestimmen: 
-            // Wenn Punkte > 0 (Bronze/Silber/Gold oder Verband), MÜSSEN wir ein Datum setzen.
-            // Wir nehmen "Jetzt" (new DateTime), da $pData['req'] kein verlässliches Datum ist.
-            $proofDate = null;
-            
-            if ($points > 0) {
-                $proofDate = new \DateTime(); 
-            }
-
-            // Service Aufruf:
-            // Bei points=0 wird der Proof gelöscht/deaktiviert (Date ist dann egal/null).
-            // Bei points>0 wird er mit dem Datum $proofDate gesetzt.
-            $this->service->updateSwimmingProof($ep, $discipline, $points, $proofDate);
+            // Wir übergeben keine Requirements oder Datum manuell, 
+            // der Service kümmert sich um "confirmed_at" bei Punkten > 0.
+            $this->service->updateSwimmingProof($ep, $discipline, $points);
         }
 
         $this->em->flush();
+        $this->em->refresh($ep); // Entity neu laden vor Summary
         
         return $this->generateSummaryResponse($ep, $points, $stufe);
     }
@@ -310,7 +299,10 @@ final class ExamResultController extends AbstractPageController
         if ($leistung === null && !$isUnitNone) {
             // Wert gelöscht -> Ergebnis entfernen
             if ($result) {
-                $this->service->updateSwimmingProof($ep, $discipline, 0);
+                // Schwimmnachweis zurücknehmen
+                if ($discipline->isSwimmingCategory()) {
+                    $this->service->updateSwimmingProof($ep, $discipline, 0);
+                }
                 $this->em->remove($result);
             }
         } else {
@@ -322,22 +314,33 @@ final class ExamResultController extends AbstractPageController
                 $this->em->persist($result);
             }
 
-            $pData = $this->service->calculateResult(
-                $discipline,
-                (int)$ep->getExam()->getYear(),
-                $this->getGenderString($ep),
-                (int)$ep->getAgeYear(),
-                $leistung
-            );
+            // KORREKTUR: Auch hier Logik für Verbandsabzeichen (immer 3 Punkte/Gold)
+            if ($isUnitNone) {
+                $points = 3;
+                $stufe = 'GOLD';
+                // Kein Requirement-Objekt nötig
+                $reqObj = null;
+            } else {
+                $pData = $this->service->calculateResult(
+                    $discipline,
+                    (int)$ep->getExam()->getYear(),
+                    $this->getGenderString($ep),
+                    (int)$ep->getAgeYear(),
+                    $leistung
+                );
+                $points = $pData['points'];
+                $stufe = $pData['stufe'];
+                $reqObj = $pData['req'] ?? null;
+            }
 
             $result->setLeistung($leistung);
-            $result->setPoints($pData['points']);
-            $result->setStufe($pData['stufe']);
-            
-            $points = $pData['points'];
-            $stufe = $pData['stufe'];
+            $result->setPoints($points);
+            $result->setStufe($stufe);
 
-            $this->service->updateSwimmingProof($ep, $discipline, $points, $pData['req']);
+            // Update Schwimmnachweis
+            if ($discipline->isSwimmingCategory()) {
+                $this->service->updateSwimmingProof($ep, $discipline, $points, $reqObj);
+            }
         }
 
         $this->em->flush();
@@ -410,7 +413,7 @@ final class ExamResultController extends AbstractPageController
             // Ergebnisse laden (inkl. Verbands-Info)
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
-                       d.kategorie, d.einheit, d.name as d_name, d.verband
+                        d.kategorie, d.einheit, d.name as d_name, d.verband
                 FROM sportabzeichen_exam_results res
                 JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
                 LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
@@ -510,16 +513,24 @@ final class ExamResultController extends AbstractPageController
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe): JsonResponse
     {
+        // 1. Service aufrufen: Berechnet Total, Medaille und prüft Schwimmstatus neu
         $summary = $this->service->syncSummary($ep);
+        
         return new JsonResponse([
             'status' => 'ok',
+            
+            // Daten für das aktuelle Eingabefeld
             'points' => $points,
             'stufe' => $stufe,
-            'total_points' => $summary['total'],
-            'final_medal' => $summary['medal'],
-            'has_swimming' => $summary['has_swimming'],
-            'swimming_met_via' => $summary['met_via'] ?? ($summary['swimming_met_via'] ?? ''),
-            'swimming_expiry'  => $summary['expiry'] ?? ($summary['swimming_expiry'] ?? null),
+
+            // KORREKTUR: Keys so benennen, wie dein JavaScript ('updateUIWidgets') sie erwartet:
+            'total'         => $summary['total'],        // statt 'total_points'
+            'medal'         => $summary['medal'],        // statt 'final_medal'
+            'has_swimming'  => $summary['has_swimming'],
+            
+            // Optionale Daten
+            'swimming_met_via' => $summary['swimming_met_via'] ?? ($summary['met_via'] ?? ''),
+            'expiry'           => $summary['expiry'] ?? null,
         ]);
     }
 }
