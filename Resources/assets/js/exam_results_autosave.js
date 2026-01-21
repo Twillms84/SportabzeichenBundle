@@ -3,8 +3,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // =========================================================
     // 1. ANSICHT FILTER (Select2 / Category Logic)
     // =========================================================
-    const $viewSelector = $('#viewSelector'); // jQuery Annahme, sonst document.querySelector
-
+    const $viewSelector = $('#viewSelector'); // jQuery Annahme
+    
     if ($viewSelector.length) {
         $viewSelector.on('change', function() {
             const selectedCategories = $(this).val() || [];
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok' || data.success) {
-                const row = btn.closest('tr'); // Falls Widget im Row ist
+                const row = btn.closest('tr'); 
                 // Widget neu rendern
                 updateUIWidgets(epId, row, data);
             } else {
@@ -227,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
             
-            // Aufräumen, falls vorher Text drin stand
+            // Aufräumen, falls vorher Text drin stand (Verband -> Normal Wechsel)
             if (inputEl.value === verbandName || inputEl.value === 'Nachweis') {
                 inputEl.value = '';
             }
@@ -299,8 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const medalBadge = document.getElementById('final-medal-' + epId);
         if (medalBadge) {
             const medal = data.medal ? String(data.medal).toLowerCase() : 'none';
-            const labelEl = medalBadge.querySelector('.badge-label-small');
-
+            
             medalBadge.className = 'result-badge-box'; // Reset Basis-Klasse
             
             if (medal === 'gold') {
@@ -316,8 +315,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 medalBadge.classList.add('medal-none');
                 medalBadge.textContent = '-';
             }
-            // Falls du das Label (span) behalten willst, musst du es hier wieder einfügen
-            // oder textContent nur auf den TextNode anwenden.
         }
 
         // C. Schwimm-Container
@@ -349,6 +346,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /**
      * Zeigt Bronze/Silber/Gold Werte unter dem Input an.
+     * UPDATED: Blendet Werte bei Unit=NONE (Verband) aus.
      */
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
@@ -364,27 +362,40 @@ document.addEventListener('DOMContentLoaded', function() {
             unit: parentTd.querySelector('.req-unit, .input-group-text-unit')
         };
         
-        // Input freischalten/sperren
+        // Input Referenz
         const input = parentTd.querySelector('input[data-type="leistung"]');
 
         if (!opt || !opt.value) {
-            // Alles resetten
+            // Keine Auswahl -> Alles leeren
             Object.values(labels).forEach(l => l && (l.textContent = (l === labels.unit ? '' : '-')));
             if(input) input.disabled = true;
             return;
         }
 
-        // Werte aus HTML data-Attributen
-        if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
-        if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
-        if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
-        
-        if(labels.unit) {
-            const u = opt.getAttribute('data-unit');
-            const showUnit = (u && u !== 'NONE' && u !== 'UNIT_NONE');
-            labels.unit.textContent = showUnit ? u : '';
+        // Prüfen ob Verbandsabzeichen
+        const u = opt.getAttribute('data-unit');
+        const isVerband = (u === 'NONE' || u === 'UNIT_NONE');
+
+        if (isVerband) {
+            // Bei Verbandsabzeichen: Hints leeren, damit sie nicht unter "Nachweis" stehen
+            if(labels.b) labels.b.textContent = '';
+            if(labels.s) labels.s.textContent = '';
+            if(labels.g) labels.g.textContent = '';
+            if(labels.unit) labels.unit.textContent = '';
+        } else {
+            // Bei normalen Disziplinen: Werte anzeigen
+            if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
+            if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
+            if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
+            
+            if(labels.unit) {
+                const showUnit = (u && u !== 'NONE' && u !== 'UNIT_NONE');
+                labels.unit.textContent = showUnit ? u : '';
+            }
         }
         
-        if(input) input.disabled = false;
+        // Input Status wird final von checkVerbandInput geregelt, 
+        // aber hier schalten wir es prinzipiell an, falls es nicht NONE ist.
+        if(input && !isVerband) input.disabled = false;
     }
 });
