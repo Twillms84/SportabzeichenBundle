@@ -76,11 +76,11 @@ class SportabzeichenService
      */
     public function updateSwimmingProof(ExamParticipant $ep, Discipline $discipline, int $points, ?Requirement $req = null): void
     {
-        $examYear = $ep->getExam()->getYear();
+        // Sicherstellen, dass das Jahr ein Integer ist
+        $examYear = (int)$ep->getExam()->getYear();
         $participant = $ep->getParticipant();
 
-        // 1. Prüfen, ob dies überhaupt relevant für Schwimmen ist
-        // (Kategorie Schwimmen, ODER Verbandsabzeichen (DLRG), ODER explizites Requirement-Flag)
+        // 1. Relevanz prüfen
         $disciplineIsSwimming = method_exists($discipline, 'isSwimming') 
             ? $discipline->isSwimming() 
             : ($discipline->getCategory() === 'Schwimmen');
@@ -94,45 +94,58 @@ class SportabzeichenService
         }
 
         $repo = $this->em->getRepository(SwimmingProof::class);
-        $proof = $repo->findOneBy([
+        
+        // Wir suchen explizit nach einem Nachweis für DIESES Prüfungsjahr
+        $existingProof = $repo->findOneBy([
             'participant' => $participant,
             'examYear' => $examYear
         ]);
 
-        // Wir nutzen "DISCIPLINE:ID" als Marker, damit wir wissen, dass dieser Proof automatisch generiert wurde
         $proofIdentifier = 'DISCIPLINE:' . $discipline->getId();
 
+        // FALL A: Leistung erbracht (Punkte > 0)
         if ($points > 0) {
-            // --- FALL A: Gültige Leistung -> Nachweis erstellen/aktualisieren ---
             
-            if (!$proof) {
+            // Wenn es schon einen Nachweis für dieses Jahr gibt...
+            if ($existingProof) {
+                $via = $existingProof->getRequirementMetVia();
+                
+                // ... und dieser Nachweis NICHT von dieser Disziplin stammt (und nicht leer ist),
+                // dann brechen wir ab (Schutz vor Überschreiben manueller Nachweise).
+                if ($via && $via !== $proofIdentifier) {
+                    return;
+                }
+                
+                // Wenn er von dieser Disziplin ist (oder leer), aktualisieren wir ihn.
+                $proof = $existingProof;
+            } else {
+                // Kein Nachweis für dieses Jahr -> Neuen anlegen
                 $proof = new SwimmingProof();
                 $proof->setParticipant($participant);
-                $proof->setExamYear((string)$examYear);
+                // HIER WAR DER FEHLER: Wir übergeben jetzt int
+                $proof->setExamYear($examYear);
                 $this->em->persist($proof);
             }
 
             // Gültigkeit berechnen
-            // Erwachsene: 5 Jahre (Prüfungsjahr + 4)
-            // Kinder/Jugend: Gültig bis zum 18. Lebensjahr (bzw. max 5 Jahre, Logik hier: bis 18)
             $age = $ep->getAgeYear();
             $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
             
             $proof->setConfirmedAt(new \DateTime());
             $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
-            
-            // Text für die Anzeige (z.B. "Disziplin erfüllt")
             $proof->setRequirementMetVia($proofIdentifier);
 
             $this->em->flush();
 
-        } elseif ($points === 0 && $proof && $proof->getRequirementMetVia() === $proofIdentifier) {
-            // --- FALL B: Leistung gelöscht/0 Punkte -> Nachweis entfernen ---
+        } 
+        // FALL B: Leistung gelöscht / 0 Punkte
+        elseif ($points === 0 && $existingProof) {
             
-            // Aber NUR löschen, wenn der Nachweis auch von DIESER Disziplin kam.
-            // (Nicht dass wir einen manuell hochgeladenen DLRG-Schein löschen, nur weil jemand beim 200m Schwimmen versagt hat).
-            $this->em->remove($proof);
-            $this->em->flush();
+            // Nur löschen, wenn der Nachweis auch wirklich von DIESER Disziplin kam!
+            if ($existingProof->getRequirementMetVia() === $proofIdentifier) {
+                $this->em->remove($existingProof);
+                $this->em->flush();
+            }
         }
     }
 
