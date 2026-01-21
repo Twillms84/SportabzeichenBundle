@@ -103,10 +103,7 @@ class SportabzeichenService
                 $proof->setParticipant($participant);
                 $proof->setExamYear($examYear);
                 $this->em->persist($proof);
-                
                 // WICHTIG: Damit syncSummary im gleichen Request den Nachweis findet:
-                $proof->setParticipant($participant);
-                $this->em->persist($proof);
                 $this->em->flush();
             }
             
