@@ -176,63 +176,90 @@ final class ExamResultController extends AbstractPageController
      * AJAX-Speicherung: Wechsel der Disziplin + Berechnung
      */
     #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
-    public function saveExamDiscipline(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        
-        $ep = $this->getExamParticipant((int)($data['ep_id'] ?? 0));
-        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
+public function saveExamDiscipline(Request $request): JsonResponse
+{
+    $data = json_decode($request->getContent(), true);
+    
+    $ep = $this->getExamParticipant((int)($data['ep_id'] ?? 0));
+    if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
 
-        $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
+    $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
+    if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        // 1. Alte Ergebnisse dieser Kategorie entfernen
-        $currentCat = $discipline->getCategory();
-        foreach ($ep->getResults() as $existingRes) {
-            if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                // Falls vorher Schwimmen ausgewählt war, Proof entfernen
+    // -----------------------------------------------------------
+    // 1. Alte Ergebnisse dieser Kategorie aufräumen
+    // -----------------------------------------------------------
+    $currentCat = $discipline->getCategory();
+    foreach ($ep->getResults() as $existingRes) {
+        if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
+            
+            // FIX 1: Nur Resetten, wenn das alte Ergebnis auch wirklich Schwimmen war!
+            // Vorher hat er hier auch bei "Laufen" versucht, den Schwimmnachweis zu nullen -> Crash.
+            if ($existingRes->getDiscipline()->isSwimmingCategory()) {
+                // Wir übergeben 0 Punkte -> Service sollte Eintrag löschen oder zurücksetzen
                 $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
-                $this->em->remove($existingRes);
             }
+
+            $this->em->remove($existingRes);
         }
-        $this->em->flush(); 
-
-        // 2. Berechnung der Punkte
-        $leistung = $this->formatLeistung($data['leistung'] ?? null);
-        
-        $pData = $this->service->calculateResult(
-            $discipline, 
-            (int)$ep->getExam()->getYear(), 
-            $this->getGenderString($ep), 
-            (int)$ep->getAgeYear(), 
-            $leistung
-        );
-
-        $newResult = new ExamResult();
-        $newResult->setExamParticipant($ep);
-        $newResult->setDiscipline($discipline);
-
-        // Sonderfall: DLRG / Verbandsabzeichen (Einheit NONE) -> Wert immer 1.0 (Gold)
-        $unit = $discipline->getUnit();
-        $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
-        
-        if ($isUnitNone) {
-            $newResult->setLeistung(1.0); 
-        } else {
-            $newResult->setLeistung($leistung ?? 0.0);
-        }
-
-        $newResult->setPoints($pData['points']);
-        $newResult->setStufe($pData['stufe']);
-        $this->em->persist($newResult);
-
-        // 3. Schwimm-Proof Update (falls Disziplin = Schwimmen)
-        $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? null);
-
-        $this->em->flush();
-        
-        return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
     }
+    $this->em->flush(); 
+
+    // -----------------------------------------------------------
+    // 2. Berechnung der Punkte
+    // -----------------------------------------------------------
+    $leistung = $this->formatLeistung($data['leistung'] ?? null);
+    
+    $pData = $this->service->calculateResult(
+        $discipline, 
+        (int)$ep->getExam()->getYear(), 
+        $this->getGenderString($ep), 
+        (int)$ep->getAgeYear(), 
+        $leistung
+    );
+
+    $newResult = new ExamResult();
+    $newResult->setExamParticipant($ep);
+    $newResult->setDiscipline($discipline);
+
+    // Sonderfall: DLRG / Verbandsabzeichen (Einheit NONE) -> Wert immer 1.0 (Gold)
+    $unit = $discipline->getUnit();
+    $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
+    
+    if ($isUnitNone) {
+        $newResult->setLeistung(1.0); 
+    } else {
+        $newResult->setLeistung($leistung ?? 0.0);
+    }
+
+    $newResult->setPoints($pData['points']);
+    $newResult->setStufe($pData['stufe']);
+    $this->em->persist($newResult);
+
+    // -----------------------------------------------------------
+    // 3. Schwimm-Proof Update
+    // -----------------------------------------------------------
+    
+    // FIX 2: Nur ausführen, wenn die NEUE Disziplin auch Schwimmen ist
+    if ($discipline->isSwimmingCategory()) {
+        
+        // FIX 3: Datum darf niemals NULL sein (Constraint Violation im Log).
+        // Wenn calculateResult kein Datum liefert (z.B. bei manueller Eingabe), nehmen wir "Heute".
+        // Wir setzen das Datum nur, wenn auch Punkte erzielt wurden.
+        $points = $pData['points'];
+        $proofDate = null;
+
+        if ($points > 0) {
+            $proofDate = $pData['req'] ?? new \DateTime(); // Fallback auf Heute
+        }
+
+        $this->service->updateSwimmingProof($ep, $discipline, $points, $proofDate);
+    }
+
+    $this->em->flush();
+    
+    return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
+}
 
     /**
      * AJAX-Speicherung: Update reiner Leistungswert
