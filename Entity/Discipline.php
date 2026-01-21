@@ -85,23 +85,33 @@ class Discipline
     }
     public function isSwimmingCategory(): bool
     {
-        $matchesName = str_contains(strtolower($this->name ?? ''), 'schwimmen');
-        $matchesCategory = str_contains(strtolower($this->category ?? ''), 'schwimmen');
+        // 1. Check: Steht "Schwimmen" im Namen oder der Kategorie?
+        // Wir nutzen ?? '', falls name oder category null sind, um Fehler zu vermeiden.
+        $nameCheck = str_contains(strtolower($this->name ?? ''), 'schwimmen');
+        $catCheck  = str_contains(strtolower($this->category ?? ''), 'schwimmen');
 
-        if ($matchesName || $matchesCategory) {
+        if ($nameCheck || $catCheck) {
             return true;
         }
+
+        // 2. Check: Prüfen der Requirements (DB-Flag)
+        // Wir loopen durch alle Anforderungen dieser Disziplin.
         foreach ($this->requirements as $req) {
+            // Prüfen auf die neue Methode (Englisch)
             if (method_exists($req, 'isSwimmingProof') && $req->isSwimmingProof()) {
                 return true;
             }
-            // Fallback falls der Getter anders heißt (siehe vorheriger Schritt)
+            // Fallback: Prüfen auf die alte Methode (Deutsch), falls der Getter so hieß
             if (method_exists($req, 'isSchwimmnachweis') && $req->isSchwimmnachweis()) {
                 return true;
             }
         }
+
+        // --- WICHTIG: DIESE ZEILE HAT GEFEHLT ---
+        // Wenn weder der Name passt noch ein Requirement das Flag hat:
+        return false;
     }
-    
+
     public function removeRequirement(Requirement $requirement): self
     {
         if ($this->requirements->removeElement($requirement)) {
