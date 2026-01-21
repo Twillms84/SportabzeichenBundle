@@ -208,28 +208,41 @@ document.addEventListener('DOMContentLoaded', function() {
             // Keine Auswahl -> Reset
             inputEl.disabled = true;
             inputEl.value = '';
-            inputEl.classList.remove('bg-light');
+            inputEl.classList.remove('bg-light', 'medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+            selectEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
             return;
         }
         
         const unit = selectedOption.getAttribute('data-unit'); 
-        const verbandName = selectedOption.getAttribute('data-verband');
+        // Lese explizite Punkte für Verband aus (neu hinzugefügt)
+        const implicitPoints = parseInt(selectedOption.getAttribute('data-implicit-points') || 0);
+        const isVerband = (unit === 'NONE' || unit === 'UNIT_NONE' || implicitPoints > 0);
 
-        const isUnitNone = (unit === 'NONE' || unit === 'UNIT_NONE');
-
-        if (isUnitNone) {
+        if (isVerband) {
             // Pauschal-Eintrag (Verband)
-            inputEl.value = verbandName || 'Nachweis';
+            inputEl.value = ''; // Kein Text nötig, Placeholder ist Haken
+            inputEl.setAttribute('placeholder', '✓');
             inputEl.disabled = true; // User kann nichts tippen
             inputEl.classList.add('bg-light');
+            
+            // Sofort visuell auf Gold setzen (3 Punkte)
+            // Dies ist rein visuell, der echte Save passiert im Hintergrund
+            inputEl.classList.remove('medal-silber', 'medal-bronze', 'medal-none');
+            inputEl.classList.add('medal-gold');
+            selectEl.classList.remove('medal-silber', 'medal-bronze', 'medal-none');
+            selectEl.classList.add('medal-gold');
         } else {
             // Normale Eingabe
             inputEl.disabled = false;
+            inputEl.setAttribute('placeholder', '');
             inputEl.classList.remove('bg-light');
             
-            // Aufräumen, falls vorher Text drin stand (Verband -> Normal Wechsel)
-            if (inputEl.value === verbandName || inputEl.value === 'Nachweis') {
-                inputEl.value = '';
+            // Wenn wir von Verband zurückwechseln, Farben resetten wenn leer
+            if(inputEl.value === '') {
+                inputEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                inputEl.classList.add('medal-none');
+                selectEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                selectEl.classList.add('medal-none');
             }
         }
     }
@@ -299,33 +312,51 @@ document.addEventListener('DOMContentLoaded', function() {
         const medalBadge = document.getElementById('final-medal-' + epId);
         if (medalBadge) {
             const medal = data.medal ? String(data.medal).toLowerCase() : 'none';
+            const labelSpan = medalBadge.querySelector('.js-medal-label');
             
-            medalBadge.className = 'result-badge-box'; // Reset Basis-Klasse
+            // Klassen entfernen
+            medalBadge.classList.remove('bg-warning', 'bg-secondary', 'bg-danger', 'bg-light', 'bg-opacity-25', 'border-warning', 'border-secondary', 'border-danger', 'text-muted');
             
+            let labelText = '-';
             if (medal === 'gold') {
-                medalBadge.classList.add('bg-gold');
-                medalBadge.textContent = 'Gold';
+                medalBadge.classList.add('bg-warning', 'bg-opacity-25', 'border-warning');
+                labelText = 'Gold';
             } else if (medal === 'silver' || medal === 'silber') {
-                medalBadge.classList.add('bg-silver');
-                medalBadge.textContent = 'Silber';
+                medalBadge.classList.add('bg-secondary', 'bg-opacity-25', 'border-secondary');
+                labelText = 'Silber';
             } else if (medal === 'bronze') {
-                medalBadge.classList.add('bg-bronze');
-                medalBadge.textContent = 'Bronze';
+                medalBadge.classList.add('bg-danger', 'bg-opacity-25', 'border-danger');
+                labelText = 'Bronze';
             } else {
-                medalBadge.classList.add('medal-none');
-                medalBadge.textContent = '-';
+                medalBadge.classList.add('bg-light', 'text-muted', 'border');
             }
+            
+            if(labelSpan) labelSpan.textContent = labelText;
         }
 
         // C. Schwimm-Container
         const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        // Auch das kleine Icon im Namensfeld updaten
+        const swimIcon = document.getElementById('swim-icon-' + epId);
+
+        const hasSwimming = (data.has_swimming === true);
+
+        // Icon update
+        if(swimIcon) {
+            if(hasSwimming) {
+                swimIcon.classList.remove('text-danger', 'opacity-50');
+                swimIcon.classList.add('text-success');
+            } else {
+                swimIcon.classList.remove('text-success');
+                swimIcon.classList.add('text-danger', 'opacity-50');
+            }
+        }
+
         if (wrapper) {
             const badgeCont = wrapper.querySelector('.swim-badge-container');
             const dropCont  = wrapper.querySelector('.swim-dropdown-container');
             const infoText  = wrapper.querySelector('.swim-info-text');
             const select    = wrapper.querySelector('select');
-
-            const hasSwimming = (data.has_swimming === true);
 
             if (hasSwimming) {
                 if(badgeCont) badgeCont.classList.remove('d-none');
@@ -346,7 +377,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /**
      * Zeigt Bronze/Silber/Gold Werte unter dem Input an.
-     * UPDATED: Blendet Werte bei Unit=NONE (Verband) aus.
+     * Nutzt data-unit-label für schöne Anzeige (Min. statt UNIT_MINUTES)
      */
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
@@ -354,12 +385,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const opt = select.options[select.selectedIndex];
         
-        // Suche nach den Elementen (Klassen anpassen falls nötig)
+        // Suche nach den Elementen
         const labels = {
             b: parentTd.querySelector('.req-val-b, .js-val-b'),
             s: parentTd.querySelector('.req-val-s, .js-val-s'),
             g: parentTd.querySelector('.req-val-g, .js-val-g'),
-            unit: parentTd.querySelector('.req-unit, .input-group-text-unit')
+            unit: parentTd.querySelector('.req-unit, .js-unit-label') // Hier auf js-unit-label achten
         };
         
         // Input Referenz
@@ -372,12 +403,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Prüfen ob Verbandsabzeichen
-        const u = opt.getAttribute('data-unit');
-        const isVerband = (u === 'NONE' || u === 'UNIT_NONE');
+        // 1. Hole schöne Einheit aus Label
+        const prettyUnit = opt.getAttribute('data-unit-label') || '';
+        // 2. Prüfen ob Verbandsabzeichen (implicit points gesetzt oder unit=none)
+        const implicitPoints = opt.getAttribute('data-implicit-points');
+        const unitRaw = opt.getAttribute('data-unit');
+        const isVerband = (unitRaw === 'NONE' || unitRaw === 'UNIT_NONE' || implicitPoints > 0);
 
         if (isVerband) {
-            // Bei Verbandsabzeichen: Hints leeren, damit sie nicht unter "Nachweis" stehen
+            // Bei Verbandsabzeichen: Hints leeren
             if(labels.b) labels.b.textContent = '';
             if(labels.s) labels.s.textContent = '';
             if(labels.g) labels.g.textContent = '';
@@ -389,13 +423,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
             
             if(labels.unit) {
-                const showUnit = (u && u !== 'NONE' && u !== 'UNIT_NONE');
-                labels.unit.textContent = showUnit ? u : '';
+                labels.unit.textContent = prettyUnit;
             }
         }
-        
-        // Input Status wird final von checkVerbandInput geregelt, 
-        // aber hier schalten wir es prinzipiell an, falls es nicht NONE ist.
-        if(input && !isVerband) input.disabled = false;
     }
 });
