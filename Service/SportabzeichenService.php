@@ -126,8 +126,7 @@ class SportabzeichenService
             // Wenn der existierende Nachweis genau von DIESER Disziplin kam, 
             // aber jetzt keine Punkte mehr da sind (oder Disziplin geändert wurde) -> löschen.
             if (!$isSwimmingRelevant || $points === 0) {
-                $participant->removeSwimmingProof($proof);
-                $this->em->remove($proof);
+                $this->em->remove($existingProof);
             }
         }
     }
