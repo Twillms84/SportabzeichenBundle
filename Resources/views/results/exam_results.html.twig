@@ -257,30 +257,33 @@
 
                                         {# Select Box #}
                                         <select class="discipline-selector js-discipline-select mb-1 form-select form-select-sm {{ mClass }}" 
-                                                data-save 
-                                                data-ep-id="{{ p.ep_id }}" 
-                                                data-type="discipline" 
-                                                data-kategorie="{{ category }}"
-                                                style="font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px;">
-                                            
-                                            {% if options is empty %}
-                                                <option value="">--</option>
-                                            {% else %}
-                                                {% for req in options %}
-                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
-                                                    <option value="{{ req.discipline.id }}" 
-                                                            {{ selectedReq and selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
-                                                            data-unit="{{ req.discipline.unit }}"
-                                                            data-calc="{{ req.discipline.calculation_type|default('') }}"
-                                                            data-verband="{{ req.discipline.verband|default('') }}" 
-                                                            data-bronze="{{ req.bronze }}"
-                                                            data-silber="{{ req.silver }}"
-                                                            data-gold="{{ req.gold }}">
-                                                        {{ req.discipline.name }}
-                                                    </option>
-                                                {% endfor %}
-                                            {% endif %}
-                                        </select>
+                                            data-save 
+                                            data-ep-id="{{ p.ep_id }}" 
+                                            data-type="discipline" 
+                                            data-kategorie="{{ category }}"
+                                            style="font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px;">
+                                        
+                                        {% if options is empty %}
+                                            <option value="">--</option>
+                                        {% else %}
+                                            {% for req in options %}
+                                                {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
+                                                {# Check ob Verbandsabzeichen (bringt implizit 3 Punkte) #}
+                                                {% set implicitPoints = (req.discipline.unit == 'NONE' or req.discipline.unit == 'UNIT_NONE') ? 3 : 0 %}
+                                                
+                                                <option value="{{ req.discipline.id }}" 
+                                                        {{ selectedReq and selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
+                                                        data-unit="{{ req.discipline.unit }}"
+                                                        data-unit-label="{{ cleanUnit }}"  {# WICHTIG FÜR JS #}
+                                                        data-implicit-points="{{ implicitPoints }}" {# WICHTIG FÜR JS #}
+                                                        data-bronze="{{ req.bronze }}"
+                                                        data-silber="{{ req.silver }}"
+                                                        data-gold="{{ req.gold }}">
+                                                    {{ req.discipline.name }}
+                                                </option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
 
                                         {# Input Feld #}
                                         {# Wenn Einheit NONE/UNIT_NONE ist (DLRG), wird das Feld deaktiviert #}
