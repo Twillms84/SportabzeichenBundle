@@ -105,7 +105,7 @@ class SportabzeichenService
                 $this->em->persist($proof);
                 
                 // WICHTIG: Damit syncSummary im gleichen Request den Nachweis findet:
-                $proof->setParticipant($participant)
+                $proof->setParticipant($participant);
                 $this->em->persist($proof);
                 $this->em->flush();
             }
