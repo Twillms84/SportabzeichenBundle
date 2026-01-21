@@ -18,7 +18,8 @@
     'UNIT_HOURS': 'Std.',
     'UNIT_NUMBER': 'Anz.',
     'UNIT_PIECES': 'Wert',
-    'NONE': 'Verband'
+    'NONE': 'Verband',
+    'UNIT_NONE': 'Verband'
 } %}
 
 <div class="container-fluid mt-3">
@@ -58,11 +59,12 @@
     </div>
 
     {# --- FORMULAR & TABELLE --- #}
+    {# KORRIGIERT: Keine doppelten Attribute mehr #}
     <form id="autosave-form" 
       data-discipline-route="{{ path('sportabzeichen_results_exam_discipline_save') }}"
       data-result-route="{{ path('sportabzeichen_results_exam_result_save') }}"
-      data-swimming-route="{{ path('sportabzeichen_results_exam_swimming_add_proof') }}" {# Fallback Route #}
-      data-swimming-delete-route="{{ path('sportabzeichen_results_exam_swimming_remove_proof') }}" {# Fallback Route #}
+      data-swimming-route="{{ path('sportabzeichen_results_exam_swimming_add_proof') }}"
+      data-swimming-delete-route="{{ path('sportabzeichen_results_exam_swimming_remove_proof') }}"
       data-global-token="{{ csrf_token('authenticate') }}">
 
         <div class="table-responsive">
@@ -70,7 +72,7 @@
                 <thead class="table-light text-center align-middle sticky-header">
                     <tr>
                         {# TEILNEHMER SPALTE #}
-                        <th class="col-name text-start shadow-sm">
+                        <th class="col-name text-start shadow-sm" style="min-width: 200px; position: sticky; left: 0; z-index: 5;">
                             {% set currentSort = app.request.query.get('sort', 'lastname') %}
                             {% set currentOrder = app.request.query.get('order', 'asc') %}
                             
@@ -97,14 +99,14 @@
                         </th>
 
                         {# SCHWIMM SPALTE #}
-                        <th class="col-swimming-status text-center col-discipline col-cat-SWIMMING">
+                        <th class="col-swimming-status text-center col-discipline col-cat-SWIMMING" style="min-width: 140px;">
                             🏊
                         </th>
 
                         {# DISZIPLINEN SPALTEN #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                <th class="col-discipline col-cat-{{ category }}">{{ category }}</th>
+                                <th class="col-discipline col-cat-{{ category }}" style="min-width: 160px;">{{ category }}</th>
                             {% endif %}
                         {% endfor %}
                     </tr>
@@ -112,14 +114,15 @@
                 <tbody>
                 {% for p in participants %}
                     {% set epResults = results[p.ep_id] ?? {} %}
+                    {# Row ID für partielle Updates #}
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
                         {# 1. TEILNEHMER INFOS #}
-                        <td class="col-name py-2">
+                        <td class="col-name py-2 bg-white" style="position: sticky; left: 0; z-index: 4;">
                             <div class="name-container text-truncate">
                                 <span class="fw-bold">{{ p.nachname }}</span>
                                 <span class="d-none d-md-inline">, {{ p.vorname }}</span>
-                                <span class="mobile-break">{{ p.vorname }}</span>
+                                <span class="mobile-break d-md-none">{{ p.vorname }}</span>
                             </div>
                             
                             <div class="small text-muted mb-2 text-truncate">
@@ -131,7 +134,7 @@
                                 <div class="d-flex gap-2 align-items-center mt-1 mb-2">
                                     {# Punkte #}
                                     <div class="result-badge-box border rounded px-2 py-1 text-center bg-light" title="Gesamtpunkte">
-                                        <div class="badge-label-small text-muted">Pkt</div>
+                                        <div class="badge-label-small text-muted" style="font-size: 0.65rem;">Pkt</div>
                                         <div class="fw-bold fs-6" id="total-points-{{ p.ep_id }}">{{ p.total_points|default(0) }}</div>
                                     </div>
 
@@ -141,23 +144,23 @@
                                     {% set medalClass = 'bg-light text-muted border' %}
 
                                     {% if medalValue == 'gold' %}
-                                        {% set medalLabel = 'Gold' %}{% set medalClass = 'bg-gold text-dark border-gold' %}
+                                        {% set medalLabel = 'Gold' %}{% set medalClass = 'bg-warning bg-opacity-25 text-dark border-warning' %}
                                     {% elseif medalValue == 'silver' or medalValue == 'silber' %}
-                                        {% set medalLabel = 'Silber' %}{% set medalClass = 'bg-silver text-dark border-silver' %}
+                                        {% set medalLabel = 'Silber' %}{% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
                                     {% elseif medalValue == 'bronze' %}
-                                        {% set medalLabel = 'Bronze' %}{% set medalClass = 'bg-bronze text-white border-bronze' %}
+                                        {% set medalLabel = 'Bronze' %}{% set medalClass = 'bg-danger bg-opacity-25 text-dark border-danger' %}
                                     {% endif %}
 
                                     <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" id="final-medal-{{ p.ep_id }}">
-                                        <div class="badge-label-small text-uppercase opacity-75">Rang</div>
+                                        <div class="badge-label-small text-uppercase opacity-75" style="font-size: 0.65rem;">Rang</div>
                                         <div class="d-flex align-items-center justify-content-center gap-1">
                                             <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
                                             
                                             {# Status Icon im Badge #}
                                             {% if p.has_swimming %}
-                                                <span class="swim-status-icon swim-status-ok" title="Schwimmnachweis erbracht" data-bs-toggle="tooltip">🏊</span>
+                                                <span class="swim-status-icon text-success" title="Schwimmnachweis erbracht" data-bs-toggle="tooltip">🏊</span>
                                             {% else %}
-                                                <span class="swim-status-icon swim-status-missing" title="Schwimmnachweis fehlt" data-bs-toggle="tooltip">🏊</span>
+                                                <span class="swim-status-icon text-danger opacity-50" title="Schwimmnachweis fehlt" data-bs-toggle="tooltip">🏊</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -168,7 +171,7 @@
                         {# 2. SCHWIMMEN LOGIK & DROPDOWN #}
                         <td class="col-swimming-status align-middle p-2 text-center col-discipline col-cat-SWIMMING">
                             
-                            <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
+                            <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper h-100 d-flex flex-column justify-content-center">
                                 {% set hasSwimming = p.has_swimming %}
                                 {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}
 
@@ -178,12 +181,13 @@
                                         <small class="swim-info-text text-success fw-bold d-block text-truncate w-100 mb-1" title="{{ swimInfo }}">
                                             {{ swimInfo }}
                                         </small>
-                                        {# Optionaler Delete-Button für Schwimmnachweis via JS #}
+                                        {# Delete-Button für Schwimmnachweis #}
                                         <button type="button" 
                                                 class="btn btn-outline-danger btn-sm py-0 px-2 btn-delete-swimming" 
                                                 data-ep-id="{{ p.ep_id }}"
+                                                title="Nachweis löschen"
                                                 style="font-size: 0.7rem;">
-                                            {{ icon('trash')|raw }} Löschen
+                                            {{ icon('trash')|raw }}
                                         </button>
                                     </div>
                                 </div>
@@ -209,54 +213,55 @@
                         {% for category, items in disciplines %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
                                 
-                                <td class="p-1 col-discipline col-cat-{{ category }}">
-                                    
-                                    {# Optionen filtern (Server-Side Logic: Filter by Gender & Age) #}
-                                    {% set options = [] %}
-                                    {% set pGender = p.geschlecht %} 
-                                    
-                                    {% for discipline in items %}
-                                        {% if discipline.requirements is defined %}
-                                            {% for req in discipline.requirements %}
-                                                {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
-                                                    {% set combo = req|merge({'discipline': discipline}) %}
-                                                    {% set options = options|merge([combo]) %}
-                                                {% endif %}
-                                            {% endfor %}
+                                <td class="p-1 col-discipline col-cat-{{ category }} align-middle">
+                                    <div class="discipline-cell-wrapper d-flex flex-column h-100 justify-content-center">
+                                        
+                                        {# Optionen filtern (Server-Side Logic: Filter by Gender & Age) #}
+                                        {% set options = [] %}
+                                        {% set pGender = p.geschlecht %} 
+                                        
+                                        {% for discipline in items %}
+                                            {% if discipline.requirements is defined %}
+                                                {% for req in discipline.requirements %}
+                                                    {% if req.gender == pGender and p.age_year >= req.minAge and p.age_year <= req.maxAge %}
+                                                        {% set combo = req|merge({'discipline': discipline}) %}
+                                                        {% set options = options|merge([combo]) %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {# Ergebnis finden #}
+                                        {% set selectedReq = null %}
+                                        {% set resObj = null %}
+
+                                        {% for req in options %}
+                                            {% if epResults[req.discipline.id] is defined %}
+                                                {% set selectedReq = req %}
+                                                {% set resObj = epResults[req.discipline.id] %}
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if selectedReq is null and options|length > 0 %}
+                                            {% set selectedReq = options[0] %}
                                         {% endif %}
-                                    {% endfor %}
-
-                                    {# Ergebnis finden #}
-                                    {% set selectedReq = null %}
-                                    {% set resObj = null %}
-
-                                    {% for req in options %}
-                                        {% if epResults[req.discipline.id] is defined %}
-                                            {% set selectedReq = req %}
-                                            {% set resObj = epResults[req.discipline.id] %}
+                                        
+                                        {# Medaillen-Farbe initial setzen für Input-Rahmen #}
+                                        {% set mClass = 'medal-none' %}
+                                        {% if resObj %}
+                                            {% if resObj.points == 3 %}{% set mClass = 'medal-gold' %}
+                                            {% elseif resObj.points == 2 %}{% set mClass = 'medal-silber' %}
+                                            {% elseif resObj.points == 1 %}{% set mClass = 'medal-bronze' %}
+                                            {% endif %}
                                         {% endif %}
-                                    {% endfor %}
 
-                                    {% if selectedReq is null and options|length > 0 %}
-                                        {% set selectedReq = options[0] %}
-                                    {% endif %}
-                                    
-                                    {# Medaillen-Farbe initial setzen #}
-                                    {% set mClass = 'medal-none' %}
-                                    {% if resObj %}
-                                        {% if resObj.points == 3 %}{% set mClass = 'medal-gold' %}
-                                        {% elseif resObj.points == 2 %}{% set mClass = 'medal-silber' %}
-                                        {% elseif resObj.points == 1 %}{% set mClass = 'medal-bronze' %}
-                                        {% endif %}
-                                    {% endif %}
-
-                                    <div class="d-flex flex-column">
                                         {# Select Box #}
-                                        <select class="discipline-selector js-discipline-select mb-1 {{ mClass }}" 
+                                        <select class="discipline-selector js-discipline-select mb-1 form-select form-select-sm {{ mClass }}" 
                                                 data-save 
                                                 data-ep-id="{{ p.ep_id }}" 
                                                 data-type="discipline" 
-                                                data-kategorie="{{ category }}">
+                                                data-kategorie="{{ category }}"
+                                                style="font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px;">
                                             
                                             {% if options is empty %}
                                                 <option value="">--</option>
@@ -264,7 +269,7 @@
                                                 {% for req in options %}
                                                     {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
                                                     <option value="{{ req.discipline.id }}" 
-                                                            {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
+                                                            {{ selectedReq and selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
                                                             data-unit="{{ req.discipline.unit }}"
                                                             data-calc="{{ req.discipline.calculation_type|default('') }}"
                                                             data-verband="{{ req.discipline.verband|default('') }}" 
@@ -278,36 +283,37 @@
                                         </select>
 
                                         {# Input Feld #}
-                                        {# Wenn Einheit NONE ist (DLRG), wird das Feld im JS deaktiviert/ausgeblendet #}
+                                        {# Wenn Einheit NONE/UNIT_NONE ist (DLRG), wird das Feld deaktiviert #}
                                         {% set isNoneUnit = (selectedReq and (selectedReq.discipline.unit == 'NONE' or selectedReq.discipline.unit == 'UNIT_NONE')) %}
                                         
                                         <input type="text" 
-                                               class="form-control form-control-custom {{ mClass }}"
+                                               class="form-control form-control-sm form-control-custom text-center fw-bold {{ mClass }}"
                                                value="{{ resObj ? resObj.leistung : '' }}"
                                                {{ isNoneUnit ? 'disabled' : '' }}
+                                               placeholder="{{ isNoneUnit ? '✓' : '' }}"
                                                data-save 
                                                data-ep-id="{{ p.ep_id }}" 
                                                data-type="leistung" 
                                                data-kategorie="{{ category }}">
 
                                         {# Hint-Zeile #}
-                                            <div class="req-hint">
-                                                <div class="req-values-wrapper js-req-values">
-                                                    {% if selectedReq and not isNoneUnit %}
-                                                        <span class="req-val-b">B: {{ selectedReq.bronze }}</span>
-                                                        <span class="req-val-s">S: {{ selectedReq.silver }}</span>
-                                                        <span class="req-val-g">G: {{ selectedReq.gold }}</span>
-                                                    {% else %}
-                                                        <span class="text-muted small">-</span>
-                                                    {% endif %}
-                                                </div>
-                                                <div class="req-unit js-unit-label">
-                                                    {% if selectedReq %}
-                                                        {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? selectedReq.discipline.unit %}
-                                                        {{ currentUnit }}
-                                                    {% endif %}
-                                                </div>
+                                        <div class="req-hint d-flex justify-content-between align-items-center mt-1" style="font-size: 0.7rem;">
+                                            <div class="req-values-wrapper js-req-values text-muted">
+                                                {% if selectedReq and not isNoneUnit %}
+                                                    <span class="req-val-b" title="Bronze">{{ selectedReq.bronze }}</span> |
+                                                    <span class="req-val-s" title="Silber">{{ selectedReq.silver }}</span> |
+                                                    <span class="req-val-g" title="Gold">{{ selectedReq.gold }}</span>
+                                                {% else %}
+                                                    <span class="text-muted small">-</span>
+                                                {% endif %}
                                             </div>
+                                            <div class="req-unit js-unit-label fw-bold text-muted">
+                                                {% if selectedReq %}
+                                                    {% set currentUnit = unitMap[selectedReq.discipline.unit] ?? selectedReq.discipline.unit %}
+                                                    {{ currentUnit }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             {% endif %}
