@@ -98,9 +98,10 @@ class Discipline
             // Fallback falls der Getter anders heißt (siehe vorheriger Schritt)
             if (method_exists($req, 'isSchwimmnachweis') && $req->isSchwimmnachweis()) {
                 return true;
+            }
         }
     }
-
+    
     public function removeRequirement(Requirement $requirement): self
     {
         if ($this->requirements->removeElement($requirement)) {
