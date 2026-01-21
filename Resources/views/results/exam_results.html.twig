@@ -4,7 +4,6 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    {# Alles CSS liegt jetzt extern! #}
     <link rel="stylesheet" href="{{ asset('css/sportabzeichen_results.css', 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
@@ -62,8 +61,8 @@
     <form id="autosave-form" 
       data-discipline-route="{{ path('sportabzeichen_results_exam_discipline_save') }}"
       data-result-route="{{ path('sportabzeichen_results_exam_result_save') }}"
-      data-swimming-route="{{ path('sportabzeichen_results_exam_swimming_add_proof') }}"
-      data-swimming-delete-route="{{ path('sportabzeichen_results_exam_swimming_remove_proof') }}"
+      data-swimming-route="{{ path('sportabzeichen_results_exam_swimming_add_proof') }}" {# Fallback Route #}
+      data-swimming-delete-route="{{ path('sportabzeichen_results_exam_swimming_remove_proof') }}" {# Fallback Route #}
       data-global-token="{{ csrf_token('authenticate') }}">
 
         <div class="table-responsive">
@@ -179,21 +178,25 @@
                                         <small class="swim-info-text text-success fw-bold d-block text-truncate w-100 mb-1" title="{{ swimInfo }}">
                                             {{ swimInfo }}
                                         </small>
+                                        {# Optionaler Delete-Button für Schwimmnachweis via JS #}
                                         <button type="button" 
                                                 class="btn btn-outline-danger btn-sm py-0 px-2 btn-delete-swimming" 
-                                                data-ep-id="{{ p.ep_id }}">
-                                            {{ icon('trash')|raw }} Entfernen
+                                                data-ep-id="{{ p.ep_id }}"
+                                                style="font-size: 0.7rem;">
+                                            {{ icon('trash')|raw }} Löschen
                                         </button>
                                     </div>
                                 </div>
 
-                                {# B) Eingabe: Dropdown #}
+                                {# B) Eingabe: Dropdown (Nur anzeigen wenn kein Nachweis da ist) #}
                                 <div class="swim-dropdown-container {{ hasSwimming ? 'd-none' : '' }}">
                                     <select class="form-select form-select-sm swimming-select-compact" 
                                             data-ep-id="{{ p.ep_id }}"
                                             data-type="swimming_select" 
                                             data-save="true">
-                                        <option value="" selected disabled class="text-muted">-- Nachweis --</option>
+                                        <option value="" selected disabled class="text-muted">-- Nachweis wählen --</option>
+                                        
+                                        {# Loop durch Schwimm-Disziplinen vom Controller #}
                                         {% for swimDisc in swimming_disciplines %}
                                             <option value="{{ swimDisc.id }}">{{ swimDisc.name }}</option>
                                         {% endfor %}
@@ -208,7 +211,7 @@
                                 
                                 <td class="p-1 col-discipline col-cat-{{ category }}">
                                     
-                                    {# Optionen filtern (Server-Side Logic) #}
+                                    {# Optionen filtern (Server-Side Logic: Filter by Gender & Age) #}
                                     {% set options = [] %}
                                     {% set pGender = p.geschlecht %} 
                                     
@@ -262,12 +265,9 @@
                                                     {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
                                                     <option value="{{ req.discipline.id }}" 
                                                             {{ selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
-                                                            data-unit="{{ cleanUnit }}"
+                                                            data-unit="{{ req.discipline.unit }}"
                                                             data-calc="{{ req.discipline.calculation_type|default('') }}"
-                                                            
-                                                            {# NEU: Hier den Verbandsnamen hinterlegen #}
                                                             data-verband="{{ req.discipline.verband|default('') }}" 
-                                                            
                                                             data-bronze="{{ req.bronze }}"
                                                             data-silber="{{ req.silver }}"
                                                             data-gold="{{ req.gold }}">
@@ -278,18 +278,22 @@
                                         </select>
 
                                         {# Input Feld #}
+                                        {# Wenn Einheit NONE ist (DLRG), wird das Feld im JS deaktiviert/ausgeblendet #}
+                                        {% set isNoneUnit = (selectedReq and (selectedReq.discipline.unit == 'NONE' or selectedReq.discipline.unit == 'UNIT_NONE')) %}
+                                        
                                         <input type="text" 
-                                            class="form-control form-control-custom {{ mClass }}"
-                                            value="{{ resObj ? resObj.leistung : '' }}"
-                                            data-save 
-                                            data-ep-id="{{ p.ep_id }}" 
-                                            data-type="leistung" 
-                                            data-kategorie="{{ category }}">
+                                               class="form-control form-control-custom {{ mClass }}"
+                                               value="{{ resObj ? resObj.leistung : '' }}"
+                                               {{ isNoneUnit ? 'disabled' : '' }}
+                                               data-save 
+                                               data-ep-id="{{ p.ep_id }}" 
+                                               data-type="leistung" 
+                                               data-kategorie="{{ category }}">
 
                                         {# Hint-Zeile #}
                                             <div class="req-hint">
                                                 <div class="req-values-wrapper js-req-values">
-                                                    {% if selectedReq %}
+                                                    {% if selectedReq and not isNoneUnit %}
                                                         <span class="req-val-b">B: {{ selectedReq.bronze }}</span>
                                                         <span class="req-val-s">S: {{ selectedReq.silver }}</span>
                                                         <span class="req-val-g">G: {{ selectedReq.gold }}</span>
@@ -319,6 +323,5 @@
 
 {% block javascripts %}
     {{ parent() }}
-    {# Externe JS Datei laden. KEIN INLINE SCRIPT! #}
     <script src="{{ asset('js/exam_results_autosave.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}

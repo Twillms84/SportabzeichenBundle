@@ -11,14 +11,12 @@ use PulsR\SportabzeichenBundle\Entity\Exam;
 use PulsR\SportabzeichenBundle\Entity\ExamParticipant;
 use PulsR\SportabzeichenBundle\Entity\ExamResult;
 use PulsR\SportabzeichenBundle\Entity\Requirement;
-use PulsR\SportabzeichenBundle\Entity\SwimmingProof;
 use PulsR\SportabzeichenBundle\Service\SportabzeichenService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-
 
 #[Route('/sportabzeichen/exams/results', name: 'sportabzeichen_results_')]
 #[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
@@ -48,7 +46,7 @@ final class ExamResultController extends AbstractPageController
     {
         $selectedClass = $request->query->get('class');
 
-        // 1. Teilnehmer mit allen relevanten Daten laden
+        // 1. Teilnehmer mit allen relevanten Daten laden (Eager Loading)
         $qb = $this->em->createQueryBuilder();
         $qb->select('ep', 'p', 'u', 'sp', 'res', 'd')
             ->from(ExamParticipant::class, 'ep')
@@ -58,9 +56,17 @@ final class ExamResultController extends AbstractPageController
             ->leftJoin('ep.results', 'res')
             ->leftJoin('res.discipline', 'd')
             ->where('ep.exam = :exam')
-            ->setParameter('exam', $exam)
-            ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC');
+            ->setParameter('exam', $exam);
+
+        // Sortierung verarbeiten
+        $sort = $request->query->get('sort', 'lastname');
+        $order = strtoupper($request->query->get('order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
+
+        if ($sort === 'lastname') {
+            $qb->orderBy('u.lastname', $order)->addOrderBy('u.firstname', 'ASC');
+        } else {
+            $qb->orderBy('u.lastname', 'ASC'); // Default fallback
+        }
 
         if ($selectedClass) {
             $qb->andWhere('u.auxinfo = :class')->setParameter('class', $selectedClass);
@@ -68,7 +74,7 @@ final class ExamResultController extends AbstractPageController
 
         $examParticipants = $qb->getQuery()->getResult();
 
-        // 2. Daten für Twig transformieren
+        // 2. Daten für Twig aufbereiten
         $participantsData = [];
         $resultsData = [];
         $today = new \DateTime();
@@ -78,7 +84,7 @@ final class ExamResultController extends AbstractPageController
             $swimmingExpiry = null;
             $metVia = null; 
             
-            // Schwimmstatus prüfen
+            // Schwimmstatus prüfen (Gültigkeit oder aktuelles Jahr)
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
                 if ($proof->getExamYear() == $exam->getYear() || $proof->getValidUntil() >= $today) {
                     $hasSwimming = true;
@@ -89,7 +95,7 @@ final class ExamResultController extends AbstractPageController
                 }
             }
 
-            // Ergebnisse indizieren
+            // Ergebnisse indizieren: [ep_id][discipline_id] => ResultData
             foreach ($ep->getResults() as $res) {
                 $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
                     'leistung' => $res->getLeistung(),
@@ -146,15 +152,14 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$kat] = array_values($vals);
         }
 
-        // 4. Klassenliste für Filter laden
+        // 4. Listen für Filter und Dropdowns
         $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
 
-        // --- NEU: Schwimm-Disziplinen für das Dropdown laden ---
+        // Spezielle Liste nur für Schwimm-Disziplinen im Dropdown
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
-            ['category' => 'Schwimmen'], // Filtert nach Kategorie "Swimming"
+            ['category' => 'Schwimmen'], 
             ['name' => 'ASC']
         );
-        // -------------------------------------------------------
 
         return $this->render('@PulsRSportabzeichen/results/exam_results.html.twig', [
             'exam' => $exam,
@@ -163,49 +168,36 @@ final class ExamResultController extends AbstractPageController
             'results' => $resultsData,
             'classes' => $classes,
             'selectedClass' => $selectedClass,
-            'swimming_disciplines' => $swimmingDisciplines, // NEU: Hier übergeben!
+            'swimming_disciplines' => $swimmingDisciplines,
         ]);
     }
 
     /**
-     * AJAX-Speicherung einer Disziplinwahl + Leistung
+     * AJAX-Speicherung: Wechsel der Disziplin + Berechnung
      */
     #[Route('/exam/discipline/save', name: 'exam_discipline_save', methods: ['POST'])]
     public function saveExamDiscipline(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         
-        // ... (Eager Loading EP Code bleibt gleich) ...
-        // ... (Discipline Loading Code bleibt gleich) ...
-        
-        $ep = $this->em->createQueryBuilder()
-             ->select('ep', 'p', 'u', 'ex')
-             ->from(ExamParticipant::class, 'ep')
-             ->join('ep.participant', 'p')
-             ->join('p.user', 'u')
-             ->join('ep.exam', 'ex')
-             ->where('ep.id = :id')
-             ->setParameter('id', (int)($data['ep_id'] ?? 0))
-             ->getQuery()
-             ->getOneOrNullResult();
-
+        $ep = $this->getExamParticipant((int)($data['ep_id'] ?? 0));
         if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
 
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        // 1. Bereinigung
+        // 1. Alte Ergebnisse dieser Kategorie entfernen
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                // Alten Schwimmnachweis ggf. entfernen, falls er an dieser Disziplin hing
+                // Falls vorher Schwimmen ausgewählt war, Proof entfernen
                 $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
                 $this->em->remove($existingRes);
             }
         }
         $this->em->flush(); 
 
-        // 2. Calculation
+        // 2. Berechnung der Punkte
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
         
         $pData = $this->service->calculateResult(
@@ -220,12 +212,12 @@ final class ExamResultController extends AbstractPageController
         $newResult->setExamParticipant($ep);
         $newResult->setDiscipline($discipline);
 
-        // FIX: Konsistente Prüfung wie im Service und JS
+        // Sonderfall: DLRG / Verbandsabzeichen (Einheit NONE) -> Wert immer 1.0 (Gold)
         $unit = $discipline->getUnit();
         $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
         
         if ($isUnitNone) {
-            $newResult->setLeistung(1.0); // Gold erzwingen
+            $newResult->setLeistung(1.0); 
         } else {
             $newResult->setLeistung($leistung ?? 0.0);
         }
@@ -234,56 +226,35 @@ final class ExamResultController extends AbstractPageController
         $newResult->setStufe($pData['stufe']);
         $this->em->persist($newResult);
 
-        // 3. Schwimm-Proof Update
-        // WICHTIG: Service prüft jetzt $discipline->isSwimming()
+        // 3. Schwimm-Proof Update (falls Disziplin = Schwimmen)
         $this->service->updateSwimmingProof($ep, $discipline, $pData['points'], $pData['req'] ?? null);
 
         $this->em->flush();
         
-        // Refresh nötig, damit syncSummary den neuen Schwimmnachweis findet?
-        // Meistens nicht, aber falls doch:
-        // $this->em->refresh($ep->getParticipant());
-
         return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
     }
 
     /**
-     * Speichert die reine Leistung (Update eines Textfeldes)
+     * AJAX-Speicherung: Update reiner Leistungswert
      */
     #[Route('/exam/result/save', name: 'exam_result_save', methods: ['POST'])]
     public function saveExamResult(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         
-        // Eager Loading des Teilnehmers inkl. Relationen
-        $ep = $this->em->createQueryBuilder()
-            ->select('ep', 'p', 'u', 'ex')
-            ->from(ExamParticipant::class, 'ep')
-            ->join('ep.participant', 'p')
-            ->join('p.user', 'u')
-            ->join('ep.exam', 'ex')
-            ->where('ep.id = :id')
-            ->setParameter('id', (int)($data['ep_id'] ?? 0))
-            ->getQuery()
-            ->getOneOrNullResult();
-
-        if (!$ep) {
-            return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
-        }
+        $ep = $this->getExamParticipant((int)($data['ep_id'] ?? 0));
+        if (!$ep) return new JsonResponse(['error' => 'Teilnehmer nicht gefunden'], 404);
 
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
-        if (!$discipline) {
-            return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
-        }
+        if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
 
-        // FIX: Sicherheitshalber auch hier prüfen, falls Frontend 'disabled' Feld nicht sendet
+        // Check auf DLRG/Verband
         $unit = $discipline->getUnit();
         $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
-        
         if ($isUnitNone) {
-            $leistung = 1.0; // Erzwinge Gold-Wert bei DLRG, egal was reinkommt
+            $leistung = 1.0; 
         }
 
         $result = $this->em->getRepository(ExamResult::class)->findOneBy([
@@ -294,12 +265,14 @@ final class ExamResultController extends AbstractPageController
         $points = 0; 
         $stufe = 'none';
 
-        if ($leistung === null) {
+        if ($leistung === null && !$isUnitNone) {
+            // Wert gelöscht -> Ergebnis entfernen
             if ($result) {
                 $this->service->updateSwimmingProof($ep, $discipline, 0);
                 $this->em->remove($result);
             }
         } else {
+            // Wert gesetzt oder Update
             if (!$result) {
                 $result = new ExamResult();
                 $result->setExamParticipant($ep);
@@ -330,74 +303,34 @@ final class ExamResultController extends AbstractPageController
 
         return $this->generateSummaryResponse($ep, $points, $stufe);
     }
-    
-    // --- HELPER ---
 
-    private function formatLeistung($input): ?float
-    {
-        if ($input === null || $input === '') return null;
-        return (float)str_replace(',', '.', (string)$input);
-    }
-
-    private function getGenderString(ExamParticipant $ep): string
-    {
-        $raw = $ep->getParticipant()->getGender() ?? 'W';
-        return (str_starts_with(strtoupper($raw), 'M')) ? 'MALE' : 'FEMALE';
-    }
-
-    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe): JsonResponse
-    {
-        // Service synchronisiert Gesamtpunkte und Medaille
-        $summary = $this->service->syncSummary($ep);
-
-        return new JsonResponse([
-            'status' => 'ok',
-            'points' => $points,
-            'stufe' => $stufe,
-            'total_points' => $summary['total'],
-            'final_medal' => $summary['medal'],
-            'has_swimming' => $summary['has_swimming'],
-            'swimming_met_via' => $summary['met_via'] ?? ($summary['swimming_met_via'] ?? ''),
-            'swimming_expiry'  => $summary['expiry'] ?? ($summary['swimming_expiry'] ?? null),
-        ]);
-    }
-
+    /**
+     * PDF/Druckansicht der Prüfkarte
+     */
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request): Response
     {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
         $selectedClass = $request->query->get('class');
-        
         $conn = $this->em->getConnection();
 
-        // 1. Prüfungsdaten laden
+        // 1. Prüfungsdaten
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
-        if (!$exam) {
-            throw $this->createNotFoundException('Prüfung nicht gefunden.');
-        }
+        if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden.');
 
         $examYear = (int)$exam['exam_year'];
         $examYearEnd = $examYear . '-12-31';
 
-        // 2. Teilnehmer laden (inkl. Fix für Jahr und Schreibweise 'silver')
+        // 2. Teilnehmer laden (nur Bronze/Silber/Gold)
         $sql = "
             SELECT 
                 ep.id as ep_id, 
-                u.lastname, 
-                u.firstname, 
-                p.geburtsdatum, 
-                p.geschlecht, 
-                ep.age_year, 
-                ep.total_points, 
-                ep.final_medal, 
-                ep.participant_id,
+                u.lastname, u.firstname, 
+                p.geburtsdatum, p.geschlecht, 
+                ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
                 (SELECT sp.exam_year 
                  FROM sportabzeichen_swimming_proofs sp 
                  WHERE sp.participant_id = ep.participant_id 
-                   AND (
-                       sp.exam_year = :year 
-                       OR sp.valid_until >= :yearEnd
-                   )
+                   AND (sp.exam_year = :year OR sp.valid_until >= :yearEnd)
                  ORDER BY sp.confirmed_at DESC LIMIT 1
                 ) as swimming_proof_year
             FROM sportabzeichen_exam_participants ep
@@ -407,11 +340,7 @@ final class ExamResultController extends AbstractPageController
               AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
         ";
         
-        $params = [
-            'examId' => $examId,
-            'year' => $examYear,
-            'yearEnd' => $examYearEnd
-        ];
+        $params = ['examId' => $examId, 'year' => $examYear, 'yearEnd' => $examYearEnd];
 
         if ($selectedClass) {
             $sql .= " AND u.auxinfo = :cls";
@@ -422,29 +351,21 @@ final class ExamResultController extends AbstractPageController
 
         // Mappings
         $unitMap = [
-            'UNIT_MINUTES' => 'min', 
-            'UNIT_SECONDS' => 's', 
-            'UNIT_METERS' => 'm',
-            'UNIT_CENTIMETERS' => 'cm', 
-            'UNIT_HOURS' => 'h', 
-            'UNIT_NUMBER' => 'x',
-            'NONE' => ''
+            'UNIT_MINUTES' => 'min', 'UNIT_SECONDS' => 's', 
+            'UNIT_METERS' => 'm', 'UNIT_CENTIMETERS' => 'cm', 
+            'UNIT_HOURS' => 'h', 'UNIT_NUMBER' => 'x', 'NONE' => ''
         ];
         $catMap = ['Ausdauer' => 1, 'Kraft' => 2, 'Schnelligkeit' => 3, 'Koordination' => 4];
 
         $enrichedParticipants = [];
         
-        // 3. Daten aufbereiten
         foreach ($participants as $p) {
             $p['geschlecht_kurz'] = ($p['geschlecht'] === 'FEMALE') ? 'w' : 'm';
             $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
-            
-            // Schwimm-Jahr Logik
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
-            // Ergebnisse laden
-            // NEU: d.verband hinzugefügt
+            // Ergebnisse laden (inkl. Verbands-Info)
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
                        d.kategorie, d.einheit, d.name as d_name, d.verband
@@ -469,33 +390,25 @@ final class ExamResultController extends AbstractPageController
                 if (isset($catMap[$res['kategorie']])) {
                     $idx = $catMap[$res['kategorie']];
                     
-                    // --- NEUE LOGIK START (KORRIGIERT) ---
-                    
-                    // Wir brauchen auch hier den Check auf NONE
-                    $unit = $res['einheit']; // Kommt aus dem SQL Select
+                    $unit = $res['einheit'];
                     $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
                     if (!empty($res['verband']) && $isUnitNone) {
-                        // FALL 1: ECHTES Verbandsabzeichen (DLRG, etc.)
-                        // Ziffer = A
-                        // Ergebnis = Name des Verbands
+                        // FALL 1: Verbandsabzeichen (z.B. DLRG) -> "A" und Verbandsname
                         $displayNr = 'A';
                         $displayRes = $res['verband'];
                     } else {
-                        // FALL 2: Normale Disziplin ODER Turnen (hat Verband, aber auch Einheit)
+                        // FALL 2: Normale Disziplin
                         $einheit = $unitMap[$res['einheit']] ?? '';
                         $displayNr = $res['auswahlnummer'] ?? '-';
-                        
                         $valStr = str_replace('.', ',', (string)$res['leistung']);
                         
-                        // Kleine Kosmetik: Wenn 0 aber Punkte da sind -> Status anzeigen (Fallback)
                         if ((empty($valStr) || $valStr === '0') && $res['points'] > 0) {
                              $displayRes = ucfirst($res['stufe'] ?? 'Ok');
                         } else {
                              $displayRes = $valStr . ' ' . $einheit;
                         }
                     }
-                    // --- NEUE LOGIK ENDE ---
 
                     $p['disciplines'][$idx] = [
                         'nr'  => $displayNr,
@@ -507,7 +420,7 @@ final class ExamResultController extends AbstractPageController
             $enrichedParticipants[] = $p;
         }
 
-        // 4. Batches bilden
+        // Batches für Seitenumbruch (je 10)
         $batches = array_chunk($enrichedParticipants, 10);
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
@@ -522,6 +435,49 @@ final class ExamResultController extends AbstractPageController
             'exam_year_short' => substr((string)$examYear, -2),
             'selectedClass' => $selectedClass,
             'today' => new \DateTime(),
+        ]);
+    }
+
+    // --- HELPER ---
+
+    private function getExamParticipant(int $id): ?ExamParticipant
+    {
+        return $this->em->createQueryBuilder()
+             ->select('ep', 'p', 'u', 'ex')
+             ->from(ExamParticipant::class, 'ep')
+             ->join('ep.participant', 'p')
+             ->join('p.user', 'u')
+             ->join('ep.exam', 'ex')
+             ->where('ep.id = :id')
+             ->setParameter('id', $id)
+             ->getQuery()
+             ->getOneOrNullResult();
+    }
+
+    private function formatLeistung($input): ?float
+    {
+        if ($input === null || $input === '') return null;
+        return (float)str_replace(',', '.', (string)$input);
+    }
+
+    private function getGenderString(ExamParticipant $ep): string
+    {
+        $raw = $ep->getParticipant()->getGender() ?? 'W';
+        return (str_starts_with(strtoupper($raw), 'M')) ? 'MALE' : 'FEMALE';
+    }
+
+    private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe): JsonResponse
+    {
+        $summary = $this->service->syncSummary($ep);
+        return new JsonResponse([
+            'status' => 'ok',
+            'points' => $points,
+            'stufe' => $stufe,
+            'total_points' => $summary['total'],
+            'final_medal' => $summary['medal'],
+            'has_swimming' => $summary['has_swimming'],
+            'swimming_met_via' => $summary['met_via'] ?? ($summary['swimming_met_via'] ?? ''),
+            'swimming_expiry'  => $summary['expiry'] ?? ($summary['swimming_expiry'] ?? null),
         ]);
     }
 }
