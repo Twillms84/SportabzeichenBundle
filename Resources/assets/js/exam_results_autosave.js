@@ -1,19 +1,20 @@
 document.addEventListener('DOMContentLoaded', function() {
     
     // =========================================================
-    // 1. ANSICHT FILTER (Select2 Logic)
+    // 1. ANSICHT FILTER (Select2 / Category Logic)
     // =========================================================
-    const $viewSelector = $('#viewSelector');
+    const $viewSelector = $('#viewSelector'); // jQuery Annahme, sonst document.querySelector
 
     if ($viewSelector.length) {
         $viewSelector.on('change', function() {
             const selectedCategories = $(this).val() || [];
             
+            // Iteriere über alle Optionen, um Spalten ein- oder auszublenden
             $('#viewSelector option').each(function() {
                 const category = $(this).val();
                 const cells = document.querySelectorAll('.col-cat-' + category);
                 
-                if (selectedCategories.includes(category)) {
+                if (selectedCategories.length === 0 || selectedCategories.includes(category)) {
                     cells.forEach(cell => cell.classList.remove('col-hidden'));
                 } else {
                     cells.forEach(cell => cell.classList.add('col-hidden'));
@@ -23,11 +24,12 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem('sportabzeichen_view_selection', JSON.stringify(selectedCategories));
         });
 
+        // Restore Selection
         const savedSelection = localStorage.getItem('sportabzeichen_view_selection');
         if (savedSelection) {
             try {
                 $viewSelector.val(JSON.parse(savedSelection)).trigger('change');
-            } catch(e) { console.error(e); }
+            } catch(e) { console.error('Storage Error', e); }
         }
     }
 
@@ -44,17 +46,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const swimmingDeleteRoute = form.getAttribute('data-swimming-delete-route');
     const csrfToken = form.getAttribute('data-global-token');
 
-    // --- INITIALISIERUNG BEI SEITENAUFRUF ---
+    // --- INITIALISIERUNG ---
+    // Hints aktualisieren und Verbands-Inputs sperren
     document.querySelectorAll('.js-discipline-select').forEach(select => {
         updateRequirementHints(select);
-        // WICHTIG: Beim Laden sofort prüfen, ob Felder gesperrt sein müssen
         checkVerbandInput(select);
     });
 
-    // --- CHANGE LISTENER (Speichern & UI Logik) ---
+    // --- CHANGE LISTENER (Delegate) ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
-        // Wir reagieren nur auf Elemente mit data-save Attribut
+        
+        // Nur Elemente mit data-save verarbeiten
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
@@ -69,6 +72,10 @@ document.addEventListener('DOMContentLoaded', function() {
             _token: csrfToken
         };
 
+        // UI-Referenzen
+        const selectEl = cell ? cell.querySelector('select') : null;
+        const inputEl = cell ? cell.querySelector('input[type="text"]') : null;
+
         // A) SCHWIMM-NACHWEIS SELECT
         if (type === 'swimming_select') {        
             targetRoute = swimmingRoute;
@@ -76,26 +83,26 @@ document.addEventListener('DOMContentLoaded', function() {
         } 
         // B) NORMALE DISZIPLINEN & LEISTUNGEN
         else {
-            const selectEl = cell.querySelector('select');
-            const inputEl = cell.querySelector('input[type="text"]');
-            
             if (!selectEl || !selectEl.value || !epId) return;
 
-            // Route wählen: Wurde das Select geändert oder das Textfeld?
+            // Route: Select geändert -> Disziplin speichern; Text geändert -> Ergebnis speichern
             targetRoute = (el.tagName === 'SELECT') ? disciplineRoute : resultRoute;
 
             if (el.tagName === 'SELECT') {
                 updateRequirementHints(el);
-                // WICHTIG: Sofort UI anpassen (Sperren/Text setzen)
-                checkVerbandInput(el); 
+                checkVerbandInput(el); // UI sofort sperren/entsperren
             }
 
             payload.discipline_id = selectEl.value;
-            // Wert aus dem Input nehmen (kann Zahl sein oder "DLRG" String)
+            // Wert aus Input (Zahl oder Text wie "DLRG")
             payload.leistung = inputEl ? inputEl.value : '';
 
-            // Visuelles Feedback: Input kurz ausgrauen während des Speicherns
-            if (inputEl && !inputEl.disabled) inputEl.style.opacity = '0.5';
+            // Visuelles Feedback: Input sperren während Request
+            if (inputEl && !inputEl.disabled) {
+                inputEl.setAttribute('data-temp-disabled', 'true');
+                inputEl.disabled = true;
+                inputEl.style.opacity = '0.6';
+            }
         }
 
         try {
@@ -108,30 +115,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error('Server-Fehler');
             const data = await response.json();
             
-            const inputEl = cell ? cell.querySelector('input[type="text"]') : null;
-            if (inputEl) inputEl.style.opacity = '1';
+            // Input wieder freigeben
+            if (inputEl && inputEl.hasAttribute('data-temp-disabled')) {
+                inputEl.disabled = false;
+                inputEl.removeAttribute('data-temp-disabled');
+                inputEl.style.opacity = '1';
+                inputEl.focus(); // Fokus zurückgeben
+            }
 
             if (data.status === 'ok' || data.success) {
-                // 1. Farben & Inputs der aktuellen Zelle aktualisieren
+                // 1. Zellen-Update (Farben etc.)
                 if (type !== 'swimming_select' && cell) {
                     handleDisciplineColors(data, cell, row, kat, el);
                 }
                 
-                // 2. WICHTIG: Gesamtergebnis (Punkte/Medaille) sofort aktualisieren
-                // Dies löst das Problem, dass Änderungen erst nach Refresh sichtbar waren.
+                // 2. Gesamt-Update (Punkte/Medaillen Widget)
                 updateUIWidgets(epId, row, data);
+            } else {
+                throw new Error(data.message || 'Fehler beim Speichern');
             }
         } catch (e) {
             console.error('Fehler:', e);
-            if (el.type === 'text') el.style.backgroundColor = '#ffe6e6'; // Rot bei Fehler
+            if (inputEl) {
+                inputEl.disabled = false;
+                inputEl.style.backgroundColor = '#ffe6e6'; // Rot markieren
+                setTimeout(() => inputEl.style.backgroundColor = '', 3000);
+            }
+            alert('Fehler beim Speichern: ' + e.message);
         }
     });
 
-    // --- CLICK LISTENER (Schwimmen Löschen Button) ---
+    // --- CLICK LISTENER (Schwimmen Löschen) ---
     document.addEventListener('click', async function(event) {
+        // Delegate: Prüfen ob Click innerhalb des Buttons war
         const btn = event.target.closest('.btn-delete-swimming');
         if (!btn) return;
 
@@ -139,8 +157,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const epId = btn.getAttribute('data-ep-id');
         
         if (!swimmingDeleteRoute || !epId) return;
+        
+        if(!confirm('Schwimmnachweis wirklich entfernen?')) return;
 
         btn.style.opacity = '0.5';
+        btn.disabled = true;
 
         try {
             const response = await fetch(swimmingDeleteRoute, {
@@ -155,14 +176,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok' || data.success) {
-                const row = btn.closest('tr');
+                const row = btn.closest('tr'); // Falls Widget im Row ist
+                // Widget neu rendern
                 updateUIWidgets(epId, row, data);
+            } else {
+                alert('Fehler: ' + (data.message || 'Konnte nicht gelöscht werden.'));
             }
         } catch (e) {
             console.error('Fehler beim Löschen:', e);
-            alert('Fehler beim Entfernen des Nachweises.');
+            alert('Server-Fehler beim Löschen.');
         } finally {
             btn.style.opacity = '1';
+            btn.disabled = false;
         }
     });
 
@@ -171,8 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // =========================================================
 
     /**
-     * Prüft, ob die gewählte Disziplin eine "Nur-Haken" Disziplin ist (Verband).
-     * Wenn data-unit="NONE" ist, wird das Eingabefeld gesperrt und der Name eingetragen.
+     * Sperrt das Eingabefeld, wenn Unit=NONE (z.B. Verbandsabzeichen).
      */
     function checkVerbandInput(selectEl) {
         const cell = selectEl.closest('td');
@@ -180,29 +204,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!inputEl) return;
 
         const selectedOption = selectEl.options[selectEl.selectedIndex];
-        if (!selectedOption) return; // Falls "Bitte wählen" aktiv ist
+        if (!selectedOption || !selectedOption.value) {
+            // Keine Auswahl -> Reset
+            inputEl.disabled = true;
+            inputEl.value = '';
+            inputEl.classList.remove('bg-light');
+            return;
+        }
         
-        // Werte aus den data-Attributen holen
         const unit = selectedOption.getAttribute('data-unit'); 
         const verbandName = selectedOption.getAttribute('data-verband');
 
-        // Prüfen auf NONE Varianten
         const isUnitNone = (unit === 'NONE' || unit === 'UNIT_NONE');
 
         if (isUnitNone) {
-            // FALL 1: Verbandsabzeichen (z.B. DLRG) -> Input sperren
-            // Wir schreiben den Namen (z.B. "DLRG") in das Feld.
-            // Das Backend ignoriert diesen String und setzt 1.0 (Gold).
+            // Pauschal-Eintrag (Verband)
             inputEl.value = verbandName || 'Nachweis';
-            inputEl.disabled = true;
+            inputEl.disabled = true; // User kann nichts tippen
             inputEl.classList.add('bg-light');
         } else {
-            // FALL 2: Normale Disziplin oder Turnen (Unit = PIECES) -> Input frei
+            // Normale Eingabe
             inputEl.disabled = false;
             inputEl.classList.remove('bg-light');
             
-            // Falls vorher ein automatischer Text drin stand, leeren wir das Feld,
-            // damit der User eine Zahl eingeben kann.
+            // Aufräumen, falls vorher Text drin stand
             if (inputEl.value === verbandName || inputEl.value === 'Nachweis') {
                 inputEl.value = '';
             }
@@ -210,8 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * Aktualisiert die Farben (Gold/Silber/Bronze) der Inputs basierend auf der Antwort.
-     * Bereinigt auch Konflikte (andere Felder der gleichen Kategorie leeren).
+     * Setzt Farben (Gold/Silber/Bronze) und leert Konkurrenzfelder.
      */
     function handleDisciplineColors(data, cell, row, kat, el) {
         const selectEl = cell.querySelector('select');
@@ -227,81 +251,76 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 2. Sicherstellen, dass Verbands-Sperre erhalten bleibt
+        // 2. Verbands-Logik erneut prüfen (falls Backend Daten geändert hat)
         if (isSelect) {
             checkVerbandInput(selectEl);
         }
 
-        // 3. Konflikte bereinigen (nur EINE Disziplin pro Kategorie erlaubt)
+        // 3. Andere Felder der gleichen Kategorie leeren
         if (isSelect && kat) {
             row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                // Wenn es ein Element in einer anderen Zelle (gleiche Zeile, gleiche Kategorie) ist
-                if (otherEl.closest('td') !== cell) {
-                    
-                    if (otherEl.tagName === 'INPUT') {
-                        otherEl.value = ''; // Wert löschen
-                        otherEl.disabled = false; // Wieder freigeben
-                        otherEl.classList.remove('bg-light');
-                    }
-                    if (otherEl.tagName === 'SELECT') {
-                        otherEl.value = ''; // Auswahl zurücksetzen
-                    }
-                    
-                    // Farbe entfernen
+                // Überspringen, wenn es das aktuelle Element ist
+                if (otherEl.closest('td') === cell) return;
+
+                if (otherEl.tagName === 'INPUT') {
+                    otherEl.value = '';
+                    otherEl.disabled = true; // Erst disablen, bis Disziplin gewählt wird
+                    otherEl.classList.remove('bg-light');
                     otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                     otherEl.classList.add('medal-none');
+                }
+                if (otherEl.tagName === 'SELECT') {
+                    otherEl.value = ''; 
+                    otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
+                    otherEl.classList.add('medal-none');
+                    // Hints resetten
+                    updateRequirementHints(otherEl);
                 }
             });
         }
     }
 
     /**
-     * Aktualisiert die Gesamtpunkte, Medaille und den Schwimm-Status im DOM.
-     * Benutzt die IDs, die im Twig-Template definiert wurden.
+     * Aktualisiert Gesamtpunkte, Medaille und Schwimmstatus im DOM.
      */
     function updateUIWidgets(epId, row, data) {
         
-        // A. Gesamtpunkte aktualisieren
+        // A. Gesamtpunkte
         const totalBadge = document.getElementById('total-points-' + epId);
-        if (totalBadge && data.total_points !== undefined) {
-            totalBadge.textContent = data.total_points;
+        if (totalBadge && data.total !== undefined) {
+            totalBadge.textContent = data.total;
             
-            // Kleiner visueller Effekt (kurz grün aufleuchten lassen optional)
-            totalBadge.style.transition = 'color 0.5s';
-            const oldColor = totalBadge.style.color;
-            totalBadge.style.color = '#28a745'; // Success Green
-            setTimeout(() => totalBadge.style.color = oldColor, 1000);
+            // Animation
+            totalBadge.classList.add('text-success');
+            setTimeout(() => totalBadge.classList.remove('text-success'), 1000);
         }
 
-        // B. Medaille (Gesamt) aktualisieren
+        // B. Medaille
         const medalBadge = document.getElementById('final-medal-' + epId);
         if (medalBadge) {
-            const medal = data.final_medal ? String(data.final_medal).toLowerCase() : 'none';
-            const labelEl = medalBadge.querySelector('.badge-label-small'); // Falls vorhanden
+            const medal = data.medal ? String(data.medal).toLowerCase() : 'none';
+            const labelEl = medalBadge.querySelector('.badge-label-small');
 
-            // Reset Classes
-            medalBadge.className = 'result-badge-box'; 
-            // Hier deine CSS Klassen für die Badges anwenden:
+            medalBadge.className = 'result-badge-box'; // Reset Basis-Klasse
+            
             if (medal === 'gold') {
                 medalBadge.classList.add('bg-gold');
-                if(labelEl) labelEl.textContent = 'Gold';
-                medalBadge.textContent = 'Gold'; // Fallback Text
+                medalBadge.textContent = 'Gold';
             } else if (medal === 'silver' || medal === 'silber') {
                 medalBadge.classList.add('bg-silver');
-                if(labelEl) labelEl.textContent = 'Silber';
                 medalBadge.textContent = 'Silber';
             } else if (medal === 'bronze') {
                 medalBadge.classList.add('bg-bronze');
-                if(labelEl) labelEl.textContent = 'Bronze';
                 medalBadge.textContent = 'Bronze';
             } else {
                 medalBadge.classList.add('medal-none');
-                if(labelEl) labelEl.textContent = '-';
                 medalBadge.textContent = '-';
             }
+            // Falls du das Label (span) behalten willst, musst du es hier wieder einfügen
+            // oder textContent nur auf den TextNode anwenden.
         }
 
-        // C. Schwimm-Bereich aktualisieren (Badge vs. Dropdown)
+        // C. Schwimm-Container
         const wrapper = document.getElementById('swimming-wrapper-' + epId);
         if (wrapper) {
             const badgeCont = wrapper.querySelector('.swim-badge-container');
@@ -312,58 +331,60 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasSwimming = (data.has_swimming === true);
 
             if (hasSwimming) {
-                // Zeige Badge, verstecke Dropdown
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont)  dropCont.classList.add('d-none');
                 
-                // Info Text aktualisieren (z.B. "Gültig bis 2025")
-                if(infoText && (data.swimming_met_via || data.met_via)) {
-                    infoText.textContent = data.swimming_met_via || data.met_via;
-                    infoText.title = data.swimming_met_via || data.met_via;
+                if(infoText) {
+                    const txt = data.swimming_met_via || data.met_via || 'Erledigt';
+                    infoText.textContent = txt;
+                    infoText.title = txt + (data.expiry ? ' (bis ' + data.expiry + ')' : '');
                 }
             } else {
-                // Zeige Dropdown, verstecke Badge
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont)  dropCont.classList.remove('d-none');
-                if(select)    select.value = ""; // Reset Auswahl
+                if(select)    select.value = ""; 
             }
         }
     }
 
     /**
-     * Aktualisiert die Hinweise (Bronze/Silber/Gold Werte) unter dem Input.
+     * Zeigt Bronze/Silber/Gold Werte unter dem Input an.
      */
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
+        if (!parentTd) return;
+
         const opt = select.options[select.selectedIndex];
-        if (!parentTd || !opt) return;
-
-        // Versuchen, die Elemente zu finden (Anpassung an dein HTML nötig)
+        
+        // Suche nach den Elementen (Klassen anpassen falls nötig)
         const labels = {
-            b: parentTd.querySelector('.req-val-b') || parentTd.querySelector('.js-val-b'),
-            s: parentTd.querySelector('.req-val-s') || parentTd.querySelector('.js-val-s'),
-            g: parentTd.querySelector('.req-val-g') || parentTd.querySelector('.js-val-g'),
-            unit: parentTd.querySelector('.req-unit') || parentTd.querySelector('.input-group-text-unit')
+            b: parentTd.querySelector('.req-val-b, .js-val-b'),
+            s: parentTd.querySelector('.req-val-s, .js-val-s'),
+            g: parentTd.querySelector('.req-val-g, .js-val-g'),
+            unit: parentTd.querySelector('.req-unit, .input-group-text-unit')
         };
-
+        
+        // Input freischalten/sperren
         const input = parentTd.querySelector('input[data-type="leistung"]');
 
-        // Wenn "Bitte wählen..."
-        if (!opt.value) {
+        if (!opt || !opt.value) {
+            // Alles resetten
             Object.values(labels).forEach(l => l && (l.textContent = (l === labels.unit ? '' : '-')));
             if(input) input.disabled = true;
             return;
         }
 
-        // Werte aus data-Attributen lesen
+        // Werte aus HTML data-Attributen
         if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
         if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
         if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
         
         if(labels.unit) {
-            // Einheit anzeigen, außer bei NONE
             const u = opt.getAttribute('data-unit');
-            labels.unit.textContent = (u === 'NONE' || u === 'UNIT_NONE') ? '' : (u || '');
+            const showUnit = (u && u !== 'NONE' && u !== 'UNIT_NONE');
+            labels.unit.textContent = showUnit ? u : '';
         }
+        
+        if(input) input.disabled = false;
     }
 });
