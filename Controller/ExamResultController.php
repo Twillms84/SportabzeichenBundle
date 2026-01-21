@@ -192,78 +192,88 @@ final class ExamResultController extends AbstractPageController
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                
-                // WICHTIG: Nur den Schwimm-Service rufen, wenn das alte Ergebnis auch Schwimmen war!
-                // Sonst versucht er für "Kugelstoßen" einen leeren Schwimmnachweis zu erzeugen -> Crash.
+                // Wenn das alte Ergebnis ein Schwimmnachweis war, setzen wir ihn sicherheitshalber auf 0 zurück,
+                // bevor wir das neue speichern.
                 if ($existingRes->getDiscipline()->isSwimmingCategory()) {
                     $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
                 }
-
                 $this->em->remove($existingRes);
             }
         }
         $this->em->flush(); 
 
         // -----------------------------------------------------------
-        // 2. Berechnung der Punkte
+        // 2. Berechnung & Logik für Verbandsabzeichen
         // -----------------------------------------------------------
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
         
-        $pData = $this->service->calculateResult(
-            $discipline, 
-            (int)$ep->getExam()->getYear(), 
-            $this->getGenderString($ep), 
-            (int)$ep->getAgeYear(), 
-            $leistung
-        );
+        // Check: Ist es ein Verbandsabzeichen (Einheit 'NONE')?
+        $unit = $discipline->getUnit();
+        $isVerband = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
+        $points = 0;
+        $stufe = '';
+
+        if ($isVerband) {
+            // FALL A: Verbandsabzeichen (DLRG, Schwimmabzeichen etc.)
+            // Wir gehen davon aus: Wenn es ausgewählt wurde, ist es Gold/Bestanden (3 Punkte).
+            // Wir ignorieren calculateResult, da es für "NONE" keine Tabellen gibt.
+            $points = 3; 
+            $stufe = 'GOLD';
+        } else {
+            // FALL B: Normale Disziplin (Zeit/Meter)
+            $pData = $this->service->calculateResult(
+                $discipline, 
+                (int)$ep->getExam()->getYear(), 
+                $this->getGenderString($ep), 
+                (int)$ep->getAgeYear(), 
+                $leistung
+            );
+            $points = $pData['points'];
+            $stufe = $pData['stufe'];
+        }
+
+        // -----------------------------------------------------------
+        // 3. Ergebnis speichern
+        // -----------------------------------------------------------
         $newResult = new ExamResult();
         $newResult->setExamParticipant($ep);
         $newResult->setDiscipline($discipline);
+        $newResult->setPoints($points);
+        $newResult->setStufe($stufe);
 
-        // Sonderfall: DLRG / Verbandsabzeichen (Einheit NONE) -> Wert immer 1.0 (Gold)
-        $unit = $discipline->getUnit();
-        $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
-        
-        if ($isUnitNone) {
+        // Leistung setzen (bei Verband 1.0 als Platzhalter, sonst der echte Wert)
+        if ($isVerband) {
             $newResult->setLeistung(1.0); 
         } else {
             $newResult->setLeistung($leistung ?? 0.0);
         }
-
-        $newResult->setPoints($pData['points']);
-        $newResult->setStufe($pData['stufe']);
+        
         $this->em->persist($newResult);
 
         // -----------------------------------------------------------
-        // 3. Schwimm-Proof Update (CRASH FIX)
+        // 4. Schwimm-Proof Update (FIXED)
         // -----------------------------------------------------------
-        
-        // Nur ausführen, wenn die NEUE Disziplin auch wirklich Schwimmen ist
         if ($discipline->isSwimmingCategory()) {
             
-            $points = $pData['points'];
+            // Datum bestimmen: 
+            // Wenn Punkte > 0 (Bronze/Silber/Gold oder Verband), MÜSSEN wir ein Datum setzen.
+            // Wir nehmen "Jetzt" (new DateTime), da $pData['req'] kein verlässliches Datum ist.
+            $proofDate = null;
             
-            // HIER WAR DER FEHLER:
-            // $pData['req'] ist oft NULL (z.B. bei DLRG Gold Abzeichen oder manueller Eingabe).
-            // Die Datenbank verbietet aber NULL.
-            // Lösung: Wenn wir Punkte haben (>0), aber kein Datum, nehmen wir HEUTE.
-            
-            $proofDate = $pData['req']; // Das berechnete Datum (falls vorhanden)
-
-            if ($points > 0 && empty($proofDate)) {
-                $proofDate = new \DateTime(); // Fallback auf Heute
+            if ($points > 0) {
+                $proofDate = new \DateTime(); 
             }
-            
-            // Falls Punkte 0 sind, ist das Datum egal, der Service löscht/resettet es vermutlich.
-            // Aber sicherheitshalber übergeben wir nie NULL, wenn Punkte > 0 sind.
-            
+
+            // Service Aufruf:
+            // Bei points=0 wird der Proof gelöscht/deaktiviert (Date ist dann egal/null).
+            // Bei points>0 wird er mit dem Datum $proofDate gesetzt.
             $this->service->updateSwimmingProof($ep, $discipline, $points, $proofDate);
         }
 
         $this->em->flush();
         
-        return $this->generateSummaryResponse($ep, $pData['points'], $pData['stufe']);
+        return $this->generateSummaryResponse($ep, $points, $stufe);
     }
 
     /**
