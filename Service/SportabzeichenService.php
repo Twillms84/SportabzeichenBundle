@@ -76,72 +76,88 @@ class SportabzeichenService
      */
     public function updateSwimmingProof(ExamParticipant $ep, Discipline $discipline, int $points, ?Requirement $req = null): void
     {
-        // Sicherstellen, dass das Jahr ein Integer ist
         $examYear = (int)$ep->getExam()->getYear();
         $participant = $ep->getParticipant();
 
-        // 1. Relevanz prüfen
-        $disciplineIsSwimming = method_exists($discipline, 'isSwimming') 
-            ? $discipline->isSwimming() 
-            : ($discipline->getCategory() === 'Schwimmen');
-        
-        $isSwimmingRelevant = $disciplineIsSwimming 
-            || !empty($discipline->getVerband()) 
-            || ($req && $req->isSwimmingProof());
+        // --- 1. RELEVANZ PRÜFEN ---
+        $isSwimmingRelevant = false;
 
+        // Prio A: Das Flag direkt am Requirement (Deine Requirement-Entity)
+        // Das deckt die Fälle ab, wo in der DB 'schwimmnachweis = true' gesetzt ist.
+        if ($req !== null && $req->isSwimmingProof()) {
+            $isSwimmingRelevant = true;
+        }
+        // Prio B: Fallback auf die Disziplin (Namen oder Kategorie)
+        // Falls mal kein Requirement da ist oder es nicht explizit gesetzt wurde.
+        elseif (method_exists($discipline, 'isSwimmingCategory') && $discipline->isSwimmingCategory()) {
+            $isSwimmingRelevant = true;
+        }
+        // Prio C: Fallback auf alte Getter-Namen (Sicherheitshalber)
+        elseif (method_exists($discipline, 'isSwimming') && $discipline->isSwimming()) {
+            $isSwimmingRelevant = true;
+        }
+
+        // Wenn es nichts mit Schwimmen zu tun hat -> Abbruch.
         if (!$isSwimmingRelevant) {
             return;
         }
 
+        // --- 2. NACHWEIS VERARBEITEN ---
+        
         $repo = $this->em->getRepository(SwimmingProof::class);
         
-        // Wir suchen explizit nach einem Nachweis für DIESES Prüfungsjahr
+        // Prüfen, ob für dieses Jahr schon ein Nachweis existiert
         $existingProof = $repo->findOneBy([
             'participant' => $participant,
             'examYear' => $examYear
         ]);
 
+        // Eindeutige Kennung, damit wir wissen, dass der Nachweis AUTOMATISCH durch diese Disziplin kam
         $proofIdentifier = 'DISCIPLINE:' . $discipline->getId();
 
-        // FALL A: Leistung erbracht (Punkte > 0)
+        // FALL A: Leistung wurde erbracht (Gold/Silber/Bronze bzw. Verband erfolgreich)
         if ($points > 0) {
             
-            // Wenn es schon einen Nachweis für dieses Jahr gibt...
             if ($existingProof) {
+                // Wenn schon ein manueller Upload da ist (via ist NULL oder anders), nicht überschreiben!
                 $via = $existingProof->getRequirementMetVia();
-                
-                // ... und dieser Nachweis NICHT von dieser Disziplin stammt (und nicht leer ist),
-                // dann brechen wir ab (Schutz vor Überschreiben manueller Nachweise).
                 if ($via && $via !== $proofIdentifier) {
-                    return;
+                    return; // Manuellen Nachweis behalten
                 }
-                
-                // Wenn er von dieser Disziplin ist (oder leer), aktualisieren wir ihn.
                 $proof = $existingProof;
             } else {
-                // Kein Nachweis für dieses Jahr -> Neuen anlegen
+                // Neuen Nachweis anlegen
                 $proof = new SwimmingProof();
                 $proof->setParticipant($participant);
-                // HIER WAR DER FEHLER: Wir übergeben jetzt int
                 $proof->setExamYear($examYear);
                 $this->em->persist($proof);
             }
 
-            // Gültigkeit berechnen
-            $age = $ep->getAgeYear();
-            $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
+            // Gültigkeit berechnen (Kinder/Jugend < 18: bis Volljährigkeit, Erw: 5 Jahre)
+            $age = $ep->getAgeYear(); // oder wie du das Alter ermittelst
+            
+            // Regelwerk: 
+            // Erwachsene: Gültigkeit 5 Jahre (Prüfungsjahr + 4)
+            // Jugend: Gültig bis zum 18. Lebensjahr (bzw. Jahresende)
+            if ($age < 18) {
+                $yearsTo18 = 18 - $age;
+                $validUntilYear = $examYear + $yearsTo18; 
+            } else {
+                $validUntilYear = $examYear + 4; 
+            }
             
             $proof->setConfirmedAt(new \DateTime());
-            $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
+            $proof->setValidUntil(new \DateTime("$validUntilYear-12-31 23:59:59"));
+            
+            // Wichtig: Markieren, dass dieser Nachweis durch diese Disziplin entstand
             $proof->setRequirementMetVia($proofIdentifier);
 
             $this->em->flush();
-
         } 
-        // FALL B: Leistung gelöscht / 0 Punkte
+        
+        // FALL B: Leistung wurde zurückgenommen (z.B. Note gelöscht -> 0 Punkte)
         elseif ($points === 0 && $existingProof) {
-            
-            // Nur löschen, wenn der Nachweis auch wirklich von DIESER Disziplin kam!
+            // Nur löschen, wenn er auch von DIESER Disziplin erstellt wurde
             if ($existingProof->getRequirementMetVia() === $proofIdentifier) {
                 $this->em->remove($existingProof);
                 $this->em->flush();

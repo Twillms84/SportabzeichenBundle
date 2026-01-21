@@ -85,11 +85,29 @@ class Discipline
     }
     public function isSwimmingCategory(): bool
     {
-        // Hier prüfen wir, ob die Kategorie "Ausdauer" oder "Schnelligkeit" ist 
-        // UND ob es eine Schwimmdisziplin ist. 
-        // Am einfachsten über den Namen oder ein Flag, falls vorhanden:
-        return str_contains(strtolower($this->name ?? ''), 'schwimmen') 
-            || str_contains(strtolower($this->category ?? ''), 'schwimmen');
+        / 1. Klassischer Check: Steht "Schwimmen" im Namen oder der Kategorie?
+        // (Für Standard-Disziplinen wie "800m Schwimmen")
+        $matchesName = str_contains(strtolower($this->name ?? ''), 'schwimmen');
+        $matchesCategory = str_contains(strtolower($this->category ?? ''), 'schwimmen');
+
+        if ($matchesName || $matchesCategory) {
+            return true;
+        }
+
+        // 2. Neuer Check: Schauen wir in die Anforderungen (Requirements).
+        // Wenn EINE der Anforderungen ein Schwimmnachweis ist (z.B. bei DLRG),
+        // dann ist die ganze Disziplin "schwimm-relevant".
+        
+        // Hinweis: Das funktioniert nur, wenn du in der Requirement-Entity
+        // das Feld 'schwimmnachweis' und den Getter 'isSwimmingProof()' oder 'isSchwimmnachweis()' hast.
+        foreach ($this->requirements as $req) {
+            if (method_exists($req, 'isSwimmingProof') && $req->isSwimmingProof()) {
+                return true;
+            }
+            // Fallback falls der Getter anders heißt (siehe vorheriger Schritt)
+            if (method_exists($req, 'isSchwimmnachweis') && $req->isSchwimmnachweis()) {
+                return true;
+        }
     }
 
     public function removeRequirement(Requirement $requirement): self
