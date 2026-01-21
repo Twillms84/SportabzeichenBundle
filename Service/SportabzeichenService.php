@@ -103,29 +103,33 @@ class SportabzeichenService
                 $proof->setParticipant($participant);
                 $proof->setExamYear($examYear);
                 $this->em->persist($proof);
-                // WICHTIG: Damit syncSummary im gleichen Request den Nachweis findet:
-                $this->em->flush();
+                // WICHTIG: KEIN FLUSH HIER! Wir müssen erst die Pflichtfelder setzen.
             }
             
             $age = $ep->getAgeYear(); // Alter im Prüfungsjahr
             
-            // Gültigkeit: 
-            // Kinder/Jugend (<=17): Gültig bis zum 18. Geburtstag? DOSB sagt oft "einmalig im Jugendbereich".
-            // Erwachsene: Prüfungsjahr + 4 weitere Jahre = 5 Jahre Gültigkeit.
+            // Gültigkeit berechnen
             $validUntilYear = ($age <= 17) ? ($examYear + (18 - $age)) : ($examYear + 4);
             
+            // JETZT die Pflichtfelder setzen
             $proof->setConfirmedAt(new \DateTime());
             $proof->setValidUntil(new \DateTime("$validUntilYear-12-31"));
-            
-            // Speichern, dass dieser Nachweis durch diese Disziplin erbracht wurde
             $proof->setRequirementMetVia($proofIdentifier);
+
+            // JETZT ist es sicher zu flushen, da confirmed_at gesetzt ist
+            // (Nur nötig, wenn du die ID sofort im gleichen Request brauchst)
+            $this->em->flush();
 
         } elseif ($proof && $proof->getRequirementMetVia() === $proofIdentifier) {
             // B) Löschen
             // Wenn der existierende Nachweis genau von DIESER Disziplin kam, 
             // aber jetzt keine Punkte mehr da sind (oder Disziplin geändert wurde) -> löschen.
             if (!$isSwimmingRelevant || $points === 0) {
-                $this->em->remove($existingProof);
+                // KORREKTUR: Variable hieß vorher $existingProof (war undefined)
+                $this->em->remove($proof);
+                
+                // Auch hier flush, damit die Löschung wirksam wird, falls syncSummary das prüft
+                $this->em->flush(); 
             }
         }
     }
