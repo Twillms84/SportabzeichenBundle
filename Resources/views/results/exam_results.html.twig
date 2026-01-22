@@ -59,7 +59,6 @@
     </div>
 
     {# --- FORMULAR & TABELLE --- #}
-    {# KORRIGIERT: Keine doppelten Attribute mehr #}
     <form id="autosave-form" 
       data-discipline-route="{{ path('sportabzeichen_results_exam_discipline_save') }}"
       data-result-route="{{ path('sportabzeichen_results_exam_result_save') }}"
@@ -142,25 +141,31 @@
                                     {% set medalValue = p.final_medal|default('none')|lower %}
                                     {% set medalLabel = '-' %}
                                     {% set medalClass = 'bg-light text-muted border' %}
+                                    {% set medalStyle = '' %}
 
                                     {% if medalValue == 'gold' %}
-                                        {% set medalLabel = 'Gold' %}{% set medalClass = 'bg-warning bg-opacity-25 text-dark border-warning' %}
+                                        {% set medalLabel = 'Gold' %}
+                                        {% set medalClass = 'bg-warning bg-opacity-25 text-dark border-warning' %}
                                     {% elseif medalValue == 'silver' or medalValue == 'silber' %}
-                                        {% set medalLabel = 'Silber' %}{% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
+                                        {% set medalLabel = 'Silber' %}
+                                        {% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
                                     {% elseif medalValue == 'bronze' %}
-                                        {% set medalLabel = 'Bronze' %}{% set medalClass = 'bg-danger bg-opacity-25 text-dark border-danger' %}
+                                        {# --- ÄNDERUNG 1: Bronze Farbe korrigiert (Hex statt Red/Danger) --- #}
+                                        {% set medalLabel = 'Bronze' %}
+                                        {% set medalClass = 'text-dark' %}
+                                        {% set medalStyle = 'background-color: rgba(205, 127, 50, 0.25); border: 1px solid rgba(205, 127, 50, 0.6);' %}
                                     {% endif %}
 
-                                    <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" id="final-medal-{{ p.ep_id }}">
+                                    <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
+                                         id="final-medal-{{ p.ep_id }}"
+                                         style="{{ medalStyle }}">
                                         <div class="badge-label-small text-uppercase opacity-75" style="font-size: 0.65rem;">Rang</div>
                                         <div class="d-flex align-items-center justify-content-center gap-1">
                                             <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
                                             
-                                            {# Status Icon im Badge #}
+                                            {# --- ÄNDERUNG 2: Schwimm-Icon nur anzeigen wenn vorhanden (kein Else mehr) --- #}
                                             {% if p.has_swimming %}
                                                 <span class="swim-status-icon text-success" title="Schwimmnachweis erbracht" data-bs-toggle="tooltip">🏊</span>
-                                            {% else %}
-                                                <span class="swim-status-icon text-danger opacity-50" title="Schwimmnachweis fehlt" data-bs-toggle="tooltip">🏊</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -171,7 +176,9 @@
                         {# 2. SCHWIMMEN LOGIK & DROPDOWN #}
                         <td class="col-swimming-status align-middle p-2 text-center col-discipline col-cat-SWIMMING">
                             
-                            <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper h-100 d-flex flex-column justify-content-center">
+                            {# --- ÄNDERUNG 3: Layout fixiert (h-100 und justify-content-center entfernt) --- #}
+                            {# Das td hat align-middle, das zentriert den Inhalt automatisch vertikal #}
+                            <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper w-100">
                                 {% set hasSwimming = p.has_swimming %}
                                 {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}
 
@@ -200,7 +207,6 @@
                                             data-save="true">
                                         <option value="" selected disabled class="text-muted">-- Nachweis wählen --</option>
                                         
-                                        {# Loop durch Schwimm-Disziplinen vom Controller #}
                                         {% for swimDisc in swimming_disciplines %}
                                             <option value="{{ swimDisc.id }}">{{ swimDisc.name }}</option>
                                         {% endfor %}
@@ -263,27 +269,27 @@
                                             data-kategorie="{{ category }}"
                                             style="font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px;">
                                         
-                                        {% if options is empty %}
-                                            <option value="">--</option>
-                                        {% else %}
-                                            {% for req in options %}
-                                                {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
-                                                {# Check ob Verbandsabzeichen (bringt implizit 3 Punkte) #}
-                                                {% set implicitPoints = (req.discipline.unit == 'NONE' or req.discipline.unit == 'UNIT_NONE') ? 3 : 0 %}
-                                                
-                                                <option value="{{ req.discipline.id }}" 
-                                                        {{ selectedReq and selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
-                                                        data-unit="{{ req.discipline.unit }}"
-                                                        data-unit-label="{{ cleanUnit }}"  {# WICHTIG FÜR JS #}
-                                                        data-implicit-points="{{ implicitPoints }}" {# WICHTIG FÜR JS #}
-                                                        data-bronze="{{ req.bronze }}"
-                                                        data-silber="{{ req.silver }}"
-                                                        data-gold="{{ req.gold }}">
-                                                    {{ req.discipline.name }}
-                                                </option>
-                                            {% endfor %}
-                                        {% endif %}
-                                    </select>
+                                            {% if options is empty %}
+                                                <option value="">--</option>
+                                            {% else %}
+                                                {% for req in options %}
+                                                    {% set cleanUnit = unitMap[req.discipline.unit] ?? req.discipline.unit %}
+                                                    {# Check ob Verbandsabzeichen (bringt implizit 3 Punkte) #}
+                                                    {% set implicitPoints = (req.discipline.unit == 'NONE' or req.discipline.unit == 'UNIT_NONE') ? 3 : 0 %}
+                                                    
+                                                    <option value="{{ req.discipline.id }}" 
+                                                            {{ selectedReq and selectedReq.discipline.id == req.discipline.id ? 'selected' : '' }}
+                                                            data-unit="{{ req.discipline.unit }}"
+                                                            data-unit-label="{{ cleanUnit }}"  {# WICHTIG FÜR JS #}
+                                                            data-implicit-points="{{ implicitPoints }}" {# WICHTIG FÜR JS #}
+                                                            data-bronze="{{ req.bronze }}"
+                                                            data-silber="{{ req.silver }}"
+                                                            data-gold="{{ req.gold }}">
+                                                        {{ req.discipline.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </select>
 
                                         {# Input Feld #}
                                         {# Wenn Einheit NONE/UNIT_NONE ist (DLRG), wird das Feld deaktiviert #}
