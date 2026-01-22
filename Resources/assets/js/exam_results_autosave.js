@@ -1,25 +1,30 @@
 document.addEventListener('DOMContentLoaded', function() {
     
     // =========================================================
-    // 1. ANSICHT FILTER
+    // 1. ANSICHT FILTER (Select2 / Category Logic)
     // =========================================================
-    const $viewSelector = $('#viewSelector'); 
+    const $viewSelector = $('#viewSelector'); // jQuery Annahme
     
     if ($viewSelector.length) {
         $viewSelector.on('change', function() {
             const selectedCategories = $(this).val() || [];
+            
+            // Iteriere über alle Optionen, um Spalten ein- oder auszublenden
             $('#viewSelector option').each(function() {
                 const category = $(this).val();
                 const cells = document.querySelectorAll('.col-cat-' + category);
+                
                 if (selectedCategories.length === 0 || selectedCategories.includes(category)) {
                     cells.forEach(cell => cell.classList.remove('col-hidden'));
                 } else {
                     cells.forEach(cell => cell.classList.add('col-hidden'));
                 }
             });
+
             localStorage.setItem('sportabzeichen_view_selection', JSON.stringify(selectedCategories));
         });
 
+        // Restore Selection
         const savedSelection = localStorage.getItem('sportabzeichen_view_selection');
         if (savedSelection) {
             try {
@@ -42,50 +47,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = form.getAttribute('data-global-token');
 
     // --- INITIALISIERUNG ---
+    // Hints aktualisieren und Verbands-Inputs sperren
     document.querySelectorAll('.js-discipline-select').forEach(select => {
         updateRequirementHints(select);
         checkVerbandInput(select);
     });
 
-    // --- CHANGE LISTENER ---
+    // --- CHANGE LISTENER (Delegate) ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
+        
+        // Nur Elemente mit data-save verarbeiten
         if (!el.hasAttribute('data-save')) return;
 
         const epId = el.getAttribute('data-ep-id');
-        const type = el.getAttribute('data-type'); 
+        const type = el.getAttribute('data-type'); // 'discipline', 'leistung', 'swimming_select'
         const kat = el.getAttribute('data-kategorie');
-        const row = el.closest('tr'); // Wir referenzieren hier die ganze Zeile
         const cell = el.closest('td');
-
+        const row = el.closest('tr');
+        
         let targetRoute = '';
-        let payload = { ep_id: epId, _token: csrfToken };
+        let payload = {
+            ep_id: epId,
+            _token: csrfToken
+        };
 
-        // Suche Elemente im Kontext der Zeile (sicherer als Cell) oder Cell
-        // (Select ist immer das Element, das wir gerade geändert haben oder suchen)
-        const selectEl = row.querySelector(`select[data-ep-id="${epId}"]`);
-        const inputEl  = row.querySelector(`input[data-type="leistung"][data-ep-id="${epId}"]`);
+        // UI-Referenzen
+        const selectEl = cell ? cell.querySelector('select') : null;
+        const inputEl = cell ? cell.querySelector('input[type="text"]') : null;
 
-        // A) SCHWIMM-NACHWEIS
+        // A) SCHWIMM-NACHWEIS SELECT
         if (type === 'swimming_select') {        
             targetRoute = swimmingRoute;
             payload.discipline_id = el.value;
         } 
-        // B) NORMALE DISZIPLINEN
+        // B) NORMALE DISZIPLINEN & LEISTUNGEN
         else {
             if (!selectEl || !selectEl.value || !epId) return;
 
+            // Route: Select geändert -> Disziplin speichern; Text geändert -> Ergebnis speichern
             targetRoute = (el.tagName === 'SELECT') ? disciplineRoute : resultRoute;
 
             if (el.tagName === 'SELECT') {
-                // Sofortiges Update der UI (Client-Side Prediction aus Select-Attributen)
-                updateRequirementHints(el); 
-                checkVerbandInput(el);
+                updateRequirementHints(el);
+                checkVerbandInput(el); // UI sofort sperren/entsperren
             }
 
             payload.discipline_id = selectEl.value;
+            // Wert aus Input (Zahl oder Text wie "DLRG")
             payload.leistung = inputEl ? inputEl.value : '';
 
+            // Visuelles Feedback: Input sperren während Request
             if (inputEl && !inputEl.disabled) {
                 inputEl.setAttribute('data-temp-disabled', 'true');
                 inputEl.disabled = true;
@@ -105,38 +117,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
             
+            // Input wieder freigeben
             if (inputEl && inputEl.hasAttribute('data-temp-disabled')) {
                 inputEl.disabled = false;
                 inputEl.removeAttribute('data-temp-disabled');
                 inputEl.style.opacity = '1';
-                inputEl.focus(); 
+                inputEl.focus(); // Fokus zurückgeben
             }
 
             if (data.status === 'ok' || data.success) {
-                // 1. Visuelles Update (Farben)
-                if (type !== 'swimming_select' && selectEl) {
-                    // Wir übergeben hier selectEl, um sicherzustellen, dass wir das richtige Element haben
-                    handleDisciplineColors(data, row, kat, selectEl);
+                // 1. Zellen-Update (Farben etc.)
+                if (type !== 'swimming_select' && cell) {
+                    handleDisciplineColors(data, cell, row, kat, el);
 
-                    // --- 1.1 REQUIREMENTS UPDATE VOM SERVER ---
+                    // --- NEU: REQUIREMENTS UPDATE ---
+                    // Schreibt die Werte aus der Server-Antwort direkt in die Badges
                     if (data.new_requirements) {
                         const req = data.new_requirements;
                         
-                        // Wir suchen in der ganzen Zeile nach den Badges
-                        const badgeB = row.querySelector('.req-val-b, .js-val-b');
-                        const badgeS = row.querySelector('.req-val-s, .js-val-s');
-                        const badgeG = row.querySelector('.req-val-g, .js-val-g');
+                        const badgeB = cell.querySelector('.req-val-b, .js-val-b');
+                        const badgeS = cell.querySelector('.req-val-s, .js-val-s');
+                        const badgeG = cell.querySelector('.req-val-g, .js-val-g');
                         
-                        // Debugging: Falls Elemente fehlen, Warnung in Konsole
-                        if (!badgeB && req.bronze) console.warn('Badge-Elemente in Zeile nicht gefunden! HTML prüfen.');
-
                         if(badgeB) badgeB.textContent = req.bronze;
                         if(badgeS) badgeS.textContent = req.silber;
                         if(badgeG) badgeG.textContent = req.gold;
                     }
+                    // --------------------------------
                 }
                 
-                // 2. Widgets Update
+                // 2. Gesamt-Update (Punkte/Medaillen Widget)
                 updateUIWidgets(epId, row, data);
             } else {
                 throw new Error(data.message || 'Fehler beim Speichern');
@@ -145,53 +155,72 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Fehler:', e);
             if (inputEl) {
                 inputEl.disabled = false;
-                inputEl.style.backgroundColor = '#ffe6e6';
+                inputEl.style.backgroundColor = '#ffe6e6'; // Rot markieren
+                setTimeout(() => inputEl.style.backgroundColor = '', 3000);
             }
+            alert('Fehler beim Speichern: ' + e.message);
         }
     });
 
-    // --- CLICK LISTENER (Schwimmen) ---
+    // --- CLICK LISTENER (Schwimmen Löschen) ---
     document.addEventListener('click', async function(event) {
+        // Delegate: Prüfen ob Click innerhalb des Buttons war
         const btn = event.target.closest('.btn-delete-swimming');
         if (!btn) return;
+
         event.preventDefault();
-        
         const epId = btn.getAttribute('data-ep-id');
+        
         if (!swimmingDeleteRoute || !epId) return;
+        
         if(!confirm('Schwimmnachweis wirklich entfernen?')) return;
 
-        btn.style.opacity = '0.5'; 
+        btn.style.opacity = '0.5';
         btn.disabled = true;
 
         try {
             const response = await fetch(swimmingDeleteRoute, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: JSON.stringify({ ep_id: epId, _token: csrfToken })
             });
+
             const data = await response.json();
+
             if (data.status === 'ok' || data.success) {
                 const row = btn.closest('tr'); 
+                // Widget neu rendern
                 updateUIWidgets(epId, row, data);
             } else {
-                alert('Fehler: ' + (data.message || 'Error'));
+                alert('Fehler: ' + (data.message || 'Konnte nicht gelöscht werden.'));
             }
-        } catch (e) { console.error(e); } 
-        finally { btn.style.opacity = '1'; btn.disabled = false; }
+        } catch (e) {
+            console.error('Fehler beim Löschen:', e);
+            alert('Server-Fehler beim Löschen.');
+        } finally {
+            btn.style.opacity = '1';
+            btn.disabled = false;
+        }
     });
 
     // =========================================================
     // 3. HELPER FUNCTIONS
     // =========================================================
 
+    /**
+     * Sperrt das Eingabefeld, wenn Unit=NONE (z.B. Verbandsabzeichen).
+     */
     function checkVerbandInput(selectEl) {
-        const row = selectEl.closest('tr');
-        // Suche Input spezifisch für diese Zeile
-        const inputEl = row.querySelector('input[data-type="leistung"]');
+        const cell = selectEl.closest('td');
+        const inputEl = cell.querySelector('input[type="text"]');
         if (!inputEl) return;
 
         const selectedOption = selectEl.options[selectEl.selectedIndex];
         if (!selectedOption || !selectedOption.value) {
+            // Keine Auswahl -> Reset
             inputEl.disabled = true;
             inputEl.value = '';
             inputEl.classList.remove('bg-light', 'medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
@@ -200,22 +229,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const unit = selectedOption.getAttribute('data-unit'); 
+        // Lese explizite Punkte für Verband aus (neu hinzugefügt)
         const implicitPoints = parseInt(selectedOption.getAttribute('data-implicit-points') || 0);
         const isVerband = (unit === 'NONE' || unit === 'UNIT_NONE' || implicitPoints > 0);
 
         if (isVerband) {
-            inputEl.value = ''; 
+            // Pauschal-Eintrag (Verband)
+            inputEl.value = ''; // Kein Text nötig, Placeholder ist Haken
             inputEl.setAttribute('placeholder', '✓');
-            inputEl.disabled = true; 
+            inputEl.disabled = true; // User kann nichts tippen
             inputEl.classList.add('bg-light');
+            
+            // Sofort visuell auf Gold setzen (3 Punkte)
+            // Dies ist rein visuell, der echte Save passiert im Hintergrund
             inputEl.classList.remove('medal-silber', 'medal-bronze', 'medal-none');
             inputEl.classList.add('medal-gold');
             selectEl.classList.remove('medal-silber', 'medal-bronze', 'medal-none');
             selectEl.classList.add('medal-gold');
         } else {
+            // Normale Eingabe
             inputEl.disabled = false;
             inputEl.setAttribute('placeholder', '');
             inputEl.classList.remove('bg-light');
+            
+            // Wenn wir von Verband zurückwechseln, Farben resetten wenn leer
             if(inputEl.value === '') {
                 inputEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                 inputEl.classList.add('medal-none');
@@ -225,68 +262,74 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function handleDisciplineColors(data, row, kat, el) {
-        // Wir nutzen hier 'row', um Input und Select sicher zu finden
-        const selectEl = row.querySelector('select[data-type="discipline"]');
-        const inputEl = row.querySelector('input[data-type="leistung"]');
-        
-        const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
-        
-        if(selectEl) {
-            selectEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-            selectEl.classList.add('medal-' + resultColor);
-        }
-        if(inputEl) {
-            inputEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-            inputEl.classList.add('medal-' + resultColor);
-        }
-
+    /**
+     * Setzt Farben (Gold/Silber/Bronze) und leert Konkurrenzfelder.
+     */
+    function handleDisciplineColors(data, cell, row, kat, el) {
+        const selectEl = cell.querySelector('select');
+        const inputEl = cell.querySelector('input[type="text"]');
         const isSelect = (el.tagName === 'SELECT');
-        if (isSelect && selectEl) {
+
+        // 1. Farben setzen
+        const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
+        [selectEl, inputEl].forEach(element => {
+            if(element) {
+                element.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+                element.classList.add('medal-' + resultColor);
+            }
+        });
+
+        // 2. Verbands-Logik erneut prüfen (falls Backend Daten geändert hat)
+        if (isSelect) {
             checkVerbandInput(selectEl);
         }
 
-        // Andere Felder der gleichen Kategorie leeren
+        // 3. Andere Felder der gleichen Kategorie leeren
         if (isSelect && kat) {
-            row.closest('table').querySelectorAll(`tr[data-kategorie-row="${kat}"]`).forEach(otherRow => {
-                 // Logik um andere Zeilen zu resetten, falls nötig (abhängig von Layout)
-                 // Hier belassen wir es bei der ursprünglichen Logik, suchen aber globaler
-                 const otherSelect = otherRow.querySelector('select');
-                 // ... (Vereinfacht, da Struktur unbekannt. Bleibt wie zuvor meist row-basiert)
-            });
-            
-            // Backup: Falls alle inputs in einer row sind:
-             row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                if (otherEl === selectEl || otherEl === inputEl) return; // Skip self
+            row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
+                // Überspringen, wenn es das aktuelle Element ist
+                if (otherEl.closest('td') === cell) return;
 
                 if (otherEl.tagName === 'INPUT') {
                     otherEl.value = '';
-                    otherEl.disabled = true; 
-                    otherEl.classList.remove('bg-light', 'medal-gold', 'medal-silber', 'medal-bronze');
+                    otherEl.disabled = true; // Erst disablen, bis Disziplin gewählt wird
+                    otherEl.classList.remove('bg-light');
+                    otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                     otherEl.classList.add('medal-none');
                 }
                 if (otherEl.tagName === 'SELECT') {
                     otherEl.value = ''; 
                     otherEl.classList.remove('medal-gold', 'medal-silber', 'medal-bronze');
                     otherEl.classList.add('medal-none');
+                    // Hints resetten
                     updateRequirementHints(otherEl);
                 }
             });
         }
     }
 
+    /**
+     * Aktualisiert Gesamtpunkte, Medaille und Schwimmstatus im DOM.
+     */
     function updateUIWidgets(epId, row, data) {
+        
+        // A. Gesamtpunkte
         const totalBadge = document.getElementById('total-points-' + epId);
         if (totalBadge && data.total !== undefined) {
             totalBadge.textContent = data.total;
+            
+            // Animation
             totalBadge.classList.add('text-success');
             setTimeout(() => totalBadge.classList.remove('text-success'), 1000);
         }
 
+        // B. Medaille
         const medalBadge = document.getElementById('final-medal-' + epId);
         if (medalBadge) {
             const medal = data.medal ? String(data.medal).toLowerCase() : 'none';
             const labelSpan = medalBadge.querySelector('.js-medal-label');
+            
+            // Klassen entfernen
             medalBadge.classList.remove('bg-warning', 'bg-secondary', 'bg-danger', 'bg-light', 'bg-opacity-25', 'border-warning', 'border-secondary', 'border-danger', 'text-muted');
             
             let labelText = '-';
@@ -302,13 +345,18 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 medalBadge.classList.add('bg-light', 'text-muted', 'border');
             }
+            
             if(labelSpan) labelSpan.textContent = labelText;
         }
 
+        // C. Schwimm-Container
         const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        // Auch das kleine Icon im Namensfeld updaten
         const swimIcon = document.getElementById('swim-icon-' + epId);
+
         const hasSwimming = (data.has_swimming === true);
 
+        // Icon update
         if(swimIcon) {
             if(hasSwimming) {
                 swimIcon.classList.remove('text-danger', 'opacity-50');
@@ -328,6 +376,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (hasSwimming) {
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont)  dropCont.classList.add('d-none');
+                
                 if(infoText) {
                     const txt = data.swimming_met_via || data.met_via || 'Erledigt';
                     infoText.textContent = txt;
@@ -341,41 +390,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    /**
+     * Zeigt Bronze/Silber/Gold Werte unter dem Input an.
+     * Nutzt data-unit-label für schöne Anzeige (Min. statt UNIT_MINUTES)
+     */
     function updateRequirementHints(select) {
-        // --- ÄNDERUNG: Suche in der ganzen Zeile (TR), nicht nur in der Zelle (TD) ---
-        const row = select.closest('tr');
-        if (!row) return;
+        const parentTd = select.closest('td');
+        if (!parentTd) return;
 
         const opt = select.options[select.selectedIndex];
         
-        // Selektoren für die Badges innerhalb der Zeile
+        // Suche nach den Elementen
         const labels = {
-            b: row.querySelector('.req-val-b, .js-val-b'),
-            s: row.querySelector('.req-val-s, .js-val-s'),
-            g: row.querySelector('.req-val-g, .js-val-g'),
-            unit: row.querySelector('.req-unit, .js-unit-label') 
+            b: parentTd.querySelector('.req-val-b, .js-val-b'),
+            s: parentTd.querySelector('.req-val-s, .js-val-s'),
+            g: parentTd.querySelector('.req-val-g, .js-val-g'),
+            unit: parentTd.querySelector('.req-unit, .js-unit-label') // Hier auf js-unit-label achten
         };
         
-        // Input Referenz (in der gleichen Zeile)
-        const input = row.querySelector('input[data-type="leistung"]');
+        // Input Referenz
+        const input = parentTd.querySelector('input[data-type="leistung"]');
 
         if (!opt || !opt.value) {
+            // Keine Auswahl -> Alles leeren
             Object.values(labels).forEach(l => l && (l.textContent = (l === labels.unit ? '' : '-')));
             if(input) input.disabled = true;
             return;
         }
 
+        // 1. Hole schöne Einheit aus Label
         const prettyUnit = opt.getAttribute('data-unit-label') || '';
+        // 2. Prüfen ob Verbandsabzeichen (implicit points gesetzt oder unit=none)
         const implicitPoints = opt.getAttribute('data-implicit-points');
         const unitRaw = opt.getAttribute('data-unit');
         const isVerband = (unitRaw === 'NONE' || unitRaw === 'UNIT_NONE' || implicitPoints > 0);
 
         if (isVerband) {
+            // Bei Verbandsabzeichen: Hints leeren
             if(labels.b) labels.b.textContent = '';
             if(labels.s) labels.s.textContent = '';
             if(labels.g) labels.g.textContent = '';
             if(labels.unit) labels.unit.textContent = '';
         } else {
+            // Bei normalen Disziplinen: Werte anzeigen
             if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
             if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
             if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
