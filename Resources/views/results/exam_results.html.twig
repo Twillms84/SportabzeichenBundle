@@ -302,13 +302,13 @@
                                         {# Hint-Zeile #}
                                         <div class="req-hint d-flex justify-content-between align-items-center mt-1" style="font-size: 0.7rem;">
                                             <div class="req-values-wrapper js-req-values text-muted">
-                                                {% if selectedReq and not isNoneUnit %}
-                                                    <span class="req-val-b" title="Bronze">{{ selectedReq.bronze }}</span> |
-                                                    <span class="req-val-s" title="Silber">{{ selectedReq.silver }}</span> |
-                                                    <span class="req-val-g" title="Gold">{{ selectedReq.gold }}</span>
-                                                {% else %}
-                                                    <span class="text-muted small">-</span>
-                                                {% endif %}
+                                                {% set showReqs = (selectedReq and not isNoneUnit) %}
+                                                
+                                                <span class="req-val-b" title="Bronze">{{ showReqs ? selectedReq.bronze : '-' }}</span>
+                                                <span class="mx-1">|</span>
+                                                <span class="req-val-s" title="Silber">{{ showReqs ? selectedReq.silver : '-' }}</span>
+                                                <span class="mx-1">|</span>
+                                                <span class="req-val-g" title="Gold">{{ showReqs ? selectedReq.gold : '-' }}</span>
                                             </div>
                                             <div class="req-unit js-unit-label fw-bold text-muted">
                                                 {% if selectedReq %}
