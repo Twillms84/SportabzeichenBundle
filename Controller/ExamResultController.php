@@ -233,7 +233,6 @@ final class ExamResultController extends AbstractPageController
         $requirementsData = null;
 
         if (!$isVerband) {
-            // Wir suchen explizit die Anforderung für das Alter/Geschlecht des Teilnehmers
             $reqEntity = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
                 ->where('r.discipline = :disp')
                 ->andWhere('r.year = :year')
@@ -250,14 +249,13 @@ final class ExamResultController extends AbstractPageController
 
             if ($reqEntity) {
                 $requirementsData = [
-                    'bronze' => $reqEntity->getBronze(), // Passe Getter an deine Entity an (z.B. getValueBronze())
-                    'silber' => $reqEntity->getSilber(),
+                    'bronze' => $reqEntity->getBronze(),
+                    'silber' => $reqEntity->getSilver(), // <--- HIER WAR DER FEHLER (b -> v)
                     'gold'   => $reqEntity->getGold(),
-                    'unit'   => $unit // Hilft dem Frontend bei der Formatierung
+                    'unit'   => $unit
                 ];
             }
         }
-
 
         // -----------------------------------------------------------
         // 3. Ergebnis speichern
