@@ -193,7 +193,6 @@ final class ExamResultController extends AbstractPageController
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
-                // Wenn das alte Ergebnis ein Schwimmnachweis war, setzen wir ihn auf 0 (Löschen)
                 if ($existingRes->getDiscipline()->isSwimmingCategory()) {
                     $this->service->updateSwimmingProof($ep, $existingRes->getDiscipline(), 0); 
                 }
@@ -203,11 +202,9 @@ final class ExamResultController extends AbstractPageController
         $this->em->flush(); 
 
         // -----------------------------------------------------------
-        // 2. Berechnung & Logik für Verbandsabzeichen
+        // 2. Berechnung & Logik
         // -----------------------------------------------------------
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
-        
-        // Check: Ist es ein Verbandsabzeichen (Einheit 'NONE')?
         $unit = $discipline->getUnit();
         $isVerband = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
@@ -215,12 +212,9 @@ final class ExamResultController extends AbstractPageController
         $stufe = '';
 
         if ($isVerband) {
-            // FALL A: Verbandsabzeichen (DLRG, Schwimmabzeichen etc.)
-            // Wenn ausgewählt, ist es Gold/Bestanden (3 Punkte).
             $points = 3; 
             $stufe = 'GOLD';
         } else {
-            // FALL B: Normale Disziplin (Zeit/Meter)
             $pData = $this->service->calculateResult(
                 $discipline, 
                 (int)$ep->getExam()->getYear(), 
@@ -233,6 +227,39 @@ final class ExamResultController extends AbstractPageController
         }
 
         // -----------------------------------------------------------
+        // NEU: 2a. Requirements für das Frontend laden!
+        // Damit das JS die Labels "Bronze: 12:00" etc. aktualisieren kann.
+        // -----------------------------------------------------------
+        $requirementsData = null;
+
+        if (!$isVerband) {
+            // Wir suchen explizit die Anforderung für das Alter/Geschlecht des Teilnehmers
+            $reqEntity = $this->em->getRepository(Requirement::class)->createQueryBuilder('r')
+                ->where('r.discipline = :disp')
+                ->andWhere('r.year = :year')
+                ->andWhere('r.gender = :gender')
+                ->andWhere('r.minAge <= :age')
+                ->andWhere('r.maxAge >= :age')
+                ->setParameter('disp', $discipline)
+                ->setParameter('year', $ep->getExam()->getYear())
+                ->setParameter('gender', $this->getGenderString($ep))
+                ->setParameter('age', $ep->getAgeYear())
+                ->setMaxResults(1)
+                ->getQuery()
+                ->getOneOrNullResult();
+
+            if ($reqEntity) {
+                $requirementsData = [
+                    'bronze' => $reqEntity->getBronze(), // Passe Getter an deine Entity an (z.B. getValueBronze())
+                    'silber' => $reqEntity->getSilber(),
+                    'gold'   => $reqEntity->getGold(),
+                    'unit'   => $unit // Hilft dem Frontend bei der Formatierung
+                ];
+            }
+        }
+
+
+        // -----------------------------------------------------------
         // 3. Ergebnis speichern
         // -----------------------------------------------------------
         $newResult = new ExamResult();
@@ -241,7 +268,6 @@ final class ExamResultController extends AbstractPageController
         $newResult->setPoints($points);
         $newResult->setStufe($stufe);
 
-        // Leistung setzen (bei Verband 1.0 als Platzhalter, sonst der echte Wert)
         if ($isVerband) {
             $newResult->setLeistung(1.0); 
         } else {
@@ -251,18 +277,31 @@ final class ExamResultController extends AbstractPageController
         $this->em->persist($newResult);
 
         // -----------------------------------------------------------
-        // 4. Schwimm-Proof Update (KORRIGIERT)
+        // 4. Schwimm-Proof Update
         // -----------------------------------------------------------
         if ($discipline->isSwimmingCategory()) {
-            // Wir übergeben keine Requirements oder Datum manuell, 
-            // der Service kümmert sich um "confirmed_at" bei Punkten > 0.
             $this->service->updateSwimmingProof($ep, $discipline, $points);
         }
 
         $this->em->flush();
-        $this->em->refresh($ep); // Entity neu laden vor Summary
+        $this->em->refresh($ep); 
         
-        return $this->generateSummaryResponse($ep, $points, $stufe);
+        // -----------------------------------------------------------
+        // 5. Response bauen (Requirements einschleusen)
+        // -----------------------------------------------------------
+        $response = $this->generateSummaryResponse($ep, $points, $stufe);
+        
+        // Wir müssen das JSON decoded, um die Requirements hinzuzufügen, 
+        // oder generateSummaryResponse anpassen. Hier machen wir es direkt:
+        $content = json_decode($response->getContent(), true);
+        
+        // Die neuen Requirements ins JSON packen
+        $content['new_requirements'] = $requirementsData;
+        
+        // Einheit mitschicken, falls sich das Input-Feld ändern muss
+        $content['discipline_unit'] = $unit; 
+
+        return new JsonResponse($content);
     }
 
     /**
