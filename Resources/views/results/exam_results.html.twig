@@ -117,32 +117,28 @@
                     <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}">
                         
                         {# 1. TEILNEHMER INFOS #}
-                        <td class="col-name py-2 bg-white" style="position: sticky; left: 0; z-index: 4;">
-                            <div class="name-container text-truncate">
-                                <span class="fw-bold">{{ p.nachname }}</span>
-                                <span class="d-none d-md-inline">, {{ p.vorname }}</span>
-                                <span class="mobile-break d-md-none">{{ p.vorname }}</span>
-                            </div>
-                            
-                            <div class="small text-muted mb-2 text-truncate">
-                                <span class="d-none d-md-inline">Klasse:</span> <span class="text-dark fw-semibold">{{ p.klasse|default('-') }}</span>
-                                <span class="d-none d-md-inline"> | {{ p.age_year }} J.</span>
-                            </div>
-                            
-                            <div class="d-flex flex-column gap-1">
-                                <div class="d-flex gap-2 align-items-center mt-1 mb-2">
-                                    {# Punkte #}
+                        <td class="col-name py-2 bg-body shadow-sm" style="position: sticky; left: 0; z-index: 4;">
+                            <div class="name-container text-truncate ps-1">
+                                <div class="name-main text-truncate">
+                                    {{ p.nachname }}<span class="fw-normal">, {{ p.vorname }}</span>
+                                </div>
+                                
+                                <div class="name-age text-truncate mb-2">
+                                    {{ p.klasse|default('-') }} | {{ p.age_year }} J.
+                                </div>
+                                
+                                <div class="d-flex gap-2 align-items-center">
+                                    {# --- WIEDERHERGESTELLT: PUNKTE BADGE --- #}
                                     <div class="result-badge-box border rounded px-2 py-1 text-center bg-light" title="Gesamtpunkte">
-                                        <div class="badge-label-small text-muted" style="font-size: 0.65rem;">Pkt</div>
+                                        <div class="badge-label-small text-muted">Pkt</div>
                                         <div class="fw-bold fs-6" id="total-points-{{ p.ep_id }}">{{ p.total_points|default(0) }}</div>
                                     </div>
 
-                                    {# Medaille & Schwimmstatus Icon #}
+                                    {# --- WIEDERHERGESTELLT: MEDAILLEN BADGE --- #}
                                     {% set medalValue = p.final_medal|default('none')|lower %}
                                     {% set medalLabel = '-' %}
                                     {% set medalClass = 'bg-light text-muted border' %}
-                                    {% set medalStyle = '' %}
-
+                                    
                                     {% if medalValue == 'gold' %}
                                         {% set medalLabel = 'Gold' %}
                                         {% set medalClass = 'bg-warning bg-opacity-25 text-dark border-warning' %}
@@ -151,17 +147,14 @@
                                         {% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
                                     {% elseif medalValue == 'bronze' %}
                                         {% set medalLabel = 'Bronze' %}
-                                        {# Alte Version mit Inline-Style entfernt #}
                                         {% set medalClass = 'bg-bronze-transparent' %} 
                                     {% endif %}
 
                                     <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
                                          id="final-medal-{{ p.ep_id }}">
-                                        <div class="badge-label-small text-uppercase opacity-75" style="font-size: 0.65rem;">Rang</div>
+                                        <div class="badge-label-small text-uppercase opacity-75">Rang</div>
                                         <div class="d-flex align-items-center justify-content-center gap-1">
                                             <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
-                                            
-                                            {# --- ÄNDERUNG 2: Schwimm-Icon nur anzeigen wenn vorhanden (kein Else mehr) --- #}
                                             {% if p.has_swimming %}
                                                 <span class="swim-status-icon text-success" title="Schwimmnachweis erbracht" data-bs-toggle="tooltip">🏊</span>
                                             {% endif %}

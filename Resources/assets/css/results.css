@@ -42,37 +42,52 @@
     display: none !important;
 }
 
-/* =========================================
-   2. MEDAILLEN-FARBEN (Modernisiert)
-   ========================================= */
-/* Gold: Wärmer, besserer Kontrast */
-select.medal-gold, input.medal-gold, .bg-gold { 
-    background-color: #ffdc2e !important; 
-    color: #4a3b00 !important; 
-    border: 1px solid #cca300 !important; 
-    font-weight: 600 !important; 
-}
-/* Silber: Kühles Grau */
-select.medal-silber, input.medal-silber, .bg-silver { 
-    background-color: #e9ecef !important; 
-    color: #495057 !important; 
-    border: 1px solid #adb5bd !important; 
-    font-weight: 600 !important; 
-}
-/* Bronze: Kupferton (Solid - für Inputs) */
-select.medal-bronze, input.medal-bronze, .bg-bronze { 
-    background-color: #d98a4e !important; 
-    color: #fff !important; 
-    border: 1px solid #a65e26 !important; 
-    font-weight: 600 !important; 
+.result-badge-box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 65px;
+    padding: 4px 0;
+    border-radius: 6px;
+    border-width: 1px;
+    border-style: solid;
+    line-height: 1.1;
+    font-weight: bold;
 }
 
-/* NEU: Bronze Transparent (Für den Badge unter dem Namen) */
-/* Ersetzt den Inline-Style für CSP-Compliance */
+.badge-label-small {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+}
+
+/* Medaillen-Hintergründe für Badges */
 .bg-bronze-transparent {
-    background-color: rgba(205, 127, 50, 0.25) !important;
-    color: #212529 !important;
-    border: 1px solid rgba(205, 127, 50, 0.6) !important;
+    background-color: rgba(205, 127, 50, 0.15) !important;
+    color: #8c5625 !important;
+    border-color: rgba(205, 127, 50, 0.4) !important;
+}
+
+/* =========================================
+   3. MEDAILLEN-FARBEN (Inputs & Selects)
+   ========================================= */
+/* Gold */
+select.medal-gold, input.medal-gold, .bg-gold { 
+    background-color: #ffdc2e !important; color: #4a3b00 !important; border: 1px solid #cca300 !important; font-weight: 600 !important; 
+}
+/* Silber */
+select.medal-silber, input.medal-silber, .bg-silver { 
+    background-color: #e9ecef !important; color: #495057 !important; border: 1px solid #adb5bd !important; font-weight: 600 !important; 
+}
+/* Bronze */
+select.medal-bronze, input.medal-bronze, .bg-bronze { 
+    background-color: #d98a4e !important; color: #fff !important; border: 1px solid #a65e26 !important; font-weight: 600 !important; 
+}
+/* Keine */
+select.medal-none, input.medal-none { 
+    background-color: #ffffff !important; color: #212529 !important; border: 1px solid #dee2e6 !important;
 }
 
 /* Standard-Status */
