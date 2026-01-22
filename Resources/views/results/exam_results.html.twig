@@ -150,15 +150,13 @@
                                         {% set medalLabel = 'Silber' %}
                                         {% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
                                     {% elseif medalValue == 'bronze' %}
-                                        {# --- ÄNDERUNG 1: Bronze Farbe korrigiert (Hex statt Red/Danger) --- #}
                                         {% set medalLabel = 'Bronze' %}
-                                        {% set medalClass = 'text-dark' %}
-                                        {% set medalStyle = 'background-color: rgba(205, 127, 50, 0.25); border: 1px solid rgba(205, 127, 50, 0.6);' %}
+                                        {# Alte Version mit Inline-Style entfernt #}
+                                        {% set medalClass = 'bg-bronze-transparent' %} 
                                     {% endif %}
 
                                     <div class="result-badge-box rounded px-2 py-1 text-center js-medal-badge {{ medalClass }}" 
-                                         id="final-medal-{{ p.ep_id }}"
-                                         style="{{ medalStyle }}">
+                                         id="final-medal-{{ p.ep_id }}">
                                         <div class="badge-label-small text-uppercase opacity-75" style="font-size: 0.65rem;">Rang</div>
                                         <div class="d-flex align-items-center justify-content-center gap-1">
                                             <div class="fw-bold fs-6 medal-label">{{ medalLabel }}</div>
@@ -176,8 +174,6 @@
                         {# 2. SCHWIMMEN LOGIK & DROPDOWN #}
                         <td class="col-swimming-status align-middle p-2 text-center col-discipline col-cat-SWIMMING">
                             
-                            {# --- ÄNDERUNG 3: Layout fixiert (h-100 und justify-content-center entfernt) --- #}
-                            {# Das td hat align-middle, das zentriert den Inhalt automatisch vertikal #}
                             <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper w-100">
                                 {% set hasSwimming = p.has_swimming %}
                                 {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}

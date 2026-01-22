@@ -59,12 +59,20 @@ select.medal-silber, input.medal-silber, .bg-silver {
     border: 1px solid #adb5bd !important; 
     font-weight: 600 !important; 
 }
-/* Bronze: Kupferton */
+/* Bronze: Kupferton (Solid - für Inputs) */
 select.medal-bronze, input.medal-bronze, .bg-bronze { 
     background-color: #d98a4e !important; 
     color: #fff !important; 
     border: 1px solid #a65e26 !important; 
     font-weight: 600 !important; 
+}
+
+/* NEU: Bronze Transparent (Für den Badge unter dem Namen) */
+/* Ersetzt den Inline-Style für CSP-Compliance */
+.bg-bronze-transparent {
+    background-color: rgba(205, 127, 50, 0.25) !important;
+    color: #212529 !important;
+    border: 1px solid rgba(205, 127, 50, 0.6) !important;
 }
 
 /* Standard-Status */
@@ -130,7 +138,7 @@ input.medal-none { background-image: none !important; }
 .swimming-wrapper {
     position: relative;
     width: 100%;
-    height: 38px; /* Fixe Höhe verhindert Springen */
+    min-height: 38px; /* GEÄNDERT: min-height statt height, damit Text wachsen kann */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -151,7 +159,7 @@ input.medal-none { background-image: none !important; }
     cursor: pointer;
 }
 
-/* Badge Container (Erledigt) */
+/* Badge Container */
 .swim-badge-container {
     display: flex;
     height: auto;            /* Höhe flexibel machen */
@@ -286,6 +294,12 @@ input.medal-none { background-image: none !important; }
     .bg-gold { color: #000 !important; }
     .bg-silver { color: #000 !important; }
     .bg-bronze { color: #fff !important; }
+    
+    /* Dark Mode Bronze Transparent */
+    .bg-bronze-transparent {
+        color: #fff !important;
+        background-color: rgba(205, 127, 50, 0.4) !important;
+    }
 }
 
 /* Bootstrap Theme Attribut Support */
