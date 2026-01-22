@@ -129,6 +129,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 1. Zellen-Update (Farben etc.)
                 if (type !== 'swimming_select' && cell) {
                     handleDisciplineColors(data, cell, row, kat, el);
+
+                    // --- NEU: REQUIREMENTS UPDATE ---
+                    // Schreibt die Werte aus der Server-Antwort direkt in die Badges
+                    if (data.new_requirements) {
+                        const req = data.new_requirements;
+                        
+                        const badgeB = cell.querySelector('.req-val-b, .js-val-b');
+                        const badgeS = cell.querySelector('.req-val-s, .js-val-s');
+                        const badgeG = cell.querySelector('.req-val-g, .js-val-g');
+                        
+                        if(badgeB) badgeB.textContent = req.bronze;
+                        if(badgeS) badgeS.textContent = req.silber;
+                        if(badgeG) badgeG.textContent = req.gold;
+                    }
+                    // --------------------------------
                 }
                 
                 // 2. Gesamt-Update (Punkte/Medaillen Widget)
