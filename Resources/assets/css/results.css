@@ -239,8 +239,9 @@ thead .col-sticky-left {
 
 
 /* =========================================
-   6. UI HELFER (Badges etc.)
+   6. UI HELFER (Badges & Anforderungen)
    ========================================= */
+
 .result-badge-box {
     display: inline-flex;
     flex-direction: column;
@@ -253,9 +254,55 @@ thead .col-sticky-left {
     background-color: #f8f9fa;
     line-height: 1.1;
 }
-.badge-label-small { font-size: 0.65rem; text-transform: uppercase; opacity: 0.7; }
-.req-hint { font-size: 0.75rem; display: flex; justify-content: space-between; color: #6c757d; margin-top: 2px; }
 
+.badge-label-small { 
+    font-size: 0.65rem; 
+    text-transform: uppercase; 
+    opacity: 0.7; 
+}
+
+/* --- ANFORDERUNGS-HINTS (B | S | G) --- */
+
+.req-hint { 
+    font-size: 0.85rem !important;  /* GRÖSSER (war 0.75rem) */
+    font-weight: 600;               /* Fett, damit Farben besser wirken */
+    display: flex; 
+    justify-content: space-between; /* Zahlen links, Einheit rechts */
+    align-items: center;
+    color: #6c757d;                 /* Standardfarbe für Trennstriche */
+    margin-top: 3px;
+    padding: 0 2px;
+}
+
+/* Wrapper für die Zahlen, damit der Abstand stimmt */
+.req-values-wrapper {
+    display: flex;
+    gap: 4px; /* Kleiner Abstand zwischen den Zahlen */
+}
+
+/* Die spezifischen Farben zurückbringen */
+.req-val-b { color: #d98a4e !important; } /* Bronze (Kupfer) */
+.req-val-s { color: #6c757d !important; } /* Silber (Dunkelgrau) */
+.req-val-g { color: #b8860b !important; } /* Gold (Dunkelgold) */
+
+/* Einheit (z.B. "Sek.") etwas dezenter */
+.req-unit {
+    font-weight: normal;
+    font-size: 0.75rem;
+    color: #adb5bd;
+    font-style: italic;
+}
+
+/* --- DARK MODE ANPASSUNG FÜR HINTS --- */
+@media (prefers-color-scheme: dark) {
+    /* Heller im Darkmode, damit es leuchtet */
+    .req-val-b { color: #eecba9 !important; } /* Helles Bronze */
+    .req-val-s { color: #adb5bd !important; } /* Helles Silber */
+    .req-val-g { color: #ffda6a !important; } /* Helles Gold */
+    
+    .req-hint { color: #6c757d; } /* Trennstriche dunkel lassen */
+    .req-unit { color: #6c757d; }
+}
 
 /* =========================================
    7. DARK MODE & RESPONSIVE
