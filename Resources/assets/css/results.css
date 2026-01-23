@@ -18,6 +18,21 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+.view-selector-wrapper {
+    width: 100%;
+    /* Damit es nicht zu klein wird, aber mobil umbricht */
+    min-width: 200px; 
+}
+
+/* Erzwingt IServ-Look für den Select2 Container */
+.select2-container--bootstrap-5 .select2-selection {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px !important;
+    min-height: 31px !important; /* Button-Höhe anpassen */
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+}
+
 /* =========================================
    2. SPALTEN-DEFINITIONEN (Ersetzt Inline-Styles)
    ========================================= */
