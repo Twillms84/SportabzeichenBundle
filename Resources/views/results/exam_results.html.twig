@@ -20,7 +20,7 @@
         {# FILTER #}
         <div class="col-12 col-md">
             <div class="view-selector-wrapper">
-                <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen...'|trans }}">
+                <select id="viewSelector" class="form-select select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen...'|trans }}">
                     <option value="SWIMMING" selected>Schwimmen</option>
                     {% for category in disciplines|keys %}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
