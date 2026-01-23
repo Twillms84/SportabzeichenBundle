@@ -171,11 +171,43 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!btn) return;
 
         event.preventDefault();
+        
+        const row = btn.closest('tr');
         const epId = btn.getAttribute('data-ep-id');
         
-        if (!swimmingDeleteRoute || !epId) return;
+        if(!confirm('Schwimmnachweis entfernen? (Ggf. wird auch die Disziplin zurückgesetzt)')) return;
+
+        // 1. Suche nach einer aktiven Schwimm-Disziplin in dieser Zeile
+        // Wir suchen nach Selects in der Kategorie 'Ausdauer' (meist Kat 4) oder generell nach Selects mit Disziplinen
+        // Anpassung: Prüfe, ob du eine spezifische Klasse für die Schwimm-Spalte hast, z.B. .col-cat-Ausdauer
+        let swimmingDisciplineSelect = null;
         
-        if(!confirm('Schwimmnachweis wirklich entfernen?')) return;
+        // Versuche das Select in der Spalte "Ausdauer" (Gruppe 4) zu finden
+        // Falls deine Kategorie anders heißt, passe '4' oder 'Ausdauer' an.
+        const swimCell = row.querySelector('.col-cat-4, .col-cat-Ausdauer, [data-kategorie="Ausdauer"]');
+        if (swimCell) {
+            swimmingDisciplineSelect = swimCell.querySelector('select.discipline-selector');
+        }
+
+        // Wenn eine Disziplin ausgewählt ist (Wert > 0), setzen wir DIESE zurück
+        if (swimmingDisciplineSelect && swimmingDisciplineSelect.value && swimmingDisciplineSelect.value !== "0") {
+            // Reset der Disziplin -> Das Backend wird daraufhin auch den Nachweis entfernen
+            swimmingDisciplineSelect.value = "0"; // oder ""
+            
+            // Trigger das Change-Event, damit dein Autosave anspringt
+            swimmingDisciplineSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // UI Feedback sofort (Optimistisch)
+            const wrapper = document.getElementById('swimming-wrapper-' + epId);
+            if(wrapper) {
+                 wrapper.querySelector('.swim-badge-container').classList.add('d-none');
+                 wrapper.querySelector('.swim-dropdown-container').classList.remove('d-none');
+            }
+            return; // Wir sind fertig, der Autosave regelt den Rest
+        }
+
+        // 2. Fallback: Kein Disziplin-Eintrag gefunden -> Manuellen Nachweis löschen (Dein alter Code)
+        if (!swimmingDeleteRoute || !epId) return;
 
         btn.style.opacity = '0.5';
         btn.disabled = true;
@@ -193,14 +225,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok' || data.success) {
-                const row = btn.closest('tr'); 
                 updateUIWidgets(epId, row, data);
             } else {
                 alert('Fehler: ' + (data.message || 'Konnte nicht gelöscht werden.'));
             }
         } catch (e) {
             console.error('Fehler beim Löschen:', e);
-            alert('Server-Fehler beim Löschen.');
         } finally {
             btn.style.opacity = '1';
             btn.disabled = false;
@@ -335,49 +365,44 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateUIWidgets(epId, row, data) {
-        // console.log("Debug Data:", data); // Kannst du später auskommentieren
-
-        // ---------------------------------------------------------
-        // A. GESAMTPUNKTE (Server schickt 'total_points')
-        // ---------------------------------------------------------
-        // Wir prüfen auf 'total' ODER 'total_points', um sicher zu sein
+        
+        // A. GESAMTPUNKTE
         const pointsValue = (data.total !== undefined) ? data.total : data.total_points;
         const totalBadge = document.getElementById('total-points-' + epId);
         
         if (totalBadge && pointsValue !== undefined) {
             totalBadge.textContent = pointsValue;
-            // Kleiner Highlight-Effekt
-            totalBadge.classList.add('text-success', 'fw-bold');
-            setTimeout(() => totalBadge.classList.remove('text-success', 'fw-bold'), 1000);
+            // Kurzes Aufblinken zur Bestätigung
+            totalBadge.style.transform = "scale(1.2)";
+            setTimeout(() => totalBadge.style.transform = "scale(1)", 200);
         }
 
-        // ---------------------------------------------------------
-        // B. MEDAILLE (Server schickt 'final_medal')
-        // ---------------------------------------------------------
+        // B. MEDAILLE (Der CSS Fix)
         const medalBadge = document.getElementById('final-medal-' + epId);
-        
-        // WICHTIG: Hier nehmen wir den Wert, den der Server laut Log schickt ('final_medal')
-        // Fallback auf 'medal', falls sich das Backend mal ändert.
         let medalValue = data.final_medal || data.medal || 'none';
         medalValue = String(medalValue).toLowerCase();
 
         if (medalBadge) {
-            const labelSpan = medalBadge.querySelector('.js-medal-label');
-            
-            // Alte Klassen entfernen (aber Layout-Klassen behalten)
-            medalBadge.classList.remove(
+            const labelSpan = medalBadge.querySelector('.js-medal-label') || medalBadge;
+
+            // 1. ALLE Farbklassen entfernen (aggressiv)
+            // Nutze remove mit Spread-Syntax oder einzeln, um sicherzugehen
+            const classesToRemove = [
                 'bg-warning', 'border-warning', 
                 'bg-secondary', 'border-secondary', 
                 'bg-danger', 'border-danger', 
-                'bg-light', 'text-muted', 'text-dark', 
-                'bg-opacity-25'
-            );
-            
-            // Sicherstellen, dass Basisklassen da sind
+                'bg-light', 'bg-dark', 'bg-white',
+                'text-muted', 'text-dark', 'text-white',
+                'bg-opacity-10', 'bg-opacity-25', 'bg-opacity-50'
+            ];
+            medalBadge.classList.remove(...classesToRemove);
+
+            // 2. Basis-Klassen sicherstellen
             medalBadge.classList.add('badge', 'border');
 
+            // 3. Neue Klassen setzen
             let labelText = '-';
-            
+
             if (medalValue === 'gold') {
                 medalBadge.classList.add('bg-warning', 'bg-opacity-25', 'border-warning', 'text-dark');
                 labelText = 'Gold';
@@ -388,51 +413,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 medalBadge.classList.add('bg-danger', 'bg-opacity-25', 'border-danger', 'text-dark');
                 labelText = 'Bronze';
             } else {
+                // Keine Medaille
                 medalBadge.classList.add('bg-light', 'text-muted');
             }
             
-            if(labelSpan) labelSpan.textContent = labelText;
-        }
-
-        // ---------------------------------------------------------
-        // C. SCHWIMMEN (Icon & Badge)
-        // ---------------------------------------------------------
-        const wrapper = document.getElementById('swimming-wrapper-' + epId);
-        // WICHTIG: Das Log sagt "Element nicht gefunden". Das Element MUSS existieren (siehe Schritt 2 unten)
-        const swimIcon = document.getElementById('swim-icon-' + epId); 
-        
-        const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || data.has_swimming === '1');
-
-        // 1. Icon im Namen aktualisieren
-        if(swimIcon) {
-            if(hasSwimming) {
-                // Klasse komplett neu setzen ist sicherer als add/remove hier
-                swimIcon.className = 'fas fa-swimmer ms-2 text-success';
+            // Text setzen
+            if (medalBadge.querySelector('.js-medal-label')) {
+                medalBadge.querySelector('.js-medal-label').textContent = labelText;
             } else {
-                swimIcon.className = 'fas fa-swimmer ms-2 text-danger opacity-50';
+                medalBadge.textContent = labelText;
             }
         }
 
-        // 2. Container (Dropdown vs. Badge) umschalten
+        // C. SCHWIMMEN (Bleibt wie gehabt, nur kurz der Vollständigkeit halber)
+        const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || data.has_swimming === '1');
+        
+        // Icon Update
+        const swimIcon = document.getElementById('swim-icon-' + epId);
+        if(swimIcon) {
+            swimIcon.className = hasSwimming 
+                ? 'fas fa-swimmer ms-2 text-success' 
+                : 'fas fa-swimmer ms-2 text-danger opacity-50';
+        }
+
         if (wrapper) {
             const badgeCont = wrapper.querySelector('.swim-badge-container');
-            const dropCont  = wrapper.querySelector('.swim-dropdown-container');
-            const infoText  = wrapper.querySelector('.swim-info-text');
-            const select    = wrapper.querySelector('select');
-
+            const dropCont  = wrapper.querySelector('.swim-dropdown-container'); // oder .swim-inputs-container je nach HTML
+            
             if (hasSwimming) {
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont)  dropCont.classList.add('d-none');
-                
-                if(infoText) {
-                    // Server schickt laut Log: swimming_met_via
-                    const txt = data.swimming_met_via || data.met_via || 'Nachweis erbracht';
-                    infoText.textContent = txt;
-                }
             } else {
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont)  dropCont.classList.remove('d-none');
-                if(select)    select.value = ""; 
+                // Reset Inputs/Selects im UI
+                const selects = wrapper.querySelectorAll('select');
+                selects.forEach(s => s.value = "");
             }
         }
     }
