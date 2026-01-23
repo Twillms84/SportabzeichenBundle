@@ -18,6 +18,17 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+.view-selector-wrapper {
+    width: 100%;       /* Auf Handy: Volle Breite verfügbar */
+    max-width: 400px;  /* Auf PC: Schluss bei 400px (oder 300px, wie du magst) */
+    min-width: 200px;  /* Damit es nicht zu winzig wird */
+}
+
+/* Falls Select2 genutzt wird: Es soll sich an den Wrapper halten */
+.select2-container {
+    width: 100% !important; 
+}
+
 /* =========================================
    2. SPALTEN-DEFINITIONEN (Ersetzt Inline-Styles)
    ========================================= */
