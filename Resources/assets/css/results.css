@@ -175,3 +175,70 @@ thead .col-sticky-left {
     .sticky-header { background-color: #343a40; border-bottom-color: #495057; }
     .medal-none { background-color: #2b3035 !important; color: #dee2e6 !important; border-color: #495057 !important; }
 }
+
+/* =========================================
+   REPARATUR-KIT: DESIGN & ICONS
+   ========================================= */
+
+/* 1. RUNDE ECKEN & "CHIC" ZURÜCKBRINGEN */
+.discipline-selector, 
+.form-control-custom, 
+.swimming-select-compact,
+.result-badge-box {
+    border-radius: 6px !important; /* Wichtig für die Runden Ecken */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Leichter Schatten für Tiefe */
+}
+
+/* 2. STANDARD-FARBE (Kein Silber per Default) */
+/* Erzwingt Weiß, wenn NICHT explizit Gold/Silber/Bronze gesetzt ist */
+input:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
+select:not(.medal-gold):not(.medal-silber):not(.medal-bronze) {
+    background-color: #fff !important;
+    border: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+}
+
+/* 3. SCHWIMMEN-SPALTE FIXEN (Breite & Icon) */
+.col-swimming {
+    width: 160px !important; /* Fixe Breite erzwingen */
+    max-width: 160px !important;
+}
+
+/* Das grüne Badge für "Bestanden" wieder hübsch machen */
+.swim-badge-container {
+    justify-content: center;
+    position: relative;
+    padding-right: 20px; /* Platz für den Löschen-Button */
+}
+
+/* Löschen-Button (Das [X] durch ein Mülleimer-Icon ersetzen) */
+/* Wir nutzen hier ein SVG direkt im CSS, damit du keine Bibliothek brauchst */
+.btn-delete-swimming {
+    font-size: 0; /* Versteckt das Text-[X] falls vorhanden */
+    width: 24px;
+    height: 24px;
+    background-color: transparent;
+    background-repeat: no-repeat;
+    background-position: center;
+    /* Ein rotes Mülleimer-Icon als SVG (Base64 kodiert) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23dc3545' class='bi bi-trash' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z'/%3E%3Cpath fill-rule='evenodd' d='M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z'/%3E%3C/svg%3E");
+    border: none;
+    opacity: 0.6;
+}
+.btn-delete-swimming:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    opacity: 1;
+}
+
+/* Falls du ein Häkchen-Icon im grünen Kasten vermisst */
+.swim-badge-container::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 5px;
+    /* Grünes Häkchen SVG */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%230f5132' viewBox='0 0 16 16'%3E%3Cpath d='M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+}
