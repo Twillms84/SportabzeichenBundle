@@ -265,9 +265,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const inputEl = cell.querySelector('input[type="text"]');
         const isSelect = (el.tagName === 'SELECT');
 
-        // 1. Farben setzen
+        // 1. Basisfarben anhand der Stufe setzen (Bronze/Silber/Gold/None)
         const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
-        // Mapping für Englisch/Deutsch falls nötig
         let cssClass = 'medal-' + resultColor;
         if(resultColor === 'silver') cssClass = 'medal-silber';
 
@@ -278,12 +277,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 2. Verbands-Logik erneut prüfen
-        if (isSelect) {
+        // -----------------------------------------------------------
+        // NEU: Reaktion auf Server-Antwort (Verband / Unit NONE)
+        // -----------------------------------------------------------
+        // Wenn der Server sagt: "Keine Einheit" (NONE) oder explizit Stufe GOLD mit 3 Punkten ohne Leistung
+        if (data.discipline_unit === 'NONE' || data.discipline_unit === 'UNIT_NONE') {
+            if (inputEl) {
+                inputEl.value = ''; 
+                inputEl.disabled = true; // SPERREN
+                inputEl.setAttribute('placeholder', '✓'); // Haken anzeigen
+                inputEl.classList.add('bg-light');
+                
+                // Visuell zwingend auf Gold setzen
+                removeMedalClasses(inputEl);
+                inputEl.classList.add('medal-gold');
+            }
+            if (selectEl) {
+                removeMedalClasses(selectEl);
+                selectEl.classList.add('medal-gold');
+            }
+        } 
+        // Falls Server normale Einheit schickt, aber wir HTML-Logik prüfen müssen
+        else if (isSelect) {
             checkVerbandInput(selectEl);
+        } 
+        // Falls Eingabefeld geändert wurde und KEIN "NONE" zurückkam -> Entsperren prüfen
+        else {
+             if (selectEl) {
+                 // Sicherheitscheck: Passen HTML-Select und Server-Antwort zusammen?
+                 checkVerbandInput(selectEl); 
+             }
         }
+        // -----------------------------------------------------------
 
-        // 3. Andere Felder der gleichen Kategorie leeren
+
+        // 3. Andere Felder der gleichen Kategorie leeren (Exklusivität)
         if (isSelect && kat) {
             row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
                 // Überspringen, wenn es das aktuelle Element ist (oder im gleichen TD)
