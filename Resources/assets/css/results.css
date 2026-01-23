@@ -67,10 +67,24 @@ thead .col-sticky-left {
 }
 
 /* =========================================
-   3. MEDAILLEN-INPUTS & SELECTS
+   3. MEDAILLEN & INPUTS (KORRIGIERTE LOGIK)
    ========================================= */
 
-/* WICHTIG: Die Klassen müssen exakt so im JS gesetzt werden */
+/* --- A. STANDARD-DESIGN (Wenn noch keine Medaille da ist) --- */
+/* Das ist der "Normalzustand" - Weiß im Hellen, Dunkel im Dark Mode */
+
+.discipline-selector, 
+.form-control-custom,
+.swimming-select-compact {
+    background-color: #fff !important;
+    color: #212529 !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px !important;
+    font-weight: normal !important;
+    transition: all 0.2s ease-in-out;
+}
+
+/* --- B. MEDAILLEN-FARBEN (Überschreibt Standard) --- */
 
 /* GOLD */
 .medal-gold, input.medal-gold, select.medal-gold { 
@@ -80,7 +94,7 @@ thead .col-sticky-left {
     font-weight: 700 !important; 
 }
 
-/* SILBER (Achte auf Schreibweise: silber vs silver) */
+/* SILBER */
 .medal-silber, .medal-silver, input.medal-silber, select.medal-silber { 
     background-color: #e9ecef !important; 
     color: #495057 !important; 
@@ -96,38 +110,137 @@ thead .col-sticky-left {
     font-weight: 700 !important; 
 }
 
-/* KEINE MEDAILLE (Normalzustand) */
-.medal-none, input.medal-none, select.medal-none { 
-    background-color: #ffffff !important; 
-    color: #212529 !important; 
-    border: 1px solid #dee2e6 !important;
-    font-weight: normal !important;
-}
-
-/* INPUT FELDER */
+/* --- C. INPUT FELDER FEINJUSTIERUNG --- */
 .form-control-custom {
     font-size: 1.0rem !important; 
     padding: 4px 2px !important; 
     height: auto !important; 
     width: 100% !important; 
     text-align: center !important;
-    transition: background-color 0.3s ease;
 }
 
 /* =========================================
-   4. UI KOMPONENTEN
+   4. SCHWIMM-BEREICH (SCHMALER & KOMPAKT)
    ========================================= */
+
+.col-swimming {
+    width: 130px !important;      /* Schmaler gemacht (vorher 160px/180px) */
+    min-width: 130px !important;
+    max-width: 130px !important;
+    vertical-align: middle !important;
+    padding: 4px !important;
+}
+
+.swimming-wrapper {
+    width: 100%;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Dropdown */
+.swimming-select-compact {
+    width: 100% !important;
+    font-size: 0.85rem !important; /* Schrift etwas kleiner für schmale Spalte */
+    padding: 4px 2px !important;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* Badge "Nachweis erbracht" */
+.swim-badge-container {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Zentriert */
+    position: relative;
+    width: 100%;
+    background-color: #d1e7dd;
+    border: 1px solid #a3cfbb;
+    color: #0f5132;
+    border-radius: 6px;
+    padding: 3px 2px;
+}
+
+/* Häkchen Icon via CSS */
+.swim-badge-container::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 4px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%230f5132' viewBox='0 0 16 16'%3E%3Cpath d='M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+.swim-info-text {
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: normal;
+}
+
+/* Löschen Button (Mülleimer Icon) */
+.btn-delete-swimming {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    /* Mülleimer Icon Rot */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23dc3545' class='bi bi-trash' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z'/%3E%3Cpath fill-rule='evenodd' d='M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 14px;
+    opacity: 0.5;
+    cursor: pointer;
+}
+.btn-delete-swimming:hover { opacity: 1; }
+
+
+/* =========================================
+   5. NAMEN & HINTERGRÜNDE (FINAL RESULT)
+   ========================================= */
+
+.col-name {
+    vertical-align: middle !important;
+    position: relative;
+    background-color: #fff; /* Wichtig für Sticky */
+}
+
 .name-container {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    height: 100%;
     line-height: 1.2;
 }
 .name-main { font-size: 1.1rem; font-weight: 700; color: #212529; }
-.name-age { font-size: 0.9rem; color: #6c757d; }
+.name-age { font-size: 0.85rem; color: #6c757d; }
 
-/* Result Badges (Gesamtpunkte) */
+/* Transparente Hintergründe für den Namen */
+.bg-gold-transparent {
+    background-color: rgba(255, 220, 46, 0.25) !important;
+    border-left: 4px solid #ffdc2e !important;
+}
+.bg-silver-transparent {
+    background-color: rgba(233, 236, 239, 0.4) !important;
+    border-left: 4px solid #adb5bd !important;
+}
+.bg-bronze-transparent {
+    background-color: rgba(217, 138, 78, 0.2) !important;
+    border-left: 4px solid #d98a4e !important;
+}
+
+
+/* =========================================
+   6. UI HELFER (Badges etc.)
+   ========================================= */
 .result-badge-box {
     display: inline-flex;
     flex-direction: column;
@@ -137,108 +250,60 @@ thead .col-sticky-left {
     padding: 4px 0;
     border-radius: 6px;
     border: 1px solid #dee2e6;
+    background-color: #f8f9fa;
     line-height: 1.1;
 }
-
-.bg-bronze-transparent {
-    background-color: rgba(205, 127, 50, 0.15) !important;
-    color: #8c5625 !important;
-    border-color: rgba(205, 127, 50, 0.4) !important;
-}
-
-/* Schwimmen Badge */
-.swimming-wrapper { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; }
-.swim-badge-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 4px 6px;
-    background-color: #d1e7dd;
-    border: 1px solid #a3cfbb;
-    color: #0f5132;
-    border-radius: 6px;
-}
-.swim-info-text { font-size: 0.75rem; font-weight: 600; white-space: normal; word-wrap: break-word; text-align: center; }
-
-/* Anforderungs-Hint (unten im Feld) */
+.badge-label-small { font-size: 0.65rem; text-transform: uppercase; opacity: 0.7; }
 .req-hint { font-size: 0.75rem; display: flex; justify-content: space-between; color: #6c757d; margin-top: 2px; }
-.req-val-b { color: #cd7f32; } 
-.req-val-s { color: #6c757d; } 
-.req-val-g { color: #b8860b; }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    body { background-color: #212529; color: #f8f9fa; }
-    .col-sticky-left { background-color: #212529; border-right-color: #495057; }
-    thead .col-sticky-left { background-color: #343a40; }
-    .sticky-header { background-color: #343a40; border-bottom-color: #495057; }
-    .medal-none { background-color: #2b3035 !important; color: #dee2e6 !important; border-color: #495057 !important; }
-}
 
 /* =========================================
-   REPARATUR-KIT: DESIGN & ICONS
+   7. DARK MODE & RESPONSIVE
    ========================================= */
 
-/* 1. RUNDE ECKEN & "CHIC" ZURÜCKBRINGEN */
-.discipline-selector, 
-.form-control-custom, 
-.swimming-select-compact,
-.result-badge-box {
-    border-radius: 6px !important; /* Wichtig für die Runden Ecken */
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Leichter Schatten für Tiefe */
+@media (prefers-color-scheme: dark) {
+    /* Basisfarben */
+    body { background-color: #212529; color: #f8f9fa; }
+    
+    /* Name Spalte */
+    .col-name, .col-sticky-left { background-color: #212529 !important; border-right-color: #495057; }
+    .name-main { color: #f8f9fa !important; }
+    .name-age { color: #adb5bd !important; }
+    
+    /* Sticky Header */
+    .sticky-header, thead .col-sticky-left { 
+        background-color: #343a40 !important; 
+        color: #fff;
+        border-bottom-color: #495057; 
+    }
+
+    /* Standard Inputs im Dark Mode (Grau statt Weiß) */
+    /* Nur wenn KEINE Medaillen-Klasse gesetzt ist */
+    .discipline-selector:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
+    .form-control-custom:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
+    .swimming-select-compact {
+        background-color: #2b3035 !important;
+        color: #dee2e6 !important;
+        border-color: #495057 !important;
+    }
+    
+    /* Result Badge Box */
+    .result-badge-box {
+        background-color: #343a40;
+        border-color: #495057;
+        color: #e9ecef;
+    }
+
+    /* Hintergründe Namen (angepasst für Lesbarkeit auf Dunkel) */
+    .bg-gold-transparent { background-color: rgba(255, 220, 46, 0.15) !important; color: #ffda6a !important; }
+    .bg-silver-transparent { background-color: rgba(255, 255, 255, 0.1) !important; color: #dee2e6 !important; }
+    .bg-bronze-transparent { background-color: rgba(217, 138, 78, 0.15) !important; color: #eecba9 !important; }
 }
 
-/* 2. STANDARD-FARBE (Kein Silber per Default) */
-/* Erzwingt Weiß, wenn NICHT explizit Gold/Silber/Bronze gesetzt ist */
-input:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
-select:not(.medal-gold):not(.medal-silber):not(.medal-bronze) {
-    background-color: #fff !important;
-    border: 1px solid #dee2e6 !important;
-    color: #212529 !important;
-}
-
-/* 3. SCHWIMMEN-SPALTE FIXEN (Breite & Icon) */
-.col-swimming {
-    width: 160px !important; /* Fixe Breite erzwingen */
-    max-width: 160px !important;
-}
-
-/* Das grüne Badge für "Bestanden" wieder hübsch machen */
-.swim-badge-container {
-    justify-content: center;
-    position: relative;
-    padding-right: 20px; /* Platz für den Löschen-Button */
-}
-
-/* Löschen-Button (Das [X] durch ein Mülleimer-Icon ersetzen) */
-/* Wir nutzen hier ein SVG direkt im CSS, damit du keine Bibliothek brauchst */
-.btn-delete-swimming {
-    font-size: 0; /* Versteckt das Text-[X] falls vorhanden */
-    width: 24px;
-    height: 24px;
-    background-color: transparent;
-    background-repeat: no-repeat;
-    background-position: center;
-    /* Ein rotes Mülleimer-Icon als SVG (Base64 kodiert) */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23dc3545' class='bi bi-trash' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z'/%3E%3Cpath fill-rule='evenodd' d='M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z'/%3E%3C/svg%3E");
-    border: none;
-    opacity: 0.6;
-}
-.btn-delete-swimming:hover {
-    background-color: rgba(220, 53, 69, 0.1);
-    opacity: 1;
-}
-
-/* Falls du ein Häkchen-Icon im grünen Kasten vermisst */
-.swim-badge-container::before {
-    content: '';
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-right: 5px;
-    /* Grünes Häkchen SVG */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%230f5132' viewBox='0 0 16 16'%3E%3Cpath d='M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
+@media (max-width: 768px) {
+    .col-name { width: 140px !important; min-width: 140px; }
+    .col-swimming { width: 50px !important; min-width: 50px; }
+    .swim-info-text, .swimming-select-compact { display: none; }
+    .swim-badge-container { background: transparent; border: none; padding: 0; }
+    .swim-badge-container::before { content: "✓"; font-size: 1.5rem; color: #198754; width: auto; height: auto; background: none; }
 }
