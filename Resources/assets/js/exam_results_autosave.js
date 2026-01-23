@@ -6,13 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const $viewSelector = $('#viewSelector'); // jQuery für Select2
     
     // Initialisiere Select2 falls vorhanden (Bootstrap Theme empfohlen)
-    if ($.fn.select2 && $viewSelector.length) {
-        $viewSelector.select2({
-            theme: 'bootstrap-5',
-            placeholder: "Alle Kategorien anzeigen",
-            allowClear: true
-        });
-    }
     
     if ($viewSelector.length) {
         $viewSelector.on('change', function() {
