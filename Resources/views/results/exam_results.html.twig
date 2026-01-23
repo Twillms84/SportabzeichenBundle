@@ -18,9 +18,9 @@
             <h4 class="mb-0">🏅 {{ exam.name }} <small class="text-muted">({{ exam.year }})</small></h4>
         </div>
         {# FILTER #}
-        <div class="col-12 col-md">
+        <div class="col-12 col-md-auto">
             <div class="view-selector-wrapper">
-                <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen...'|trans }}">
+                <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen (z.B. Schwimmen)...'|trans }}">
                     <option value="SWIMMING" selected>Schwimmen</option>
                     {% for category in disciplines|keys %}
                         {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}

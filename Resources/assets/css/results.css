@@ -18,12 +18,41 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+/* Begrenzung der Breite, damit es nicht den ganzen Bildschirm füllt */
 .view-selector-wrapper {
-    min-width: 250px;
-    max-width: 400px;
-    width: 100%; 
+    width: 100%;
+    max-width: 500px; /* Optional: Maximale Breite wie bei deinem Formular */
 }
 
+/* WICHTIG: Wir biegen Select2 auf Bootstrap-Variablen um.
+   Damit funktioniert der Dark-Mode automatisch! */
+
+.select2-container--default .select2-selection--multiple {
+    background-color: var(--bs-body-bg) !important;       /* Hintergrund: Systemstandard */
+    border: 1px solid var(--bs-border-color) !important;  /* Rahmen: Systemstandard */
+    color: var(--bs-body-color) !important;               /* Text: Systemstandard */
+    border-radius: var(--bs-border-radius) !important;    /* Rundung: Systemstandard */
+    min-height: 38px;
+}
+
+/* Die ausgewählten Elemente (Badges) */
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    background-color: var(--bs-secondary-bg) !important;  /* Hintergrund der Tags */
+    border: 1px solid var(--bs-border-color) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* Suchfeld Textfarbe */
+.select2-search__field {
+    color: var(--bs-body-color) !important;
+}
+
+/* Dropdown Menü Hintergrund */
+.select2-dropdown {
+    background-color: var(--bs-body-bg) !important;
+    border-color: var(--bs-border-color) !important;
+    color: var(--bs-body-color) !important;
+}
 /* =========================================
    2. SPALTEN-DEFINITIONEN (Ersetzt Inline-Styles)
    ========================================= */
