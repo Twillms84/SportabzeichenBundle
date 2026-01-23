@@ -20,17 +20,31 @@
 
 .view-selector-wrapper {
     width: 100%;
-    /* Damit es nicht zu klein wird, aber mobil umbricht */
-    min-width: 200px; 
+    position: relative;
 }
 
-/* Erzwingt IServ-Look für den Select2 Container */
+/* Erzwingt, dass der Select2-Container die volle Breite nutzt */
+.view-selector-wrapper .select2-container {
+    width: 100% !important;
+    display: block;
+}
+
+/* Styling des Auswahlfeldes passend zu Bootstrap 5 / IServ */
+.select2-container--default .select2-selection--multiple,
 .select2-container--bootstrap-5 .select2-selection {
     border: 1px solid #dee2e6 !important;
     border-radius: 6px !important;
-    min-height: 31px !important; /* Button-Höhe anpassen */
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
+    min-height: 31px !important;
+    padding: 2px 4px !important;
+    font-size: 0.9rem;
+    background-color: #fff;
+}
+
+/* Fokus-Rahmen (blauer Glow wie bei IServ inputs) */
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+    border-color: #86b7fe !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: 0;
 }
 
 /* =========================================
@@ -146,67 +160,68 @@ thead .col-sticky-left {
     padding: 4px !important;
 }
 
+/* Der Wrapper für den Inhalt */
 .swimming-wrapper {
     width: 100%;
-    min-height: 38px;
+    height: 100%;
     display: flex;
+    flex-direction: column !important; /* WICHTIG: Zwingt Elemente untereinander */
     align-items: center;
     justify-content: center;
+    gap: 4px; /* Abstand zwischen Badge und Dropdown (falls beide sichtbar wären) */
 }
 
-/* Dropdown */
+/* A) Das Dropdown */
 .swimming-select-compact {
     width: 100% !important;
-    font-size: 0.85rem !important; /* Schrift etwas kleiner für schmale Spalte */
-    padding: 4px 2px !important;
+    font-size: 0.8rem !important;
+    padding: 2px 4px !important;
     text-align: center;
+    border-radius: 4px !important;
     cursor: pointer;
 }
 
-/* Badge "Nachweis erbracht" */
+/* B) Das "Bestanden"-Badge Container */
 .swim-badge-container {
+    width: 100%;
     display: flex;
-    flex-direction: column; /* Auch intern untereinander (Text oben, Button unten) */
+    flex-direction: column !important; /* Auch Inhalt im Badge untereinander */
     align-items: center;
     justify-content: center;
-    width: 100%;
     background-color: #d1e7dd;
     border: 1px solid #a3cfbb;
     color: #0f5132;
     border-radius: 6px;
-    padding: 4px;
-    position: relative;
+    padding: 3px;
 }
 
+/* Text im Badge */
 .swim-info-text {
     font-size: 0.7rem;
     font-weight: 700;
     line-height: 1.1;
-    white-space: normal;
+    text-align: center;
+    white-space: normal; /* Textumbruch erlauben */
 }
 
-/* Löschen Button (Mülleimer Icon) */
+/* Löschen Button (Mülleimer) */
 .btn-delete-swimming {
-    position: absolute;
-    right: 2px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    padding: 0;
+    width: 100%;
+    margin-top: 3px;
     border: none;
-    background-color: transparent;
-    /* Mülleimer Icon Rot */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23dc3545' class='bi bi-trash' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z'/%3E%3Cpath fill-rule='evenodd' d='M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: 14px;
-    opacity: 0.5;
+    background: transparent;
+    border-top: 1px solid rgba(15, 81, 50, 0.2);
+    border-radius: 0 0 4px 4px;
+    color: #dc3545;
+    opacity: 0.7;
+    padding: 2px 0;
     cursor: pointer;
 }
-.btn-delete-swimming:hover { opacity: 1; }
 
-
+.btn-delete-swimming:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    opacity: 1;
+}
 /* =========================================
    5. NAMEN & HINTERGRÜNDE (FINAL RESULT)
    ========================================= */
