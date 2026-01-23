@@ -314,80 +314,106 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateUIWidgets(epId, row, data) {
-        console.group("Live-Update Debugging für ID: " + epId);
-        console.log("Server Antwort:", data);
+        // console.log("Debug Data:", data); // Kannst du später auskommentieren
 
         // ---------------------------------------------------------
-        // 1. GESAMTPUNKTE (Funktioniert ja schon)
+        // A. GESAMTPUNKTE (Server schickt 'total_points')
         // ---------------------------------------------------------
+        // Wir prüfen auf 'total' ODER 'total_points', um sicher zu sein
+        const pointsValue = (data.total !== undefined) ? data.total : data.total_points;
         const totalBadge = document.getElementById('total-points-' + epId);
-        if (totalBadge && data.total !== undefined) {
-            totalBadge.textContent = data.total;
-            // Kleiner visueller Effekt
-            totalBadge.classList.add('bg-success', 'text-white');
-            setTimeout(() => totalBadge.classList.remove('bg-success', 'text-white'), 500);
+        
+        if (totalBadge && pointsValue !== undefined) {
+            totalBadge.textContent = pointsValue;
+            // Kleiner Highlight-Effekt
+            totalBadge.classList.add('text-success', 'fw-bold');
+            setTimeout(() => totalBadge.classList.remove('text-success', 'fw-bold'), 1000);
         }
 
         // ---------------------------------------------------------
-        // 2. MEDAILLE (Das Problemkind)
+        // B. MEDAILLE (Server schickt 'final_medal')
         // ---------------------------------------------------------
         const medalBadge = document.getElementById('final-medal-' + epId);
         
-        if (!medalBadge) {
-            console.error("❌ HTML-Element nicht gefunden: 'final-medal-" + epId + "'");
-        } else if (!data.medal) {
-            console.warn("⚠️ Server hat keinen Wert für 'medal' geschickt! (Erhalten: " + data.medal + ")");
-        } else {
-            console.log("✅ Update Medaille auf: " + data.medal);
-            
-            const medal = String(data.medal).toLowerCase();
-            const labelSpan = medalBadge.querySelector('.js-medal-label');
+        // WICHTIG: Hier nehmen wir den Wert, den der Server laut Log schickt ('final_medal')
+        // Fallback auf 'medal', falls sich das Backend mal ändert.
+        let medalValue = data.final_medal || data.medal || 'none';
+        medalValue = String(medalValue).toLowerCase();
 
-            // Reset aller Farben
-            medalBadge.className = 'badge border'; 
+        if (medalBadge) {
+            const labelSpan = medalBadge.querySelector('.js-medal-label');
+            
+            // Alte Klassen entfernen (aber Layout-Klassen behalten)
+            medalBadge.classList.remove(
+                'bg-warning', 'border-warning', 
+                'bg-secondary', 'border-secondary', 
+                'bg-danger', 'border-danger', 
+                'bg-light', 'text-muted', 'text-dark', 
+                'bg-opacity-25'
+            );
+            
+            // Sicherstellen, dass Basisklassen da sind
+            medalBadge.classList.add('badge', 'border');
 
             let labelText = '-';
-            if (medal === 'gold') {
+            
+            if (medalValue === 'gold') {
                 medalBadge.classList.add('bg-warning', 'bg-opacity-25', 'border-warning', 'text-dark');
                 labelText = 'Gold';
-            } else if (medal === 'silver' || medal === 'silber') {
+            } else if (medalValue === 'silver' || medalValue === 'silber') {
                 medalBadge.classList.add('bg-secondary', 'bg-opacity-25', 'border-secondary', 'text-dark');
                 labelText = 'Silber';
-            } else if (medal === 'bronze') {
+            } else if (medalValue === 'bronze') {
                 medalBadge.classList.add('bg-danger', 'bg-opacity-25', 'border-danger', 'text-dark');
                 labelText = 'Bronze';
             } else {
                 medalBadge.classList.add('bg-light', 'text-muted');
             }
-
+            
             if(labelSpan) labelSpan.textContent = labelText;
         }
 
         // ---------------------------------------------------------
-        // 3. SCHWIMMEN (Das Icon)
+        // C. SCHWIMMEN (Icon & Badge)
         // ---------------------------------------------------------
-        const swimIcon = document.getElementById('swim-icon-' + epId);
+        const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        // WICHTIG: Das Log sagt "Element nicht gefunden". Das Element MUSS existieren (siehe Schritt 2 unten)
+        const swimIcon = document.getElementById('swim-icon-' + epId); 
         
-        // Prüfen, ob der Server explizit 'has_swimming' schickt
-        if (data.has_swimming === undefined) {
-             console.warn("⚠️ Server hat keinen Wert für 'has_swimming' geschickt!");
-        }
+        const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || data.has_swimming === '1');
 
-        if (swimIcon) {
-            // Expliziter Boolean Check
-            const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || data.has_swimming === '1');
-            console.log("✅ Update Schwimmen Icon. Status: " + hasSwimming);
-
+        // 1. Icon im Namen aktualisieren
+        if(swimIcon) {
             if(hasSwimming) {
+                // Klasse komplett neu setzen ist sicherer als add/remove hier
                 swimIcon.className = 'fas fa-swimmer ms-2 text-success';
             } else {
                 swimIcon.className = 'fas fa-swimmer ms-2 text-danger opacity-50';
             }
-        } else {
-            console.warn("❌ HTML-Element nicht gefunden: 'swim-icon-" + epId + "'");
         }
-        
-        console.groupEnd();
+
+        // 2. Container (Dropdown vs. Badge) umschalten
+        if (wrapper) {
+            const badgeCont = wrapper.querySelector('.swim-badge-container');
+            const dropCont  = wrapper.querySelector('.swim-dropdown-container');
+            const infoText  = wrapper.querySelector('.swim-info-text');
+            const select    = wrapper.querySelector('select');
+
+            if (hasSwimming) {
+                if(badgeCont) badgeCont.classList.remove('d-none');
+                if(dropCont)  dropCont.classList.add('d-none');
+                
+                if(infoText) {
+                    // Server schickt laut Log: swimming_met_via
+                    const txt = data.swimming_met_via || data.met_via || 'Nachweis erbracht';
+                    infoText.textContent = txt;
+                }
+            } else {
+                if(badgeCont) badgeCont.classList.add('d-none');
+                if(dropCont)  dropCont.classList.remove('d-none');
+                if(select)    select.value = ""; 
+            }
+        }
     }
 
     function updateRequirementHints(select) {
