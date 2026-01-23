@@ -107,9 +107,9 @@
                                     {% set medalClass = 'bg-light text-muted border' %}
                                     
                                     {% if medalValue == 'gold' %}
-                                        {% set medalClass = 'bg-warning bg-opacity-25 text-dark border-warning' %}
+                                        {% set medalClass = 'bg-gold-transparent' %}
                                     {% elseif medalValue in ['silver','silber'] %}
-                                        {% set medalClass = 'bg-secondary bg-opacity-25 text-dark border-secondary' %}
+                                        {% set medalClass = 'bg-silver-transparent' %}
                                     {% elseif medalValue == 'bronze' %}
                                         {% set medalClass = 'bg-bronze-transparent' %} 
                                     {% endif %}
