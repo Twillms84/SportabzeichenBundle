@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use PulsR\SportabzeichenBundle\Entity\Exam;
 use PulsR\SportabzeichenBundle\Repository\ExamRepository;
+use PulsR\SportabzeichenBundle\Repository\SwimmingProofRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -127,7 +128,12 @@ final class ExamController extends AbstractPageController
     }
 
     #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]
-    public function delete(Exam $exam, Request $request, EntityManagerInterface $em): Response
+    public function delete(
+        Exam $exam, 
+        Request $request, 
+        EntityManagerInterface $em,
+        SwimmingProofRepository $swimmingRepo // <--- Inject Repository
+    ): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
@@ -138,9 +144,27 @@ final class ExamController extends AbstractPageController
         }
 
         try {
+            $year = $exam->getYear();
+            
+            if ($year) {
+                // Finde alle Nachweise, die zu diesem Jahr gehören
+                $proofs = $swimmingRepo->findBy(['examYear' => $year]);
+                
+                // Lösche sie
+                foreach ($proofs as $proof) {
+                    $em->remove($proof);
+                }
+            }
+
+            // 2. Das Exam selbst löschen
+            // (ExamParticipants & ExamResults werden automatisch per CASCADE gelöscht)
             $em->remove($exam);
+            
+            // 3. Alles in die DB schreiben (Proofs + Exam + Participants + Results)
             $em->flush();
-            $this->addFlash('success', 'Prüfung wurde gelöscht.');
+            
+            $this->addFlash('success', 'Prüfung und zugehörige Daten wurden gelöscht.');
+
         } catch (\Exception $e) {
             $this->addFlash('error', 'Fehler beim Löschen: ' . $e->getMessage());
         }
