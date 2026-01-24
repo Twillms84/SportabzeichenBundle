@@ -114,7 +114,7 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('ID fehlt.');
             }
 
-            // Eager Loading (wie gehabt)
+            // Eager Loading
             $ep = $this->em->createQueryBuilder()
                 ->select('ep', 'p', 'u')
                 ->from(ExamParticipant::class, 'ep')
@@ -138,24 +138,64 @@ final class SwimmingProofController extends AbstractPageController
                 'examYear' => $examYear
             ]);
             
-            // --- NEU: Prüfung auf Herkunft des Nachweises ---
+            // =================================================================
+            // LOGIK ÄNDERUNG HIER
+            // =================================================================
             if ($proofToDelete) {
                 $via = $proofToDelete->getRequirementMetVia();
                 
-                // Wenn der Nachweis automatisch durch eine Disziplin (z.B. Ausdauer) kam,
-                // beginnt der String mit "DISCIPLINE:". Dann darf hier nicht gelöscht werden.
+                // Prüfen: Wurde der Nachweis durch eine Disziplin erzeugt?
                 if ($via && str_starts_with($via, 'DISCIPLINE:')) {
-                    return new JsonResponse([
-                        'success' => false,
-                        'message' => 'Dieser Nachweis ist an eine Disziplin gebunden und kann nur über die Leistungstabelle entfernt werden.'
-                    ], 400); // 400 Bad Request verhindert, dass das JS das UI updatet
-                }
+                    
+                    // Wir müssen herausfinden, WELCHE Disziplin das war.
+                    // Format ist normalerweise "DISCIPLINE:{id}"
+                    $parts = explode(':', $via);
+                    $disciplineId = $parts[1] ?? null;
+                    
+                    $canDelete = true; // Standardannahme: Löschen erlaubt (für Schwimm-Kategorie)
 
+                    if ($disciplineId) {
+                        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+                        
+                        if ($discipline) {
+                            // Name der Kategorie holen (z.B. "Ausdauer", "Schnelligkeit", "Schwimmen")
+                            // Hinweis: Passe 'getCategory()' und 'getName()' an deine Entity-Struktur an!
+                            $categoryName = strtoupper($discipline->getCategory() ? $discipline->getCategory()->getName() : '');
+                            
+                            // Liste der Kategorien, die NICHT gelöscht werden dürfen (weil sie echte Leistungen sind)
+                            $blockingCategories = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
+
+                            if (in_array($categoryName, $blockingCategories)) {
+                                $canDelete = false;
+                            } else {
+                                // Wenn es erlaubt ist (Kategorie "Schwimmen"), müssen wir auch das 
+                                // Resultat (ExamResult) zurücksetzen, sonst taucht der Nachweis beim nächsten Sync wieder auf.
+                                foreach ($ep->getResults() as $result) {
+                                    if ($result->getDiscipline()->getId() === $discipline->getId()) {
+                                        $result->setValue(0);
+                                        $result->setPoints(0);
+                                        $result->setData(null);
+                                        // $this->em->persist($result); // ist durch flush abgedeckt
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!$canDelete) {
+                        return new JsonResponse([
+                            'success' => false,
+                            'message' => 'Dieser Nachweis resultiert aus einer Leistung in Ausdauer/Schnelligkeit. Bitte löschen Sie die Zeit in der Leistungstabelle.'
+                        ], 400);
+                    }
+                }
+                
+                // Wenn wir hier sind, ist Löschen erlaubt.
                 $this->em->remove($proofToDelete);
             }
-            // ------------------------------------------------
+            // =================================================================
 
-            // Verknüpfung am ExamParticipant lösen
+            // Verknüpfung am ExamParticipant lösen (UI Cleanup)
             if (method_exists($ep, 'setSwimmingDiscipline')) {
                 $ep->setSwimmingDiscipline(null);
             }
