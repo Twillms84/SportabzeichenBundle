@@ -114,7 +114,7 @@ final class SwimmingProofController extends AbstractPageController
                 throw new \Exception('ID fehlt.');
             }
 
-            // Eager Loading
+            // Eager Loading: Participant und User mitladen
             $ep = $this->em->createQueryBuilder()
                 ->select('ep', 'p', 'u')
                 ->from(ExamParticipant::class, 'ep')
@@ -139,7 +139,7 @@ final class SwimmingProofController extends AbstractPageController
             ]);
             
             // =================================================================
-            // LOGIK ÄNDERUNG HIER
+            // LOGIK ÄNDERUNG (FIXED)
             // =================================================================
             if ($proofToDelete) {
                 $via = $proofToDelete->getRequirementMetVia();
@@ -147,35 +147,47 @@ final class SwimmingProofController extends AbstractPageController
                 // Prüfen: Wurde der Nachweis durch eine Disziplin erzeugt?
                 if ($via && str_starts_with($via, 'DISCIPLINE:')) {
                     
-                    // Wir müssen herausfinden, WELCHE Disziplin das war.
-                    // Format ist normalerweise "DISCIPLINE:{id}"
+                    // ID parsen "DISCIPLINE:{id}"
                     $parts = explode(':', $via);
                     $disciplineId = $parts[1] ?? null;
                     
-                    $canDelete = true; // Standardannahme: Löschen erlaubt (für Schwimm-Kategorie)
+                    $canDelete = true; // Standardannahme: Löschen erlaubt
 
                     if ($disciplineId) {
                         $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
                         
                         if ($discipline) {
-                            // Name der Kategorie holen (z.B. "Ausdauer", "Schnelligkeit", "Schwimmen")
-                            // Hinweis: Passe 'getCategory()' und 'getName()' an deine Entity-Struktur an!
-                            $categoryName = strtoupper($discipline->getCategory() ? $discipline->getCategory()->getName() : '');
-                            
-                            // Liste der Kategorien, die NICHT gelöscht werden dürfen (weil sie echte Leistungen sind)
+                            // --- FIX START: Sicheres Ermitteln des Kategorienamens ---
+                            // Wir prüfen, ob getCategory() ein Objekt oder ein String ist
+                            $categoryRaw = $discipline->getCategory();
+                            $categoryName = '';
+
+                            if (is_object($categoryRaw) && method_exists($categoryRaw, 'getName')) {
+                                // Fall A: Es ist eine Entity (z.B. Category Object)
+                                $categoryName = strtoupper($categoryRaw->getName());
+                            } elseif (is_string($categoryRaw)) {
+                                // Fall B: Es ist direkt ein String (z.B. "Ausdauer")
+                                $categoryName = strtoupper($categoryRaw);
+                            } elseif ($categoryRaw === null) {
+                                $categoryName = '';
+                            }
+                            // --- FIX ENDE ---
+
+                            // Kategorien, bei denen NICHT gelöscht werden darf (echte Sportleistung)
                             $blockingCategories = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
 
                             if (in_array($categoryName, $blockingCategories)) {
                                 $canDelete = false;
                             } else {
-                                // Wenn es erlaubt ist (Kategorie "Schwimmen"), müssen wir auch das 
-                                // Resultat (ExamResult) zurücksetzen, sonst taucht der Nachweis beim nächsten Sync wieder auf.
+                                // Wenn es erlaubt ist (z.B. Kategorie "SCHWIMMEN"), 
+                                // müssen wir das zugehörige ExamResult nullen, sonst kommt der Nachweis wieder.
                                 foreach ($ep->getResults() as $result) {
-                                    if ($result->getDiscipline()->getId() === $discipline->getId()) {
+                                    // Null-Check für Discipline im Result hinzufügen
+                                    if ($result->getDiscipline() && $result->getDiscipline()->getId() === $discipline->getId()) {
                                         $result->setValue(0);
                                         $result->setPoints(0);
                                         $result->setData(null);
-                                        // $this->em->persist($result); // ist durch flush abgedeckt
+                                        // $this->em->persist($result); // Wird durch flush() gespeichert
                                     }
                                 }
                             }
