@@ -19,6 +19,31 @@
         </div>
         {# FILTER #}
         <div class="col-12 col-md-auto">
+            <form method="get" action="{{ path(app.request.attributes.get('_route'), app.request.attributes.get('_route_params')) }}">
+                
+                {# WICHTIG: Bestehende URL-Parameter (wie Sortierung) behalten #}
+                {% for key, value in app.request.query.all %}
+                    {% if key != 'class' %} {# 'class' wollen wir ja gerade neu setzen #}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        {{ icon('users')|raw }}
+                    </span>
+                    <select name="class" class="form-select border-start-0 ps-0" onchange="this.form.submit()" style="min-width: 150px;">
+                        <option value="">Alle Gruppen</option>
+                        {% for group in groups %}
+                            <option value="{{ group.id }}" {{ app.request.query.get('class') == group.id ? 'selected' : '' }}>
+                                {{ group.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+        <div class="col-12 col-md-auto">
             <div class="view-selector-wrapper">
                 <select id="viewSelector" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Ansicht wählen (z.B. Schwimmen)...'|trans }}">
                     <option value="SWIMMING" selected>Schwimmen</option>
