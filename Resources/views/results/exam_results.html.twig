@@ -130,7 +130,12 @@
                         <td class="col-swimming align-middle p-2 text-center col-discipline col-cat-SWIMMING">
                             <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
                                 {% set hasSwimming = p.has_swimming %}
-                                {% set swimInfo = p.swimming_met_via|default('Nachweis erbracht') %}
+                                
+                                {# FIX: Fallback-Text nur setzen, wenn hasSwimming auch wirklich TRUE ist #}
+                                {# Wenn p.swimming_met_via existiert -> Nimm das. #}
+                                {# Sonst: Wenn hasSwimming wahr ist -> "Nachweis erbracht". #}
+                                {# Sonst: Leer lassen. #}
+                                {% set swimInfo = p.swimming_met_via ? p.swimming_met_via : (hasSwimming ? 'Nachweis erbracht' : '') %}
 
                                 {# A) Anzeige #}
                                 <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}">
