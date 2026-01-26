@@ -130,7 +130,7 @@ thead .col-sticky-left {
    ========================================= */
 
 .col-swimming {
-    width: 130px !important;      /* Schmaler gemacht (vorher 160px/180px) */
+    width: 130px !important;      
     min-width: 130px !important;
     max-width: 130px !important;
     vertical-align: middle !important;
@@ -142,13 +142,13 @@ thead .col-sticky-left {
     width: 100%;
     height: 100%;
     display: flex;
-    flex-direction: column !important; /* WICHTIG: Zwingt Elemente untereinander */
+    flex-direction: column !important; 
     align-items: center;
     justify-content: center;
-    gap: 4px; /* Abstand zwischen Badge und Dropdown (falls beide sichtbar wären) */
+    gap: 2px; 
 }
 
-/* A) Das Dropdown */
+/* A) Das Dropdown (bleibt gleich) */
 .swimming-select-compact {
     width: 100% !important;
     font-size: 0.8rem !important;
@@ -162,41 +162,52 @@ thead .col-sticky-left {
 .swim-badge-container {
     width: 100%;
     display: flex;
-    flex-direction: column !important; /* Auch Inhalt im Badge untereinander */
+    flex-direction: column !important;
     align-items: center;
     justify-content: center;
-    background-color: #d1e7dd;
-    border: 1px solid #a3cfbb;
-    color: #0f5132;
-    border-radius: 6px;
-    padding: 3px;
+    
+    /* ÄNDERUNG: Transparent & Rand weg */
+    background-color: transparent !important;
+    border: none !important;
+    
+    /* Farbe: Ein schönes Grün für den Text/Haken */
+    color: #198754; 
+    padding: 2px;
 }
 
 /* Text im Badge */
 .swim-info-text {
-    font-size: 0.7rem;
+    /* ÄNDERUNG: Deutlich größer */
+    font-size: 0.95rem !important; 
     font-weight: 700;
-    line-height: 1.1;
+    line-height: 1.2;
     text-align: center;
-    white-space: normal; /* Textumbruch erlauben */
+    white-space: normal; 
 }
 
 /* Löschen Button (Mülleimer) */
 .btn-delete-swimming {
     width: 100%;
-    margin-top: 3px;
+    margin-top: 2px;
     border: none;
     background: transparent;
-    border-top: 1px solid rgba(15, 81, 50, 0.2);
-    border-radius: 0 0 4px 4px;
+    
+    /* ÄNDERUNG: Border-Top entfernt (sieht ohne Box besser aus) */
+    border-top: none !important;
+    
+    /* ÄNDERUNG: Icon kleiner gemacht */
+    font-size: 0.8rem !important; 
+    
     color: #dc3545;
-    opacity: 0.7;
-    padding: 2px 0;
+    opacity: 0.5; /* Dezenter Standardzustand */
+    padding: 0;   /* Padding reduziert */
     cursor: pointer;
+    transition: opacity 0.2s;
 }
 
 .btn-delete-swimming:hover {
-    background-color: rgba(220, 53, 69, 0.1);
+    /* Kein Background mehr, nur volle Deckkraft */
+    background-color: transparent; 
     opacity: 1;
 }
 /* =========================================
