@@ -16,94 +16,70 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h3 class="m-0 text-truncate">Ergebnisse: {{ exam.name }}</h3>
         
-        <div class="d-flex gap-2">
-            <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
-               class="btn btn-default btn-sm" target="_blank">
-                {{ icon('print')|raw }} <span class="d-none d-sm-inline">{{ 'Drucken'|trans }}</span>
-            </a>
-            <a href="{{ path('sportabzeichen_exams_dashboard') }}" 
-               class="btn btn-outline-secondary btn-sm">
-                {{ icon('arrow-left')|raw }} {{ 'Zurück'|trans }}
-            </a>
-        </div>
-    </div>
-
-    {# --- 2. FILTER LEISTE (Card Design) --- #}
-    <div class="card shadow-sm mb-3 bg-light border-0">
+        <div class="card shadow-sm mb-3 bg-light border-0">
         <div class="card-body p-3">
-            <div class="row g-3 align-items-end">
+            <div class="row g-2">
                 
-                {# A) KLASSEN FILTER #}
-                <div class="col-12 col-md-4">
-                    <label class="form-label fw-bold text-uppercase small text-muted mb-1">
-                        {{ icon('users')|raw }} Klasse
-                    </label>
+                {# 1. KLASSEN FILTER #}
+                <div class="col-12 col-md-6 col-xl-3">
                     <select id="client-class-filter" 
                             class="form-control selectpicker show-tick" 
                             multiple 
                             data-live-search="true" 
                             data-actions-box="true"
-                            data-selected-text-format="count > 2"
-                            data-count-selected-text="{0} Klassen gewählt"
                             data-select-all-text="Alle"
                             data-deselect-all-text="Keine"
-                            data-none-selected-text="Alle Klassen anzeigen"
+                            data-none-selected-text="Klasse filtern..."
                             data-width="100%"
                             data-style="btn-white border">
                         {# Optionen werden per JS befüllt #}
                     </select>
                 </div>
 
-                {# B) SUCHLEISTE #}
-                <div class="col-12 col-md-4">
-                    <label class="form-label fw-bold text-uppercase small text-muted mb-1">
-                        {{ icon('search')|raw }} Suche
-                    </label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0 text-muted">{{ icon('search')|raw }}</span>
-                        <input type="text" id="client-search-input" class="form-control border-start-0" placeholder="Name des Schülers...">
-                    </div>
+                {# 2. SUCHLEISTE #}
+                <div class="col-12 col-md-6 col-xl-3">
+                    <input type="text" id="client-search-input" class="form-control" placeholder="Schüler suchen...">
                 </div>
 
-                {# C) ANSICHT / DISZIPLINEN FILTER #}
-                <div class="col-12 col-md-4">
-                    <label class="form-label fw-bold text-uppercase small text-muted mb-1">
-                        {{ icon('filter')|raw }} Ansicht
-                    </label>
+                {# 3. ANSICHT / DISZIPLINEN FILTER #}
+                <div class="col-12 col-md-6 col-xl-3">
                     <select id="viewSelector" 
                             class="form-control selectpicker show-tick" 
                             multiple 
                             data-actions-box="true"
-                            data-selected-text-format="count > 2"
-                            data-count-selected-text="{0} Kategorien"
                             data-select-all-text="Alle"
                             data-deselect-all-text="Keine"
-                            data-none-selected-text="Bitte wählen..."
+                            data-none-selected-text="Ansicht / Disziplinen..."
                             data-width="100%"
                             data-style="btn-white border">
                         
-                        {# Manuelle Option für Schwimmen #}
-                        <option value="SWIMMING" selected data-icon="fas fa-swimmer">Schwimmen</option>
+                        <option value="SWIMMING" selected>Schwimmen</option>
 
-                        {# Dynamische Optionen aus Twig #}
                         {% for category in disciplines|keys %}
                             {% if category|upper not in ['SWIMMING', 'SCHWIMMEN'] %}
-                                {# Icons basierend auf Kategorie zuweisen (optional, sonst generisches Icon) #}
-                                {% set catIcon = 'fas fa-running' %}
-                                {% if category == 'Kraft' %}{% set catIcon = 'fas fa-dumbbell' %}
-                                {% elseif category == 'Schnelligkeit' %}{% set catIcon = 'fas fa-tachometer-alt' %}
-                                {% elseif category == 'Koordination' %}{% set catIcon = 'fas fa-balance-scale' %}
-                                {% endif %}
-
-                                <option value="{{ category }}" selected data-icon="{{ catIcon }}">{{ category }}</option>
+                                <option value="{{ category }}" selected>{{ category }}</option>
                             {% endif %}
                         {% endfor %}
                     </select>
                 </div>
 
+                {# 4. BUTTONS (Drucken & Zurück) #}
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="d-flex gap-2 h-100">
+                        <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
+                           class="btn btn-default flex-fill d-flex align-items-center justify-content-center" target="_blank">
+                            {{ icon('print')|raw }} <span class="ms-2">{{ 'Drucken'|trans }}</span>
+                        </a>
+                        <a href="{{ path('sportabzeichen_exams_dashboard') }}" 
+                           class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center">
+                            {{ icon('arrow-left')|raw }} <span class="ms-2">{{ 'Zurück'|trans }}</span>
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+</div>
 
     {# --- 3. TABELLE --- #}
     <form id="autosave-form" 
