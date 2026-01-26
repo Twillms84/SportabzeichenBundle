@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const $viewSelector = $('#viewSelector'); // jQuery für Select2
     
     // Initialisiere Select2 falls vorhanden (Bootstrap Theme empfohlen)
-    
     if ($viewSelector.length) {
         $viewSelector.on('change', function() {
             const selectedCategories = $(this).val() || [];
@@ -37,6 +36,66 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } catch(e) { console.error('Storage Error', e); }
         }
+    }
+
+    // =========================================================
+    // 1b. TEILNEHMER FILTER (Klasse + Namenssuche)
+    // =========================================================
+    const classFilterSelect = document.getElementById('client-class-filter');
+    const searchInput = document.getElementById('client-search-input');
+    
+    // Nur ausführen, wenn die Elemente im DOM existieren
+    if (classFilterSelect && searchInput) {
+        const rows = document.querySelectorAll('.participant-row');
+        const classes = new Set();
+
+        // A) Dropdown befüllen (Klassen aus der Tabelle sammeln)
+        rows.forEach(row => {
+            const cls = row.getAttribute('data-class');
+            if (cls && cls.trim() !== '') {
+                classes.add(cls);
+            }
+        });
+
+        // Alphabetisch sortieren und in Select einfügen
+        Array.from(classes).sort().forEach(cls => {
+            const option = document.createElement('option');
+            option.value = cls;
+            option.textContent = cls;
+            classFilterSelect.appendChild(option);
+        });
+
+        // B) Die kombinierte Filter-Funktion
+        const filterRows = () => {
+            const selectedClass = classFilterSelect.value;
+            const searchTerm = searchInput.value.toLowerCase().trim();
+
+            rows.forEach(row => {
+                // 1. Klasse prüfen
+                const rowClass = row.getAttribute('data-class');
+                // Wenn 'all' gewählt ist ODER die Klasse übereinstimmt (ignoriert Zeilen ohne Klasse wenn Filter aktiv)
+                const matchClass = (selectedClass === 'all' || rowClass === selectedClass);
+
+                // 2. Name prüfen (sucht im .name-main Bereich)
+                const nameEl = row.querySelector('.name-main');
+                // Fallback, falls Name nicht gefunden wird
+                const nameText = nameEl ? nameEl.textContent.toLowerCase() : ''; 
+                // Wenn Suche leer ist ODER der Suchbegriff im Namen vorkommt
+                const matchSearch = (searchTerm === '' || nameText.includes(searchTerm));
+
+                // Zeigen nur wenn BEIDES (Klasse UND Suchbegriff) passt
+                if (matchClass && matchSearch) {
+                    row.style.display = ''; // Standardanzeige (Table-Row)
+                } else {
+                    row.style.display = 'none'; // Ausblenden
+                }
+            });
+        };
+
+        // C) Event Listener hinzufügen
+        classFilterSelect.addEventListener('change', filterRows);
+        searchInput.addEventListener('keyup', filterRows); // Reagiert beim Tippen
+        searchInput.addEventListener('input', filterRows); // Reagiert z.B. beim Löschen per 'X' im Input
     }
 
     // =========================================================

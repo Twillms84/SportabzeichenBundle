@@ -23,33 +23,22 @@
                 <span class="input-group-text bg-white border-end-0 text-muted">
                     {{ icon('users')|raw }}
                 </span>
-                {# ID ist wichtig für das JS #}
                 <select id="client-class-filter" class="form-select border-start-0 ps-0" style="min-width: 150px;">
                     <option value="all">Alle Klassen</option>
-                    {# Optionen werden per JS generiert #}
                 </select>
             </div>
         </div>
 
-        <div class="mb-3">
-                <label class="form-label" for="classes">{{ 'Teilnehmer direkt importieren (Mehrfachauswahl möglich)'|trans }}</label>
-                
-                {# 
-                   ACHTUNG: 
-                   1. name="classes[]" -> Damit PHP ein Array bekommt
-                   2. multiple="multiple" -> Erlaubt Mehrfachauswahl
-                   3. class="form-control select2" -> Aktiviert das IServ Such-Feature
-                #}
-                <select name="classes[]" id="classes" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Bitte wählen (z.B. 5a, 6b)...'|trans }}">
-                    {% for c in classes %}
-                        <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                </select>
-                
-                <small class="text-muted d-block mt-1">
-                    {{ 'Klicke in das Feld, um Klassen zu suchen und hinzuzufügen.'|trans }}
-                </small>
+        {# --- NEU: NAMENSSUCHE (Ersetzt den Import-Teil) --- #}
+        <div class="col-12 col-md-auto flex-grow-1">
+            <div class="input-group">
+                <span class="input-group-text bg-white border-end-0 text-muted">
+                    {{ icon('search')|raw }}
+                </span>
+                {# ID für JS wichtig: #}
+                <input type="text" id="client-search-input" class="form-control border-start-0 ps-0" placeholder="{{ 'Teilnehmer suchen...'|trans }}">
             </div>
+        </div>
 
         <div class="col-12 col-md-auto">
             <div class="view-selector-wrapper">
