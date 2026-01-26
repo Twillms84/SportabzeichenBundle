@@ -1,22 +1,30 @@
 document.addEventListener('DOMContentLoaded', function() {
     
+    // Wir nutzen jQuery für selectpicker Events, da Bootstrap-Select auf jQuery basiert
+    const $ = jQuery; 
+
     // =========================================================
-    // 1. ANSICHT FILTER (Select2 / Category Logic)
+    // 1. ANSICHT FILTER (Disziplinen) - IServ Style
     // =========================================================
-    const $viewSelector = $('#viewSelector'); // jQuery für Select2
+    const $viewSelector = $('#viewSelector'); 
     
-    // Initialisiere Select2 falls vorhanden (Bootstrap Theme empfohlen)
     if ($viewSelector.length) {
-        $viewSelector.on('change', function() {
+        // Event Listener speziell für bootstrap-select
+        $viewSelector.on('changed.bs.select', function (e, clickedIndex, isSelected, previousValue) {
             const selectedCategories = $(this).val() || [];
             
-            // Iteriere über alle Optionen des Filters (Ausdauer, Kraft, etc.)
+            // Iteriere über alle Optionen
             $('#viewSelector option').each(function() {
-                const category = $(this).val(); // z.B. "Ausdauer"
-                // CSS Klasse im HTML ist .col-cat-Ausdauer
+                const category = $(this).val(); 
                 const cells = document.querySelectorAll('.col-cat-' + category);
                 
-                if (selectedCategories.length === 0 || selectedCategories.includes(category)) {
+                // Wenn nichts ausgewählt ist ODER die Kategorie im Array ist -> anzeigen
+                // (Logik: Leere Auswahl = Alles anzeigen? Oder nichts? 
+                //  Bei IServ Filtern bedeutet "Nichts gewählt" oft "Filter aus/Alles", 
+                //  aber bei Multiple Select oft "Nichts". Ich setze hier: Leer = Alles anzeigen)
+                const showAll = selectedCategories.length === 0;
+                
+                if (showAll || selectedCategories.includes(category)) {
                     cells.forEach(cell => cell.classList.remove('col-hidden'));
                 } else {
                     cells.forEach(cell => cell.classList.add('col-hidden'));
@@ -32,24 +40,25 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const parsed = JSON.parse(savedSelection);
                 if(parsed && parsed.length > 0) {
-                    $viewSelector.val(parsed).trigger('change');
+                    $viewSelector.selectpicker('val', parsed); // Setze Wert im Plugin
                 }
+                $viewSelector.selectpicker('refresh'); // UI aktualisieren
+                $viewSelector.trigger('changed.bs.select'); // Filter sofort anwenden
             } catch(e) { console.error('Storage Error', e); }
         }
     }
 
     // =========================================================
-    // 1b. TEILNEHMER FILTER (Klasse + Namenssuche)
+    // 1b. TEILNEHMER FILTER (Klasse + Namenssuche) - IServ Style
     // =========================================================
-    const classFilterSelect = document.getElementById('client-class-filter');
+    const $classFilterSelect = $('#client-class-filter'); // jQuery Selektor
     const searchInput = document.getElementById('client-search-input');
     
-    // Nur ausführen, wenn die Elemente im DOM existieren
-    if (classFilterSelect && searchInput) {
+    if ($classFilterSelect.length && searchInput) {
         const rows = document.querySelectorAll('.participant-row');
         const classes = new Set();
 
-        // A) Dropdown befüllen (Klassen aus der Tabelle sammeln)
+        // A) Dropdown befüllen
         rows.forEach(row => {
             const cls = row.getAttribute('data-class');
             if (cls && cls.trim() !== '') {
@@ -59,43 +68,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Alphabetisch sortieren und in Select einfügen
         Array.from(classes).sort().forEach(cls => {
-            const option = document.createElement('option');
-            option.value = cls;
-            option.textContent = cls;
-            classFilterSelect.appendChild(option);
+            // Wichtig: Option als String bauen oder normales JS Element
+            $classFilterSelect.append(`<option value="${cls}">${cls}</option>`);
         });
+
+        // WICHTIG: Damit IServ/Bootstrap das Dropdown rendert:
+        $classFilterSelect.selectpicker('refresh');
 
         // B) Die kombinierte Filter-Funktion
         const filterRows = () => {
-            const selectedClass = classFilterSelect.value;
+            // Hole Array der gewählten Klassen (z.B. ['5a', '5b'])
+            const selectedClasses = $classFilterSelect.val() || [];
             const searchTerm = searchInput.value.toLowerCase().trim();
 
             rows.forEach(row => {
-                // 1. Klasse prüfen
                 const rowClass = row.getAttribute('data-class');
-                // Wenn 'all' gewählt ist ODER die Klasse übereinstimmt (ignoriert Zeilen ohne Klasse wenn Filter aktiv)
-                const matchClass = (selectedClass === 'all' || rowClass === selectedClass);
-
-                // 2. Name prüfen (sucht im .name-main Bereich)
                 const nameEl = row.querySelector('.name-main');
-                // Fallback, falls Name nicht gefunden wird
                 const nameText = nameEl ? nameEl.textContent.toLowerCase() : ''; 
-                // Wenn Suche leer ist ODER der Suchbegriff im Namen vorkommt
+
+                // 1. Klasse prüfen
+                // Zeige an, wenn KEINE Klasse ausgewählt ist (Filter inaktiv) 
+                // ODER die Zeilen-Klasse in der Auswahl enthalten ist
+                const matchClass = (selectedClasses.length === 0 || selectedClasses.includes(rowClass));
+
+                // 2. Name prüfen
                 const matchSearch = (searchTerm === '' || nameText.includes(searchTerm));
 
-                // Zeigen nur wenn BEIDES (Klasse UND Suchbegriff) passt
                 if (matchClass && matchSearch) {
-                    row.style.display = ''; // Standardanzeige (Table-Row)
+                    row.style.display = ''; 
                 } else {
-                    row.style.display = 'none'; // Ausblenden
+                    row.style.display = 'none'; 
                 }
             });
         };
 
-        // C) Event Listener hinzufügen
-        classFilterSelect.addEventListener('change', filterRows);
-        searchInput.addEventListener('keyup', filterRows); // Reagiert beim Tippen
-        searchInput.addEventListener('input', filterRows); // Reagiert z.B. beim Löschen per 'X' im Input
+        // C) Event Listener
+        // Bootstrap-Select Event
+        $classFilterSelect.on('changed.bs.select', filterRows);
+        
+        // Input Events
+        searchInput.addEventListener('keyup', filterRows);
+        searchInput.addEventListener('input', filterRows);
     }
 
     // =========================================================
