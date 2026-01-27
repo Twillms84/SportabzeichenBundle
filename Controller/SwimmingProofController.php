@@ -130,82 +130,108 @@ final class SwimmingProofController extends AbstractPageController
             }
 
             $participant = $ep->getParticipant();
-            $examYear = $ep->getExam()->getYear();
+            $examYear = $ep->getExam()->getYear(); // z.B. 2026
 
+            $repo = $this->em->getRepository(SwimmingProof::class);
+
+            // 1. Wir suchen explizit einen Nachweis für das AKTUELLE Prüfungsjahr
             /** @var SwimmingProof|null $proofToDelete */
-            $proofToDelete = $this->em->getRepository(SwimmingProof::class)->findOneBy([
+            $proofToDelete = $repo->findOneBy([
                 'participant' => $participant,
                 'examYear' => $examYear
             ]);
             
             // =================================================================
-            // LOGIK ÄNDERUNG (FIXED)
+            // LOGIK ANPASSUNG: Feedback bei historischem Nachweis
             // =================================================================
-            if ($proofToDelete) {
-                $via = $proofToDelete->getRequirementMetVia();
+            if (!$proofToDelete) {
+                // Wir haben für 2026 nichts gefunden. 
+                // Prüfen wir, ob vielleicht ein alter, noch gültiger Nachweis existiert?
+                // Wir suchen den aktuellsten Nachweis für diesen Teilnehmer
+                $historicalProof = $repo->findOneBy(
+                    ['participant' => $participant], 
+                    ['validUntil' => 'DESC']
+                );
+
+                if ($historicalProof && $historicalProof->isValidForYear($examYear)) {
+                    // Es gibt einen gültigen Nachweis, aber er ist nicht aus diesem Jahr
+                    return new JsonResponse([
+                        'success' => false,
+                        'message' => sprintf(
+                            'Der Schwimmnachweis stammt aus dem Jahr %s und ist bis %s gültig. Er kann im Prüfungsjahr %s nicht gelöscht werden.',
+                            $historicalProof->getExamYear(),
+                            $historicalProof->getValidUntil()->format('d.m.Y'),
+                            $examYear
+                        )
+                    ], 400); // 400 Bad Request sorgt für Fehler-Popup im Frontend
+                }
+
+                // Wenn gar kein Nachweis da ist, geben wir einfach OK zurück (Idempotenz)
+                // oder eine Info "Nichts zu löschen".
+                return new JsonResponse([
+                    'success' => false, 
+                    'message' => 'Kein aktueller Schwimmnachweis für dieses Jahr gefunden.'
+                ], 400);
+            }
+
+            // =================================================================
+            // AB HIER: Normales Löschen (wenn Nachweis aus aktuellem Jahr ist)
+            // =================================================================
+            
+            $via = $proofToDelete->getRequirementMetVia();
+            
+            // Prüfen: Wurde der Nachweis durch eine Disziplin erzeugt?
+            if ($via && str_starts_with($via, 'DISCIPLINE:')) {
                 
-                // Prüfen: Wurde der Nachweis durch eine Disziplin erzeugt?
-                if ($via && str_starts_with($via, 'DISCIPLINE:')) {
+                // ID parsen "DISCIPLINE:{id}"
+                $parts = explode(':', $via);
+                $disciplineId = $parts[1] ?? null;
+                
+                $canDelete = true; // Standardannahme: Löschen erlaubt
+
+                if ($disciplineId) {
+                    $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
                     
-                    // ID parsen "DISCIPLINE:{id}"
-                    $parts = explode(':', $via);
-                    $disciplineId = $parts[1] ?? null;
-                    
-                    $canDelete = true; // Standardannahme: Löschen erlaubt
+                    if ($discipline) {
+                        // Kategorie Name sicher ermitteln
+                        $categoryRaw = $discipline->getCategory();
+                        $categoryName = '';
 
-                    if ($disciplineId) {
-                        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
-                        
-                        if ($discipline) {
-                            // --- FIX START: Sicheres Ermitteln des Kategorienamens ---
-                            // Wir prüfen, ob getCategory() ein Objekt oder ein String ist
-                            $categoryRaw = $discipline->getCategory();
-                            $categoryName = '';
+                        if (is_object($categoryRaw) && method_exists($categoryRaw, 'getName')) {
+                            $categoryName = strtoupper($categoryRaw->getName());
+                        } elseif (is_string($categoryRaw)) {
+                            $categoryName = strtoupper($categoryRaw);
+                        }
 
-                            if (is_object($categoryRaw) && method_exists($categoryRaw, 'getName')) {
-                                // Fall A: Es ist eine Entity (z.B. Category Object)
-                                $categoryName = strtoupper($categoryRaw->getName());
-                            } elseif (is_string($categoryRaw)) {
-                                // Fall B: Es ist direkt ein String (z.B. "Ausdauer")
-                                $categoryName = strtoupper($categoryRaw);
-                            } elseif ($categoryRaw === null) {
-                                $categoryName = '';
-                            }
-                            // --- FIX ENDE ---
+                        // Kategorien, bei denen NICHT gelöscht werden darf
+                        $blockingCategories = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
 
-                            // Kategorien, bei denen NICHT gelöscht werden darf (echte Sportleistung)
-                            $blockingCategories = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
-
-                            if (in_array($categoryName, $blockingCategories)) {
-                                $canDelete = false;
-                            } else {
-                                // Wenn es erlaubt ist (z.B. Kategorie "SCHWIMMEN"), 
-                                // müssen wir das zugehörige ExamResult nullen, sonst kommt der Nachweis wieder.
-                                foreach ($ep->getResults() as $result) {
-                                    // Null-Check für Discipline im Result hinzufügen
-                                    if ($result->getDiscipline() && $result->getDiscipline()->getId() === $discipline->getId()) {
-                                        $result->setValue(0);
-                                        $result->setPoints(0);
-                                        $result->setData(null);
-                                        // $this->em->persist($result); // Wird durch flush() gespeichert
-                                    }
+                        if (in_array($categoryName, $blockingCategories)) {
+                            $canDelete = false;
+                        } else {
+                            // Wenn es erlaubt ist (z.B. Kategorie "SCHWIMMEN"), Result nullen
+                            foreach ($ep->getResults() as $result) {
+                                if ($result->getDiscipline() && $result->getDiscipline()->getId() === $discipline->getId()) {
+                                    $result->setValue(0);
+                                    $result->setPoints(0);
+                                    $result->setData(null);
+                                    // $this->em->persist($result); // Flush reicht
                                 }
                             }
                         }
                     }
-
-                    if (!$canDelete) {
-                        return new JsonResponse([
-                            'success' => false,
-                            'message' => 'Dieser Nachweis resultiert aus einer Leistung in Ausdauer/Schnelligkeit. Bitte löschen Sie die Zeit in der Leistungstabelle.'
-                        ], 400);
-                    }
                 }
-                
-                // Wenn wir hier sind, ist Löschen erlaubt.
-                $this->em->remove($proofToDelete);
+
+                if (!$canDelete) {
+                    return new JsonResponse([
+                        'success' => false,
+                        'message' => 'Dieser Nachweis resultiert aus einer Leistung in Ausdauer/Schnelligkeit. Bitte löschen Sie die Zeit in der Leistungstabelle.'
+                    ], 400);
+                }
             }
-            // =================================================================
+            
+            // Löschen durchführen
+            $this->em->remove($proofToDelete);
 
             // Verknüpfung am ExamParticipant lösen (UI Cleanup)
             if (method_exists($ep, 'setSwimmingDiscipline')) {
