@@ -1,10 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     
-    // Wir nutzen jQuery für selectpicker Events
     const $ = jQuery; 
 
     // =========================================================
-    // 1. ANSICHT FILTER (Disziplinen)
+    // 1. ANSICHT & FILTER
     // =========================================================
     const $viewSelector = $('#viewSelector'); 
     
@@ -23,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     cells.forEach(cell => cell.classList.add('col-hidden'));
                 }
             });
-
             localStorage.setItem('sportabzeichen_view_selection', JSON.stringify(selectedCategories));
         });
 
@@ -118,7 +116,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectEl = cell ? cell.querySelector('select') : null;
         const inputEl = cell ? cell.querySelector('input[type="text"]') : null;
 
-        // Route Wahl
         if (type === 'swimming_select') {        
             targetRoute = swimmingRoute;
             payload.discipline_id = el.value;
@@ -163,24 +160,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (data.status === 'ok' || data.success) {
-                // 1. Zelle aktualisieren
+                // 1. Zelle aktualisieren (Farben)
                 if (type !== 'swimming_select' && cell) {
                     handleDisciplineColors(data, cell, row, kat, el);
-
-                    if (data.new_requirements) {
-                        const req = data.new_requirements;
-                        const badgeB = cell.querySelector('.req-val-b');
-                        const badgeS = cell.querySelector('.req-val-s');
-                        const badgeG = cell.querySelector('.req-val-g');
-                        
-                        if(badgeB) badgeB.textContent = req.bronze;
-                        if(badgeS) badgeS.textContent = req.silber;
-                        if(badgeG) badgeG.textContent = req.gold;
-                    }
+                    if (data.new_requirements) updateRequirementsBadges(cell, data.new_requirements);
                 }
                 
-                // 2. LIVE UPDATE WIDGETS (Gesamtpunkte & Medaille)
-                // Hier wird die "FinalMedal" live aktualisiert
+                // 2. LIVE UPDATE WIDGETS (Gesamtpunkte & Medaille & Schwimmen-Text)
                 updateUIWidgets(epId, row, data);
 
             } else {
@@ -210,21 +196,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceUpper = sourceRaw.toUpperCase();
 
         if (proofYear && currentYear && proofYear !== currentYear) {
-            alert(`Dieser Schwimmnachweis stammt aus dem Jahr ${proofYear} und kann hier nicht gelöscht werden.`);
+            alert(`Jahr ${proofYear} kann hier nicht gelöscht werden.`);
             return;
         }
 
         const forbiddenSources = ['AUSDAUER', 'SCHNELLIGKEIT', 'ENDURANCE', 'SPEED'];
         if (forbiddenSources.some(s => sourceUpper.includes(s))) {
-            alert(`Automatischer Nachweis durch "${sourceRaw}". Bitte entfernen Sie die Leistung in der entsprechenden Disziplin.`);
+            alert(`Automatisch durch "${sourceRaw}" erbracht. Bitte dort löschen.`);
             return;
         }
 
-        const confirmMsg = sourceRaw 
-            ? `Soll der Schwimmnachweis (${sourceRaw}) wirklich entfernt werden?`
-            : 'Soll der manuelle Schwimmnachweis wirklich entfernt werden?';
-
-        if (!confirm(confirmMsg)) return;
+        if (!confirm('Wirklich löschen?')) return;
 
         const originalContent = btn.innerHTML;
         btn.style.opacity = '0.5';
@@ -248,24 +230,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const wrapper = document.getElementById('swimming-wrapper-' + epId);
                 if (wrapper) {
-                    const badgeCont = wrapper.querySelector('.swim-badge-container');
-                    const dropCont = wrapper.querySelector('.swim-dropdown-container');
-                    
-                    if (badgeCont) badgeCont.classList.add('d-none');
-                    if (dropCont) dropCont.classList.remove('d-none');
+                    // Reset UI
+                    wrapper.querySelector('.swim-badge-container')?.classList.add('d-none');
+                    wrapper.querySelector('.swim-dropdown-container')?.classList.remove('d-none');
                     
                     const select = wrapper.querySelector('select');
                     if (select) select.value = "";
                     
-                    const swimIcon = document.getElementById('swim-icon-' + epId);
-                    if(swimIcon) swimIcon.className = 'fas fa-swimmer ms-1 text-danger opacity-50';
+                    // Text leeren
+                    const textEl = wrapper.querySelector('.swim-info-text');
+                    if(textEl) textEl.textContent = '';
                 }
             } else {
-                alert('Fehler: ' + (data.message || 'Konnte nicht gelöscht werden.'));
+                alert('Fehler: ' + (data.message || 'Fehler beim Löschen.'));
             }
         } catch (e) {
             console.error('Delete Error:', e);
-            alert('Kommunikationsfehler mit dem Server.');
+            alert('Kommunikationsfehler.');
         } finally {
             btn.style.opacity = '1';
             btn.disabled = false;
@@ -274,8 +255,131 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // =========================================================
-    // 3. HELPER FUNCTIONS & UI UPDATER
+    // 3. UI HELFER
     // =========================================================
+
+    function updateUIWidgets(epId, row, data) {
+        // A. GESAMTPUNKTE
+        const pointsValue = (data.total !== undefined) ? data.total : data.total_points;
+        const totalBadge = document.getElementById('total-points-' + epId);
+        
+        if (totalBadge && pointsValue !== undefined) {
+            totalBadge.textContent = pointsValue;
+            triggerPulse(totalBadge);
+        }
+
+        // B. FINAL MEDAILLE (Live Update mit korrektem CSS)
+        const medalBadge = document.getElementById('final-medal-' + epId);
+        let medalValue = data.final_medal || data.medal || 'none';
+        medalValue = String(medalValue).toLowerCase();
+
+        if (medalBadge) {
+            const labelSpan = medalBadge.querySelector('.js-medal-label');
+            
+            // 1. HARD RESET
+            // Wir nutzen 'badge border' als Basis und 'rounded-2', damit es NICHT oval ist (wie deine Inputs)
+            medalBadge.className = 'badge border rounded-2'; 
+
+            // 2. Deine CSS Klassen anwenden
+            let labelText = '-';
+            let colorClass = 'bg-light text-muted'; // Fallback
+
+            switch (medalValue) {
+                case 'gold':
+                    colorClass = 'medal-gold'; // Deine CSS Klasse
+                    labelText = 'Gold';
+                    break;
+                case 'silver':
+                case 'silber':
+                    colorClass = 'medal-silber'; // Deine CSS Klasse
+                    labelText = 'Silber';
+                    break;
+                case 'bronze':
+                    colorClass = 'medal-bronze'; // Deine CSS Klasse
+                    labelText = 'Bronze';
+                    break;
+                default:
+                    colorClass = 'bg-light text-muted';
+                    labelText = '-';
+            }
+
+            medalBadge.classList.add(colorClass);
+            
+            // Optional: Padding anpassen für bessere Optik
+            medalBadge.classList.add('p-2'); 
+
+            if (labelSpan) labelSpan.textContent = labelText;
+            else medalBadge.textContent = labelText;
+
+            triggerPulse(medalBadge);
+        }
+
+        // C. SCHWIMMEN (Icon + Text Update)
+        const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || String(data.has_swimming) === '1');
+        
+        // Icon
+        const swimIcon = document.getElementById('swim-icon-' + epId);
+        if(swimIcon) {
+            swimIcon.className = hasSwimming 
+                ? 'fas fa-swimmer ms-2 text-success' 
+                : 'fas fa-swimmer ms-2 text-danger opacity-50';
+            triggerPulse(swimIcon);
+        }
+        
+        // Wrapper Bereiche umschalten
+        const wrapper = document.getElementById('swimming-wrapper-' + epId);
+        if (wrapper) {
+            const badgeCont = wrapper.querySelector('.swim-badge-container');
+            const dropCont = wrapper.querySelector('.swim-dropdown-container');
+            const textEl = wrapper.querySelector('.swim-info-text');
+
+            if (hasSwimming) {
+                // TEXT UPDATE: Wir holen den Text aus dem Select, das gerade noch sichtbar war
+                if (textEl) {
+                    // Falls Server den Namen mitschickt (ideal):
+                    if (data.swimming_name) {
+                        textEl.textContent = data.swimming_name;
+                    } 
+                    // Fallback: Text aus dem Dropdown holen, bevor wir es verstecken
+                    else {
+                        const select = wrapper.querySelector('select');
+                        if (select && select.selectedOptions.length > 0 && select.value) {
+                             // Nur Text holen, wenn auch wirklich was gewählt wurde
+                             textEl.textContent = select.selectedOptions[0].text;
+                        }
+                    }
+                }
+
+                if(badgeCont) badgeCont.classList.remove('d-none');
+                if(dropCont) dropCont.classList.add('d-none');
+            } else {
+                if(badgeCont) badgeCont.classList.add('d-none');
+                if(dropCont) dropCont.classList.remove('d-none');
+            }
+        }
+    }
+
+    // --- KLEINE HELFER ---
+
+    function triggerPulse(element) {
+        if(!element) return;
+        element.style.transition = "transform 0.2s ease-in-out";
+        element.style.transform = "scale(1.1)";
+        setTimeout(() => element.style.transform = "scale(1)", 200);
+    }
+
+    function removeMedalClasses(el) {
+        el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
+    }
+
+    function updateRequirementsBadges(cell, req) {
+        const badgeB = cell.querySelector('.req-val-b');
+        const badgeS = cell.querySelector('.req-val-s');
+        const badgeG = cell.querySelector('.req-val-g');
+        if(badgeB) badgeB.textContent = req.bronze;
+        if(badgeS) badgeS.textContent = req.silber;
+        if(badgeG) badgeG.textContent = req.gold;
+    }
 
     function checkVerbandInput(selectEl) {
         const cell = selectEl.closest('td');
@@ -319,16 +423,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function removeMedalClasses(el) {
-        el.classList.remove('medal-gold', 'medal-silber', 'medal-bronze', 'medal-none');
-    }
-
     function handleDisciplineColors(data, cell, row, kat, el) {
         const selectEl = cell.querySelector('select');
         const inputEl = cell.querySelector('input[type="text"]');
         const isSelect = (el.tagName === 'SELECT');
 
-        // Farbe vom Server (silver -> silber mapping wichtig für CSS)
         const resultColor = data.stufe ? data.stufe.toLowerCase() : 'none'; 
         let cssClass = 'medal-' + resultColor;
         if(resultColor === 'silver') cssClass = 'medal-silber';
@@ -340,14 +439,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Server-Override Logik (Verbandsabzeichen)
         if (data.discipline_unit === 'NONE' || data.discipline_unit === 'UNIT_NONE') {
             if (inputEl) {
                 inputEl.value = ''; 
                 inputEl.disabled = true; 
                 inputEl.setAttribute('placeholder', '✓');
                 inputEl.classList.add('bg-light');
-                
                 removeMedalClasses(inputEl);
                 inputEl.classList.add('medal-gold');
             }
@@ -355,16 +452,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 removeMedalClasses(selectEl);
                 selectEl.classList.add('medal-gold');
             }
-        } 
-        else if (isSelect) {
+        } else if (isSelect) {
             checkVerbandInput(selectEl);
         }
 
-        // Exklusivität: Andere Felder der Kategorie leeren
         if (isSelect && kat) {
             row.querySelectorAll(`[data-kategorie="${kat}"]`).forEach(otherEl => {
-                if (otherEl.closest('td') === cell) return; // Self skip
-
+                if (otherEl.closest('td') === cell) return;
                 if (otherEl.tagName === 'INPUT') {
                     otherEl.value = '';
                     otherEl.disabled = true;
@@ -382,115 +476,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    /**
-     * WICHTIG: Diese Funktion aktualisiert das Gesamtergebnis (Final Medal) LIVE
-     * basierend auf der JSON-Antwort vom Server.
-     */
-    function updateUIWidgets(epId, row, data) {
-        // A. GESAMTPUNKTE
-        const pointsValue = (data.total !== undefined) ? data.total : data.total_points;
-        const totalBadge = document.getElementById('total-points-' + epId);
-        
-        if (totalBadge && pointsValue !== undefined) {
-            totalBadge.textContent = pointsValue;
-            // Animation
-            triggerPulse(totalBadge);
-        }
-
-        // B. FINAL MEDAILLE (Live Update)
-        const medalBadge = document.getElementById('final-medal-' + epId);
-        
-        // Prüfen ob Server Medaille zurückgibt (manchmal heißt Feld final_medal, manchmal medal)
-        let medalValue = data.final_medal || data.medal || 'none';
-        medalValue = String(medalValue).toLowerCase();
-
-        if (medalBadge) {
-            const labelSpan = medalBadge.querySelector('.js-medal-label');
-            
-            // 1. HARD RESET der Klassen
-            // Statt remove(...) setzen wir den className neu auf den Basis-Zustand.
-            // Das verhindert, dass alte Klassen hängen bleiben.
-            medalBadge.className = 'badge border'; 
-
-            // 2. Neue Klassen & Text zuweisen
-            let labelText = '-';
-            let newClasses = [];
-
-            switch (medalValue) {
-                case 'gold':
-                    newClasses = ['bg-warning', 'bg-opacity-25', 'border-warning', 'text-dark'];
-                    labelText = 'Gold';
-                    break;
-                case 'silver':
-                case 'silber':
-                    newClasses = ['bg-secondary', 'bg-opacity-25', 'border-secondary', 'text-dark'];
-                    labelText = 'Silber';
-                    break;
-                case 'bronze':
-                    newClasses = ['bg-danger', 'bg-opacity-25', 'border-danger', 'text-dark'];
-                    labelText = 'Bronze';
-                    break;
-                default:
-                    newClasses = ['bg-light', 'text-muted'];
-                    labelText = '-';
-                    break;
-            }
-
-            // Klassen hinzufügen
-            medalBadge.classList.add(...newClasses);
-            
-            // Text aktualisieren
-            if (labelSpan) {
-                labelSpan.textContent = labelText;
-            } else {
-                medalBadge.textContent = labelText;
-            }
-
-            // Visuelles Feedback
-            triggerPulse(medalBadge);
-        }
-
-        // C. SCHWIMMEN ICON UPDATE
-        const swimIcon = document.getElementById('swim-icon-' + epId);
-        const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || String(data.has_swimming) === '1');
-
-        if(swimIcon) {
-            swimIcon.className = hasSwimming 
-                ? 'fas fa-swimmer ms-2 text-success' 
-                : 'fas fa-swimmer ms-2 text-danger opacity-50';
-            
-            // Animation bei Statusänderung
-            triggerPulse(swimIcon);
-        }
-        
-        // Update Wrapper Sichtbarkeit
-        const wrapper = document.getElementById('swimming-wrapper-' + epId);
-        if (wrapper) {
-            const badgeCont = wrapper.querySelector('.swim-badge-container');
-            const dropCont = wrapper.querySelector('.swim-dropdown-container');
-            
-            if (hasSwimming) {
-                if(badgeCont) badgeCont.classList.remove('d-none');
-                if(dropCont) dropCont.classList.add('d-none');
-            } else {
-                if(badgeCont) badgeCont.classList.add('d-none');
-                if(dropCont) dropCont.classList.remove('d-none');
-            }
-        }
-    }
-
-    // Kleine Helferfunktion für Animation
-    function triggerPulse(element) {
-        if(!element) return;
-        element.style.transition = "transform 0.2s ease-in-out";
-        element.style.transform = "scale(1.2)";
-        setTimeout(() => element.style.transform = "scale(1)", 200);
-    }
-
     function updateRequirementHints(select) {
         const parentTd = select.closest('td');
         if (!parentTd) return;
-
         const opt = select.options[select.selectedIndex];
         
         const labels = {
