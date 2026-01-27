@@ -163,27 +163,32 @@
                             <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
                                 {% set hasSwimming = p.has_swimming %}
                                 
-                                {# --- FIX: Logik zur Namensfindung --- #}
+                                {# --- LOGIK START: Den Namen aus dem String "DISCIPLINE:ID" extrahieren --- #}
                                 {% set swimDisplayName = null %}
+                                {% set rawSource = p.swimming_met_via|default('') %} {# Hier steht "DISCIPLINE:193" drin #}
 
-                                {# 1. Wir suchen den Namen aktiv in der Liste anhand der ID #}
-                                {% if p.swimming_discipline_id is defined and p.swimming_discipline_id %}
-                                    {% for sd in swimming_disciplines %}
-                                        {% if sd.id == p.swimming_discipline_id %}
-                                            {% set swimDisplayName = sd.name %}
-                                        {% endif %}
-                                    {% endfor %}
-                                {% endif %}
-                                
-                                {# 2. Falls kein Name gefunden (oder keine ID), Fallback auf "met_via" (z.B. Ausdauer) #}
+                                {# Wir prüfen jede mögliche Disziplin #}
+                                {% for sd in swimming_disciplines %}
+                                    {# Wir bauen den String, wie er in der DB steht: z.B. "DISCIPLINE:193" #}
+                                    {% set searchString = 'DISCIPLINE:' ~ sd.id %}
+                                    
+                                    {# Wenn dieser String in den Daten gefunden wird, haben wir den Namen gefunden! #}
+                                    {% if searchString in rawSource %}
+                                        {% set swimDisplayName = sd.name %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {# Fallback: Wenn es keine Disziplin-ID war, sondern Freitext (z.B. "DLRG Schein") #}
                                 {% if swimDisplayName is empty %}
-                                    {% set swimDisplayName = p.swimming_met_via|default(null) %}
+                                    {% set swimDisplayName = rawSource %}
                                 {% endif %}
-                                
-                                {# 3. Falls immer noch leer, aber Schwimmen ist 'true' #}
-                                {% if swimDisplayName is empty and hasSwimming %}
+
+                                {# Putzfrau: Falls immer noch "DISCIPLINE:..." sichtbar wäre (sollte nicht passieren) #}
+                                {% if 'DISCIPLINE' in swimDisplayName %}
                                     {% set swimDisplayName = 'Nachweis erbracht' %}
                                 {% endif %}
+                                {# --- LOGIK ENDE --- #}
+
 
                                 {% set proofYear = p.swimming_year|default(exam.year) %} 
                                 
