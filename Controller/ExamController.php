@@ -104,9 +104,43 @@ final class ExamController extends AbstractPageController
                 $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
-            } catch (\Throwable $e) {
-                // Zeigt den echten Fehlertext an, damit wir wissen, was los ist
-                $this->addFlash('error', 'CRASH: ' . $e->getMessage() . ' in Zeile ' . $e->getLine());
+            } catch catch (\Throwable $e) {
+                // 1. Infos über den aktuellen User (Creator) sammeln
+                $currentUser = $this->getUser();
+                $creatorInfo = 'NULL';
+                $creatorId = 'n/a';
+                $creatorClass = 'n/a';
+
+                if ($currentUser) {
+                    // Wir prüfen, ob der User überhaupt eine ID hat (wichtig für Doctrine Relationen)
+                    $creatorId = $currentUser->getId() ?? 'NULL (Fehler!)';
+                    $creatorInfo = $currentUser->getUsername();
+                    // Zeigt an, ob es ein echtes User-Objekt oder ein Doctrine-Proxy ist
+                    $creatorClass = get_class($currentUser); 
+                }
+
+                // 2. Infos über die Eingabedaten
+                $inputName = $request->request->get('exam_name', '(leer)');
+                $inputYear = $request->request->get('exam_year', '(leer)');
+
+                // 3. Fehlerbericht zusammenbauen
+                $errorMessage = sprintf(
+                    "CRASH: %s (in Zeile %d).\n" .
+                    "Creator: %s (ID: %s) | Class: %s\n" .
+                    "Input: Name='%s', Year='%s'",
+                    $e->getMessage(),
+                    $e->getLine(),
+                    $creatorInfo,
+                    $creatorId,
+                    $creatorClass,
+                    $inputName,
+                    $inputYear
+                );
+
+                // Optional: Den Fehler auch ins IServ-System-Log schreiben (hilft, wenn die Flash-Message zu lang ist)
+                // error_log($errorMessage); 
+
+                $this->addFlash('error', $errorMessage);
             }
         }
 
@@ -184,7 +218,7 @@ final class ExamController extends AbstractPageController
 
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
-    
+
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
         // KORREKTUR: 'import_id' statt 'importid' (IServ Standard)
