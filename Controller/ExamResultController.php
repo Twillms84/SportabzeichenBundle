@@ -392,7 +392,14 @@ final class ExamResultController extends AbstractPageController
     #[Route('/exam/{examId}/print_groupcard', name: 'print_groupcard', methods: ['GET'])]
     public function printGroupcard(int $examId, Request $request): Response
     {
-        $selectedClass = $request->query->get('class');
+        // 1. Parameter auslesen
+        // HINWEIS: Das JS sendet 'class_filter', dein Controller erwartete 'class'. 
+        // Wir prüfen jetzt beides, um sicherzugehen.
+        $selectedClass = $request->query->get('class_filter') ?? $request->query->get('class');
+        
+        // NEU: Suchbegriff auslesen
+        $searchQuery   = $request->query->get('search_query');
+        
         $selectedIds   = $request->query->get('ids'); // Erwartet kommagetrennte IDs z.B. "1,2,5"
         
         // Sortierung aus Request laden (Standard: Nachname ASC)
@@ -401,16 +408,14 @@ final class ExamResultController extends AbstractPageController
 
         $conn = $this->em->getConnection();
 
-        // 1. Prüfungsdaten
+        // 2. Prüfungsdaten
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$examId]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden.');
 
         $examYear = (int)$exam['exam_year'];
         $examYearEnd = $examYear . '-12-31';
 
-        // 2. Query Builder für Raw SQL vorbereiten
-        // HINWEIS: Ich habe den JOIN auf "u.id = p.user_id" geändert, da dies der Standard-Weg ist.
-        // Falls das bei dir nicht geht, ändere es zurück auf "u.importid = p.import_id".
+        // 3. Basis-SQL vorbereiten
         $sql = "
             SELECT 
                 ep.id as ep_id, 
@@ -432,25 +437,33 @@ final class ExamResultController extends AbstractPageController
         
         $params = ['examId' => $examId, 'year' => $examYear, 'yearEnd' => $examYearEnd];
 
-        // --- FILTER LOGIK ---
+        // --- FILTER LOGIK (NEU & KORRIGIERT) ---
 
-        // A) Explizite IDs (z.B. durch Checkbox-Auswahl) haben Vorrang
+        // A) Explizite IDs haben Vorrang (z.B. Checkboxen)
         if (!empty($selectedIds)) {
-            // IDs sicher in Integers wandeln
             $idArray = array_map('intval', explode(',', $selectedIds));
-            // Sicherstellen, dass das Array nicht leer ist, um SQL Fehler zu vermeiden
             if (count($idArray) > 0) {
                 $sql .= " AND ep.id IN (" . implode(',', $idArray) . ")";
             }
         } 
-        // B) Falls keine IDs gewählt, greift der Klassenfilter
-        elseif ($selectedClass) {
-            $sql .= " AND u.auxinfo = :cls";
-            $params['cls'] = $selectedClass;
+        else {
+            // B) Filterung nach Klasse UND/ODER Suchbegriff
+            // Wir nutzen hier kein 'elseif', damit man Klasse UND Name kombinieren kann.
+            
+            // 1. Klasse filtern
+            if ($selectedClass) {
+                $sql .= " AND u.auxinfo = :cls";
+                $params['cls'] = $selectedClass;
+            }
+
+            // 2. Suchbegriff filtern (Vorname oder Nachname)
+            if ($searchQuery) {
+                $sql .= " AND (u.firstname LIKE :search OR u.lastname LIKE :search)";
+                $params['search'] = '%' . $searchQuery . '%';
+            }
         }
 
         // --- SORTIERUNG ---
-        // Mapping von URL-Parameter zu Datenbank-Spalten
         switch ($sort) {
             case 'firstname':
                 $orderBy = "u.firstname $order, u.lastname ASC";
@@ -485,8 +498,7 @@ final class ExamResultController extends AbstractPageController
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
-            // Ergebnisse laden (Hier nutzen wir Doctrine Param Converter Logik im Raw SQL)
-            // Prüfen ob 'verband' NULL ist, um Fehler zu vermeiden
+            // Ergebnisse laden
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
                        d.kategorie, d.einheit, d.name as d_name, d.verband
@@ -515,11 +527,9 @@ final class ExamResultController extends AbstractPageController
                     $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
                     if (!empty($res['verband']) && $isUnitNone) {
-                        // FALL 1: Verbandsabzeichen
                         $displayNr = 'A';
                         $displayRes = $res['verband'];
                     } else {
-                        // FALL 2: Normale Disziplin
                         $einheit = $unitMap[$res['einheit']] ?? '';
                         $displayNr = $res['auswahlnummer'] ?? '-';
                         $valStr = str_replace('.', ',', (string)$res['leistung']);
@@ -543,7 +553,8 @@ final class ExamResultController extends AbstractPageController
 
         // Batches für Seitenumbruch (je 10)
         $batches = array_chunk($enrichedParticipants, 10);
-        // Leere Zeilen auffüllen für sauberes Layout der letzten Seite
+        
+        // Leere Zeilen auffüllen
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
             while (count($batches[$lastIndex]) < 10) {
