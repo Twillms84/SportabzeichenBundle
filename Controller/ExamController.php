@@ -141,17 +141,29 @@ final class ExamController extends AbstractPageController
     // 1. Die bestehende SQL Methode für Klassen (Auxinfo)
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
+        // Wir holen die Import-IDs der User aus der Klasse
         $users = $conn->fetchAllAssociative("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL
         ", [$class]);
 
         foreach ($users as $u) {
+            // Sicherheitshalber Key-Case normalisieren (falls DB 'ImportID' oder 'importid' liefert)
+            $u = array_change_key_case($u, CASE_LOWER);
+            
+            if (empty($u['importid'])) continue;
+
             $participant = $conn->fetchAssociative("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$u['importid']]);
 
-            if (!$participant || !$participant['geburtsdatum']) continue;
+            if (!$participant) continue;
+            
+            // WICHTIG: Keys normalisieren -> 'ID' wird zu 'id'
+            $participant = array_change_key_case($participant, CASE_LOWER);
+
+            // Jetzt sicher zugreifen
+            if (empty($participant['geburtsdatum']) || empty($participant['id'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -162,57 +174,31 @@ final class ExamController extends AbstractPageController
         }
     }
 
-    // 2. Die NEUE Methode für Gruppen (Doctrine + SQL Mix)
+    // 2. Sichere Methode für Gruppen
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // Gruppe suchen
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // Alle User der Gruppe iterieren
         foreach ($group->getUsers() as $user) {
-            // Wir müssen prüfen, ob es für diesen IServ-User schon einen "Participant" gibt.
-            // Suche via User-Relation (falls vorhanden) oder import_id
-            
-            // Versuch 1: Suche in Participants Tabelle via User-Verknüpfung (falls Entity so gebaut ist)
-            // Da ich deine Participant-Entity nicht kenne, mache ich es hier über SQL/DBAL, 
-            // um Lehrer zu finden, die evtl. keine import_id haben.
-            
-            // Wir suchen in sportabzeichen_participants nach einem Eintrag, der zu diesem User gehört.
-            // Annahme: Es gibt eine Spalte 'user_id' oder wir nutzen 'import_id' = user->getImportId()
-            
-            // Sicherer Weg: Wir schauen, ob wir den User anhand der import_id finden (Schüler)
-            // ODER wir erstellen einen Teilnehmer, falls es ein Lehrer ist der noch nicht existiert.
-            
             $importId = $user->getImportId();
-            $participantId = null;
-            $birthDate = null;
 
             if ($importId) {
-                // Versuche existierenden Schüler zu finden
                 $row = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", [$importId]);
-                if ($row) {
-                    $participantId = $row['id'];
-                    $birthDate = $row['geburtsdatum'];
-                }
-            }
-
-            // Wenn kein Schüler gefunden wurde (z.B. Lehrer ohne Import-ID im Sportabzeichen-System),
-            // müssten wir hier eigentlich einen Teilnehmer anlegen. 
-            // HINWEIS: Das ist komplex, da wir Vorname/Nachname/Geschlecht/Geburtsdatum brauchen.
-            // IServ User Objekt hat: $user->getName(), $user->getFirstname(), $user->getLastname().
-            // Aber Geburtsdatum steht oft nicht im IServ User Objekt (Datenschutz).
-            
-            // Workaround für jetzt: Wir importieren nur User, die schon als Participant existieren.
-            // Wenn Lehrer mitmachen wollen, müssen sie vorher im "Teilnehmer"-Tab manuell oder per Import angelegt werden.
-            
-            if ($participantId && $birthDate) {
-                $age = $exam->getYear() - (int)substr($birthDate, 0, 4);
                 
-                $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                    VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-                ", [$exam->getId(), $participantId, $age]);
+                if ($row) {
+                    // WICHTIG: Keys normalisieren -> 'ID' wird zu 'id'
+                    $row = array_change_key_case($row, CASE_LOWER);
+                    
+                    if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
+                        $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
+                        
+                        $conn->executeStatement("
+                            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                            VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                        ", [$exam->getId(), $row['id'], $age]);
+                    }
+                }
             }
         }
     }
