@@ -239,48 +239,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- CLICK LISTENER (Schwimmen Löschen) ---
     document.addEventListener('click', async function(event) {
+        // Event Delegation: Prüfen, ob der Klick auf (oder in) .btn-delete-swimming war
         const btn = event.target.closest('.btn-delete-swimming');
         if (!btn) return;
 
         event.preventDefault();
         
-        const row = btn.closest('tr');
         const epId = btn.getAttribute('data-ep-id');
         
-        if(!confirm('Schwimmnachweis entfernen? (Ggf. wird auch die Disziplin zurückgesetzt)')) return;
-
-        // 1. Suche nach einer aktiven Schwimm-Disziplin in dieser Zeile
-        // Wir suchen nach Selects in der Kategorie 'Ausdauer' (meist Kat 4) oder generell nach Selects mit Disziplinen
-        // Anpassung: Prüfe, ob du eine spezifische Klasse für die Schwimm-Spalte hast, z.B. .col-cat-Ausdauer
-        let swimmingDisciplineSelect = null;
+        // --- NEUE LOGIK START ---
         
-        // Versuche das Select in der Spalte "Ausdauer" (Gruppe 4) zu finden
-        // Falls deine Kategorie anders heißt, passe '4' oder 'Ausdauer' an.
-        const swimCell = row.querySelector('.col-cat-4, .col-cat-Ausdauer, [data-kategorie="Ausdauer"]');
-        if (swimCell) {
-            swimmingDisciplineSelect = swimCell.querySelector('select.discipline-selector');
+        // 1. Daten aus den Attributen lesen (werden im Twig gesetzt)
+        const proofYear = String(btn.getAttribute('data-year') || '');
+        const currentYear = String(btn.getAttribute('data-current-year') || '');
+        const sourceRaw = btn.getAttribute('data-source') || '';
+        const sourceUpper = sourceRaw.toUpperCase();
+
+        // 2. Prüfung: Ist es das aktuelle Jahr?
+        // (Nur prüfen, wenn beide Werte vorhanden sind)
+        if (proofYear && currentYear && proofYear !== currentYear) {
+            alert('Dieser Schwimmnachweis stammt aus dem Jahr ' + proofYear + ' und kann hier nicht gelöscht werden.');
+            return;
         }
 
-        // Wenn eine Disziplin ausgewählt ist (Wert > 0), setzen wir DIESE zurück
-        if (swimmingDisciplineSelect && swimmingDisciplineSelect.value && swimmingDisciplineSelect.value !== "0") {
-            // Reset der Disziplin -> Das Backend wird daraufhin auch den Nachweis entfernen
-            swimmingDisciplineSelect.value = "0"; // oder ""
-            
-            // Trigger das Change-Event, damit dein Autosave anspringt
-            swimmingDisciplineSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            
-            // UI Feedback sofort (Optimistisch)
-            const wrapper = document.getElementById('swimming-wrapper-' + epId);
-            if(wrapper) {
-                 wrapper.querySelector('.swim-badge-container').classList.add('d-none');
-                 wrapper.querySelector('.swim-dropdown-container').classList.remove('d-none');
-            }
-            return; // Wir sind fertig, der Autosave regelt den Rest
+        // 3. Prüfung: Ist es ein automatischer Ersatz (Ausdauer/Schnelligkeit)?
+        const forbiddenSources = ['AUSDAUER', 'SCHNELLIGKEIT', 'ENDURANCE', 'SPEED'];
+        // Prüfen, ob der Source-String eines der verbotenen Wörter ENTHÄLT (z.B. "Ausdauer 800m")
+        const isForbidden = forbiddenSources.some(s => sourceUpper.includes(s));
+
+        if (isForbidden) {
+            alert('Dieser Nachweis wurde automatisch durch die Disziplingruppe "' + sourceRaw + '" erbracht.\n\nEr kann nicht manuell gelöscht werden. Bitte entfernen Sie stattdessen die Leistung in der Disziplin ' + sourceRaw + '.');
+            return;
         }
 
-        // 2. Fallback: Kein Disziplin-Eintrag gefunden -> Manuellen Nachweis löschen (Dein alter Code)
-        if (!swimmingDeleteRoute || !epId) return;
+        // 4. Sicherheitsabfrage mit Disziplin-Name
+        const confirmMsg = sourceRaw 
+            ? 'Soll der Schwimmnachweis (' + sourceRaw + ') wirklich entfernt werden?'
+            : 'Soll der manuelle Schwimmnachweis wirklich entfernt werden?';
 
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        // --- AJAX DELETE ---
+        
+        // Routen-Check
+        if (!swimmingDeleteRoute || !epId) {
+            console.error('Lösch-Route oder ID fehlt');
+            return;
+        }
+
+        // UI Feedback: Button deaktivieren & Spinner (optional, falls Icon vorhanden)
+        const originalContent = btn.innerHTML;
         btn.style.opacity = '0.5';
         btn.disabled = true;
 
@@ -297,15 +307,42 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.status === 'ok' || data.success) {
+                // UI Widget Update (Punkte/Medaillen neu berechnen)
+                const row = btn.closest('tr');
                 updateUIWidgets(epId, row, data);
+
+                // Spezifisches UI Update für den Schwimm-Bereich
+                const wrapper = document.getElementById('swimming-wrapper-' + epId);
+                if (wrapper) {
+                    // Badge ausblenden
+                    const badgeCont = wrapper.querySelector('.swim-badge-container');
+                    if (badgeCont) badgeCont.classList.add('d-none');
+                    
+                    // Dropdown wieder einblenden
+                    const dropCont = wrapper.querySelector('.swim-dropdown-container');
+                    if (dropCont) dropCont.classList.remove('d-none');
+
+                    // Select Reset
+                    const select = wrapper.querySelector('select');
+                    if (select) select.value = "";
+                    
+                    // Kleines Icon beim Namen aktualisieren
+                    const swimIcon = document.getElementById('swim-icon-' + epId);
+                    if(swimIcon) {
+                        swimIcon.className = 'fas fa-swimmer ms-1 text-danger opacity-50'; // Klasse entsprechend deinem HTML anpassen
+                    }
+                }
             } else {
                 alert('Fehler: ' + (data.message || 'Konnte nicht gelöscht werden.'));
             }
         } catch (e) {
             console.error('Fehler beim Löschen:', e);
+            alert('Kommunikationsfehler mit dem Server.');
         } finally {
+            // Button Reset (falls UI Update fehlschlug oder für Re-Use)
             btn.style.opacity = '1';
             btn.disabled = false;
+            btn.innerHTML = originalContent;
         }
     });
 

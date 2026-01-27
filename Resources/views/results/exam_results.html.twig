@@ -163,16 +163,36 @@
                             <div id="swimming-wrapper-{{ p.ep_id }}" class="swimming-wrapper">
                                 {% set hasSwimming = p.has_swimming %}
                                 
-                                {% set swimInfo = p.swimming_met_via ? p.swimming_met_via : (hasSwimming ? 'Nachweis erbracht' : '') %}
+                                {# LOGIK FÜR DIE ANZEIGE: Name der Disziplin bevorzugen #}
+                                {% set swimDisplayName = p.swimming_discipline_name|default(null) %}
+                                {% set swimSource = p.swimming_met_via|default('') %}
+                                
+                                {# Wenn kein spezieller Name da ist, aber eine Quelle (z.B. Ausdauer), nimm die Quelle #}
+                                {% if swimDisplayName is empty %}
+                                    {% set swimDisplayName = swimSource %}
+                                {% endif %}
+                                
+                                {% if swimDisplayName is empty and hasSwimming %}
+                                    {% set swimDisplayName = 'Nachweis erbracht' %}
+                                {% endif %}
 
+                                {# Daten für JS Prüfung #}
+                                {% set proofYear = p.swimming_year|default(currentYear) %} 
+                                
                                 {# A) Anzeige #}
                                 <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}">
                                     <div class="d-flex flex-column align-items-center justify-content-center w-100">
-                                        <small class="swim-info-text text-success fw-bold d-block text-truncate" title="{{ swimInfo }}">
-                                            {{ swimInfo }}
+                                        <small class="swim-info-text text-success fw-bold d-block text-truncate" title="{{ swimDisplayName }}">
+                                            {{ swimDisplayName }}
                                         </small>
+                                        
+                                        {# DELETE BUTTON MIT DATEN #}
                                         <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 btn-delete-swimming mt-1" 
-                                                data-ep-id="{{ p.ep_id }}" title="Nachweis löschen" style="font-size: 0.7rem;">
+                                                data-ep-id="{{ p.ep_id }}" 
+                                                data-year="{{ proofYear }}"
+                                                data-source="{{ swimSource }}"
+                                                data-current-year="{{ currentYear }}"
+                                                title="Nachweis löschen" style="font-size: 0.7rem;">
                                             {{ icon('trash')|raw }}
                                         </button>
                                     </div>
