@@ -27,18 +27,15 @@ class Exam
     #[ORM\Column(type: 'date', nullable: true, name: 'exam_date')]
     private ?\DateTimeInterface $date = null;
 
-    #[ORM\ManyToOne(targetEntity: User::class)]
-    #[ORM\JoinColumn(name: 'creator_id', referencedColumnName: 'id', nullable: true)]
-    private ?User $creator = null;
+    #[ORM\Column(type: 'string', nullable: true, name: 'creator_id')]
+    private ?string $creator = null;
 
-    // --- GETTER (gibt jetzt ein User-Objekt zurück!) ---
-    public function getCreator(): ?User
+    public function getCreator(): ?string
     {
         return $this->creator;
     }
 
-    // --- SETTER (erwartet ein User-Objekt) ---
-    public function setCreator(?User $creator): self
+    public function setCreator(?string $creator): self
     {
         $this->creator = $creator;
         return $this;
