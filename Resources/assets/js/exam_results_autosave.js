@@ -46,36 +46,91 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('client-search-input');
     
     if ($classFilterSelect.length && searchInput) {
-        const rows = document.querySelectorAll('.participant-row');
+        // Wir holen die Rows einmalig, um das Dropdown zu füllen
+        const allRows = document.querySelectorAll('.participant-row');
         const classes = new Set();
 
-        rows.forEach(row => {
-            const cls = row.getAttribute('data-class');
-            if (cls && cls.trim() !== '') classes.add(cls);
+        // Dropdown füllen: Mit .trim() säubern, um Leerzeichen-Fehler zu vermeiden
+        allRows.forEach(row => {
+            const rawClass = row.getAttribute('data-class');
+            if (rawClass) {
+                const cls = rawClass.trim();
+                if (cls !== '') classes.add(cls);
+            }
         });
 
+        // Optionen alphabetisch sortiert einfügen
         Array.from(classes).sort().forEach(cls => {
             $classFilterSelect.append(`<option value="${cls}">${cls}</option>`);
         });
-        $classFilterSelect.selectpicker('refresh');
+        
+        // Selectpicker aktualisieren (falls vorhanden)
+        if ($.fn.selectpicker) {
+            $classFilterSelect.selectpicker('refresh');
+        }
 
+        // Die Filter-Logik
         const filterRows = () => {
-            const selectedClasses = $classFilterSelect.val() || [];
-            const searchTerm = searchInput.value.toLowerCase().trim();
+            // 1. Hole die ausgewählten Werte sicher als Array
+            let selectedClasses = $classFilterSelect.val();
 
-            rows.forEach(row => {
-                const rowClass = row.getAttribute('data-class');
+            // Fix: Sicherstellen, dass es immer ein Array ist (auch bei Single-Select oder null)
+            if (!selectedClasses) {
+                selectedClasses = [];
+            } else if (!Array.isArray(selectedClasses)) {
+                selectedClasses = [selectedClasses];
+            }
+
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            
+            // Wichtig: Rows neu abfragen, falls sie dynamisch geladen wurden
+            const currentRows = document.querySelectorAll('.participant-row');
+
+            currentRows.forEach(row => {
+                // Daten aus der Zeile holen und säubern
+                const rowClass = (row.getAttribute('data-class') || '').trim();
                 const nameEl = row.querySelector('.name-main');
                 const nameText = nameEl ? nameEl.textContent.toLowerCase() : ''; 
 
+                // Logik Prüfung
+                // Zeige an, wenn KEINE Klasse gewählt ist (Länge 0) ODER die Zeilen-Klasse im Array ist
                 const matchClass = (selectedClasses.length === 0 || selectedClasses.includes(rowClass));
                 const matchSearch = (searchTerm === '' || nameText.includes(searchTerm));
 
-                row.style.display = (matchClass && matchSearch) ? '' : 'none';
+                // Sichtbarkeit setzen
+                if (matchClass && matchSearch) {
+                    row.style.display = ''; // Anzeigen (Standard)
+                } else {
+                    row.style.display = 'none'; // Ausblenden
+                }
             });
+            const $printBtn = $('#btn-print-groupcard'); 
+
+            if ($printBtn.length) {
+                // 2. Basis-URL holen (beim ersten Mal speichern wir sie in einem Attribut, damit wir sie nicht verlieren)
+                if (!$printBtn.data('base-href')) {
+                    $printBtn.data('base-href', $printBtn.attr('href'));
+                }
+                const baseUrl = $printBtn.data('base-href');
+
+                // 3. Parameter bauen
+                // Wir nehmen den ersten gewählten Filter (falls Multiselect, entscheiden wir uns für den ersten oder joinen)
+                const selectedClass = (Array.isArray(selectedClasses) && selectedClasses.length > 0) 
+                                    ? selectedClasses[0] // Oder selectedClasses.join(',')
+                                    : '';
+
+                // 4. URL aktualisieren
+                // Prüfen, ob schon ein '?' in der URL ist
+                const separator = baseUrl.includes('?') ? '&' : '?';
+                const newUrl = baseUrl + separator + 'class_filter=' + encodeURIComponent(selectedClass);
+
+                $printBtn.attr('href', newUrl);
+            }
         };
 
-        $classFilterSelect.on('changed.bs.select', filterRows);
+        // Event Listener: Auf 'change' UND 'changed.bs.select' hören für maximale Kompatibilität
+        $classFilterSelect.on('change changed.bs.select', filterRows);
+        
         searchInput.addEventListener('keyup', filterRows);
         searchInput.addEventListener('input', filterRows);
     }
