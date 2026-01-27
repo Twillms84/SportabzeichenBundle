@@ -110,17 +110,26 @@ final class ExamController extends AbstractPageController
         ]);
     }
 
-    // --- HILFSMETHODE 1: KLASSEN (Dein funktionierender Code + 1 Sicherheitszeile) ---
+    // --- HILFSMETHODE 1: KLASSEN (Mit Debug-Falle) ---
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
+        // Debug: Hole Zeilennamen als Kleinbuchstaben erzwingen
         $users = $conn->fetchAllAssociative("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
-        foreach ($users as $u) {
-            // Normierung, falls DB mal 'ImportID' statt 'importid' liefert
+        foreach ($users as $index => $u) {
+            // Keys normalisieren
             $u = array_change_key_case($u, CASE_LOWER);
+
+            // DEBUG CHECK 1: Existiert importid?
+            if (!array_key_exists('importid', $u)) {
+                echo "<h1>DEBUG ALARM IN KLASSE (User Index: $index)</h1>";
+                echo "<p>Fehler: Key 'importid' fehlt in der users-Tabelle Abfrage.</p>";
+                echo "<pre>"; print_r($u); echo "</pre>";
+                die(); // Stop script
+            }
             
             if (empty($u['importid'])) continue;
 
@@ -128,14 +137,23 @@ final class ExamController extends AbstractPageController
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$u['importid']]);
 
-            // WICHTIG: Wenn DB nix liefert -> continue.
             if (!$participant) continue;
 
-            // SICHERHEIT: Alles klein schreiben. Verhindert Fehler bei "ID" vs "id".
+            // Keys normalisieren
             $participant = array_change_key_case($participant, CASE_LOWER);
 
-            // LOGIK: Wenn ID fehlt ODER Geburtsdatum leer ist -> Überspringen
-            if (!isset($participant['id']) || empty($participant['geburtsdatum'])) continue;
+            // DEBUG CHECK 2: Existiert id im participant array?
+            if (!array_key_exists('id', $participant)) {
+                echo "<h1>DEBUG ALARM IN KLASSE (Participant)</h1>";
+                echo "<p>Fehler: Key 'id' fehlt im Ergebnis von sportabzeichen_participants.</p>";
+                echo "<p>ImportID war: " . $u['importid'] . "</p>";
+                echo "<h3>Das Array sieht so aus:</h3>";
+                echo "<pre>"; print_r($participant); echo "</pre>";
+                die(); // Stop script
+            }
+
+            // Wenn wir hier sind, MUSS 'id' da sein.
+            if (empty($participant['geburtsdatum'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -146,43 +164,46 @@ final class ExamController extends AbstractPageController
         }
     }
 
-    // --- HILFSMETHODE 2: GRUPPEN (Die gleiche Logik wie oben) ---
+    // --- HILFSMETHODE 2: GRUPPEN (Mit Debug-Falle) ---
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. IServ Gruppe holen
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // 2. Über User iterieren
         foreach ($group->getUsers() as $user) {
             $importId = $user->getImportId();
             $username = $user->getUsername();
             
             $row = false;
 
-            // Suche A: Import ID
             if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
             }
 
-            // Suche B: Username (Fallback)
             if (!$row && !empty($username)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
             }
 
-            // Wenn immer noch nichts gefunden -> Nächster User
             if (!$row) continue;
 
-            // SICHERHEIT: Exakt wie oben. Array Keys klein machen.
+            // Keys normalisieren
             $row = array_change_key_case($row, CASE_LOWER);
 
-            // LOGIK: ID fehlt oder Datum fehlt -> Nächster User. 
-            // Das killt den Fehler "Undefined array key id".
-            if (!isset($row['id']) || empty($row['geburtsdatum'])) continue;
+            // DEBUG CHECK 3: Existiert id im Gruppen-User array?
+            if (!array_key_exists('id', $row)) {
+                echo "<h1>DEBUG ALARM IN GRUPPE</h1>";
+                echo "<p>User: $username (ImportID: $importId)</p>";
+                echo "<p>Fehler: Key 'id' fehlt im Ergebnis von sportabzeichen_participants.</p>";
+                echo "<h3>Das Array sieht so aus:</h3>";
+                echo "<pre>"; print_r($row); echo "</pre>";
+                die(); // Stop script
+            }
+
+            if (empty($row['geburtsdatum'])) continue;
 
             $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
             
