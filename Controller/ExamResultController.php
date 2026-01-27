@@ -48,15 +48,16 @@ final class ExamResultController extends AbstractPageController
         $selectedFilter = $request->query->get('class'); 
 
         // ---------------------------------------------------------
-        // 1. TEILNEHMER DATENBANKABFRAGE (Optimiert)
+        // 1. TEILNEHMER DATENBANKABFRAGE (Korrigiert)
         // ---------------------------------------------------------
         $qb = $this->em->createQueryBuilder();
-        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd', 'ug', 'pg') // 'ug' = UserGroups, 'pg' = PrimaryGroup
+        
+        // WICHTIG: 'pg' und der Join auf u.group wurden entfernt, da diese Assoziation nicht existiert.
+        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd', 'ug') 
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->join('p.user', 'u')
-            ->leftJoin('u.groups', 'ug') // Alle Gruppen mitladen
-            ->leftJoin('u.group', 'pg')  // Primärgruppe (gid) mitladen
+            ->leftJoin('u.groups', 'ug') // Wir holen alle Gruppen (funktioniert!)
             ->leftJoin('p.swimmingProofs', 'sp')
             ->leftJoin('ep.results', 'res')
             ->leftJoin('res.discipline', 'd')
@@ -84,14 +85,14 @@ final class ExamResultController extends AbstractPageController
         $filterOptions = []; 
         $today = new \DateTime();
 
-        // Liste von Gruppen, die wir ignorieren wollen (Systemgruppen)
-        // Passe diese Liste an deine IServ-Realität an!
+        // Liste von Gruppen, die keine Klassen sind (Systemgruppen)
         $ignoredSystemGroups = [
             'schueler', 'students', 
             'lehrer', 'teachers', 
             'admins', 'root', 
             'internet', 'everyone', 
-            'vorlagen', 'templates'
+            'vorlagen', 'templates',
+            'sportabzeichen', 'user', 'users' // Weitere typische Systemgruppen
         ];
 
         foreach ($examParticipants as $ep) {
@@ -107,21 +108,14 @@ final class ExamResultController extends AbstractPageController
             } 
             else {
                 // Priorität 2: Echte Gruppen durchsuchen
+                // Da wir u.groups geladen haben, kostet das keine extra Query
                 $groups = $user->getGroups();
                 foreach ($groups as $g) {
                     $gName = $g->getName();
                     // Wenn der Gruppenname NICHT in der Ignorier-Liste ist
                     if (!in_array(strtolower($gName), $ignoredSystemGroups)) {
                         $categoryName = $gName;
-                        break; // Die erste "echte" Gruppe nehmen (z.B. "5a" oder "Fussball-AG")
-                    }
-                }
-
-                // Priorität 3: Wenn immer noch leer, Primärgruppe versuchen
-                if ($categoryName === '') {
-                    $primaryGroup = $user->getGroup();
-                    if ($primaryGroup && !in_array(strtolower($primaryGroup->getName()), $ignoredSystemGroups)) {
-                        $categoryName = $primaryGroup->getName();
+                        break; // Die erste "echte" Gruppe nehmen (z.B. "5a")
                     }
                 }
             }
@@ -135,7 +129,6 @@ final class ExamResultController extends AbstractPageController
             $filterOptions[] = $categoryName;
 
             // --- FILTER PRÜFUNG ---
-            // Wenn ein Filter gesetzt ist UND dieser User nicht dazu passt -> Überspringen
             if ($selectedFilter && $categoryName !== $selectedFilter) {
                 continue;
             }
@@ -171,8 +164,8 @@ final class ExamResultController extends AbstractPageController
                 'ep_id' => $ep->getId(),
                 'vorname' => $user->getFirstname(),
                 'nachname' => $user->getLastname(),
-                'klasse' => $categoryName, // Hier steht jetzt der saubere Name
-                'group'  => $categoryName, // Fallback für JS
+                'klasse' => $categoryName,
+                'group'  => $categoryName, 
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(),
                 'total_points' => $ep->getTotalPoints(),
@@ -183,7 +176,7 @@ final class ExamResultController extends AbstractPageController
             ];
         }
 
-        // Filter-Optionen bereinigen (Doppelte raus & alphabetisch sortieren)
+        // Filter-Optionen bereinigen
         $filterOptions = array_unique($filterOptions);
         sort($filterOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
@@ -215,12 +208,10 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$cat][$dId]['requirements'][] = $reqRow;
         }
         
-        // Array-Keys neu nummerieren für sauberes JSON/Twig
         foreach($disciplines as $kat => $vals) {
             $disciplines[$kat] = array_values($vals);
         }
 
-        // Schwimm-Disziplinen für Dropdown
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
             ['category' => 'Schwimmen'], 
             ['name' => 'ASC']
