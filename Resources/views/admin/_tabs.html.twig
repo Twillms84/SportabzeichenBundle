@@ -1,28 +1,60 @@
 {# templates/admin/_tabs.html.twig #}
-<ul class="nav nav-tabs" style="margin-bottom: 20px;">
+
+{# Container für Scroll-Verhalten auf Mobile #}
+<div class="sportabzeichen-tabs-scroll-container">
+    <ul class="nav nav-tabs" style="margin-bottom: 20px;">
+        
+        <li class="{{ activeTab == 'dashboard' ? 'active' : '' }}">
+            <a href="{{ path('sportabzeichen_admin_dashboard') }}">
+                {{ icon('home') }} {{ _('Übersicht') }}
+            </a>
+        </li>
+
+        <li class="{{ activeTab == 'participants_manage' ? 'active' : '' }}">
+            <a href="{{ path('sportabzeichen_admin_participants_index') }}">
+                {{ icon('users') }} {{ _('Teilnehmer') }}
+            </a>
+        </li>
+
+        <li class="{{ activeTab == 'import' ? 'active' : '' }}">
+            <a href="{{ path('sportabzeichen_admin_upload_participants') }}">
+                {{ icon('upload') }} {{ _('Import') }}
+            </a>
+        </li>
+
+        <li class="{{ activeTab == 'requirements' ? 'active' : '' }}">
+            <a href="{{ path('sportabzeichen_admin_upload') }}">
+                {{ icon('list-alt') }} {{ _('Anforderungen') }}
+            </a>
+        </li>
+
+    </ul>
+</div>
+
+<style>
+    /* CSS direkt hier einbetten oder in deine CSS-Datei auslagern */
     
-    <li class="{{ activeTab == 'dashboard' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_dashboard') }}">
-            {{ icon('home') }} {{ _('Übersicht') }}
-        </a>
-    </li>
+    /* Auf kleinen Bildschirmen: Scrollbar aktivieren */
+    @media (max-width: 767px) {
+        .sportabzeichen-tabs-scroll-container {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch; /* Weiches Scrollen auf iOS */
+            padding-bottom: 5px; /* Platz für Scrollbalken */
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd; /* Linie durchziehen, falls Tabs scrollen */
+        }
 
-    <li class="{{ activeTab == 'participants_manage' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_participants_index') }}">
-            {{ icon('users') }} {{ _('Teilnehmer') }}
-        </a>
-    </li>
+        .sportabzeichen-tabs-scroll-container .nav-tabs {
+            border-bottom: none; /* Doppelten Rahmen vermeiden */
+            display: flex;       /* Flexbox sorgt dafür, dass sie nebeneinander bleiben */
+            flex-wrap: nowrap;   /* Kein Umbruch -> Scrollen erzwingen */
+            white-space: nowrap;
+        }
 
-    <li class="{{ activeTab == 'import' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_upload_participants') }}">
-            {{ icon('upload') }} {{ _('Import') }}
-        </a>
-    </li>
-
-    <li class="{{ activeTab == 'requirements' ? 'active' : '' }}">
-        <a href="{{ path('sportabzeichen_admin_upload') }}">
-            {{ icon('list-alt') }} {{ _('Anforderungen') }}
-        </a>
-    </li>
-
-</ul>
+        .sportabzeichen-tabs-scroll-container .nav-tabs > li {
+            float: none;         /* Altes Float-Verhalten deaktivieren */
+            display: inline-block;
+        }
+    }
+</style>
