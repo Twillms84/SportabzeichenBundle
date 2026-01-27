@@ -48,20 +48,22 @@ document.addEventListener('DOMContentLoaded', function() {
     if ($classFilterSelect.length && searchInput) {
         // Wir holen die Rows einmalig, um das Dropdown zu füllen
         const allRows = document.querySelectorAll('.participant-row');
-        const classes = new Set();
+        const groups = new Set(); // Umbenannt von 'classes' zu 'groups', da logischer
 
-        // Dropdown füllen: Mit .trim() säubern
+        // Dropdown füllen: Wir suchen nach Klasse ODER Gruppe
         allRows.forEach(row => {
-            const rawClass = row.getAttribute('data-class');
-            if (rawClass) {
-                const cls = rawClass.trim();
-                if (cls !== '') classes.add(cls);
+            // HIER IST DER FIX: Fallback auf data-group
+            const rawVal = row.getAttribute('data-class') || row.getAttribute('data-group');
+            
+            if (rawVal) {
+                const val = rawVal.trim();
+                if (val !== '') groups.add(val);
             }
         });
 
         // Optionen alphabetisch sortiert einfügen
-        Array.from(classes).sort().forEach(cls => {
-            $classFilterSelect.append(`<option value="${cls}">${cls}</option>`);
+        Array.from(groups).sort().forEach(val => {
+            $classFilterSelect.append(`<option value="${val}">${val}</option>`);
         });
         
         // Selectpicker aktualisieren (falls vorhanden)
@@ -72,13 +74,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Die Filter-Logik
         const filterRows = () => {
             // 1. Hole die ausgewählten Werte sicher als Array
-            let selectedClasses = $classFilterSelect.val();
+            let selectedValues = $classFilterSelect.val();
 
             // Fix: Sicherstellen, dass es immer ein Array ist
-            if (!selectedClasses) {
-                selectedClasses = [];
-            } else if (!Array.isArray(selectedClasses)) {
-                selectedClasses = [selectedClasses];
+            if (!selectedValues) {
+                selectedValues = [];
+            } else if (!Array.isArray(selectedValues)) {
+                selectedValues = [selectedValues];
             }
 
             const searchTerm = searchInput.value.toLowerCase().trim();
@@ -87,16 +89,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const currentRows = document.querySelectorAll('.participant-row');
 
             currentRows.forEach(row => {
-                const rowClass = (row.getAttribute('data-class') || '').trim();
+                // HIER AUCH DER FIX: Wir vergleichen gegen Klasse ODER Gruppe
+                const rawRowVal = row.getAttribute('data-class') || row.getAttribute('data-group') || '';
+                const rowGroup = rawRowVal.trim();
+                
                 const nameEl = row.querySelector('.name-main');
                 const nameText = nameEl ? nameEl.textContent.toLowerCase() : ''; 
 
                 // Logik Prüfung
-                const matchClass = (selectedClasses.length === 0 || selectedClasses.includes(rowClass));
+                const matchGroup = (selectedValues.length === 0 || selectedValues.includes(rowGroup));
                 const matchSearch = (searchTerm === '' || nameText.includes(searchTerm));
 
                 // Sichtbarkeit setzen
-                if (matchClass && matchSearch) {
+                if (matchGroup && matchSearch) {
                     row.style.display = ''; 
                 } else {
                     row.style.display = 'none'; 
@@ -115,21 +120,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const baseUrl = $printBtn.data('base-href');
 
-                // A. Klasse ermitteln (nimmt die erste gewählte oder leer)
-                const selectedClass = (Array.isArray(selectedClasses) && selectedClasses.length > 0) 
-                                    ? selectedClasses[0] 
-                                    : '';
+                // A. Klasse/Gruppe ermitteln (nimmt die erste gewählte oder leer)
+                const selectedGroup = (Array.isArray(selectedValues) && selectedValues.length > 0) 
+                                      ? selectedValues[0] 
+                                      : '';
 
-                // B. Suchbegriff ermitteln (NEU)
+                // B. Suchbegriff ermitteln
                 const rawSearchTerm = searchInput.value.trim();
 
                 // URL zusammenbauen
-                // Prüfen, ob schon ein '?' in der URL ist
                 const separator = baseUrl.includes('?') ? '&' : '?';
                 
-                let newUrl = baseUrl + separator + 'class_filter=' + encodeURIComponent(selectedClass);
+                // Wir nennen den Parameter trotzdem 'class_filter', damit der Controller nicht verwirrt ist
+                // Oder du passt den Controller an, dass er auch groups versteht.
+                let newUrl = baseUrl + separator + 'class_filter=' + encodeURIComponent(selectedGroup);
                 
-                // Nur anhängen, wenn tatsächlich gesucht wird
                 if (rawSearchTerm) {
                     newUrl += '&search_query=' + encodeURIComponent(rawSearchTerm);
                 }
