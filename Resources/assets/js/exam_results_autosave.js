@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (data.status === 'ok' || data.success) {
-                // UI Updates vom Try/Catch entkoppeln, damit Fehler hier nicht als "Netzwerkfehler" gelten
+                // UI Updates separat kapseln
                 try {
                     // 1. Zelle aktualisieren
                     if (type !== 'swimming_select' && cell) {
@@ -228,17 +228,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
 
-            // Erfolgsfall prüfen (egal ob data.status oder data.success)
+            // Erfolgsfall prüfen
             if (data.status === 'ok' || data.success === true) {
                 
-                // UI Logik in eigenen Block, damit Fehler hier nicht in den Catch rutschen
                 try {
                     const row = btn.closest('tr');
                     updateUIWidgets(epId, row, data);
 
                     const wrapper = document.getElementById('swimming-wrapper-' + epId);
                     if (wrapper) {
-                        // Reset UI manuell erzwingen, falls updateUIWidgets es übersehen hat
                         const badgeCont = wrapper.querySelector('.swim-badge-container');
                         const dropCont = wrapper.querySelector('.swim-dropdown-container');
                         
@@ -273,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // =========================================================
-    // 3. UI HELFER
+    // 3. UI HELFER (WICHTIGSTE ÄNDERUNGEN HIER)
     // =========================================================
 
     function updateUIWidgets(epId, row, data) {
@@ -292,14 +290,13 @@ document.addEventListener('DOMContentLoaded', function() {
         medalValue = String(medalValue).toLowerCase();
 
         if (medalBadge) {
-            const labelSpan = medalBadge.querySelector('.js-medal-label');
-            
-            // 1. RESET (Benutze DEINE CSS Klasse 'result-badge-box', nicht 'badge')
+            // 1. Klasse komplett NEU setzen (Überschreibt alles "Ovale" wie badge/rounded-pill)
+            // Wir setzen IMMER deine Basis-Klasse 'result-badge-box'
             medalBadge.className = 'result-badge-box'; 
 
-            // 2. Deine Farb-Klassen anwenden
+            // 2. Farbe ermitteln
             let labelText = '-';
-            let colorClass = 'bg-light text-muted'; 
+            let colorClass = ''; 
 
             switch (medalValue) {
                 case 'gold':
@@ -316,21 +313,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     labelText = 'Bronze';
                     break;
                 default:
-                    // Wenn keine Medaille, Standard grau
-                    colorClass = ''; // result-badge-box hat schon grauen Hintergrund
+                    // Keine Farbe -> Standard Grau aus .result-badge-box bleibt
+                    colorClass = ''; 
                     labelText = '-';
             }
 
-            if(colorClass) medalBadge.classList.add(colorClass);
+            // 3. Farbe hinzufügen
+            if (colorClass) {
+                medalBadge.classList.add(colorClass);
+            }
 
-            if (labelSpan) labelSpan.textContent = labelText;
-            else medalBadge.textContent = labelText;
+            // 4. HTML INHALT UPDATE
+            // Damit 'flex-direction: column' wirkt, sorgen wir für Struktur
+            // Wir schauen, ob schon ein Label-Span da ist
+            const labelSpan = medalBadge.querySelector('.js-medal-label');
+
+            if (labelSpan) {
+                // Nur Text updaten
+                labelSpan.textContent = labelText;
+            } else {
+                // Komplett neu schreiben (falls nur Text drin war)
+                // Dies nutzt dein CSS: display:inline-flex; flex-direction:column;
+                medalBadge.innerHTML = `
+                    <span class="badge-label-small" style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.7;">Ergebnis</span>
+                    <span class="js-medal-label" style="font-weight:bold">${labelText}</span>
+                `;
+            }
 
             triggerPulse(medalBadge);
         }
 
         // C. SCHWIMMEN (Icon + Text Update)
-        // Prüfen auf verschiedene Boolean Formate
         const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || String(data.has_swimming) === '1');
         
         // Icon Update
@@ -488,40 +501,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateRequirementHints(otherEl);
                 }
             });
-        }
-    }
-
-    function updateRequirementHints(select) {
-        const parentTd = select.closest('td');
-        if (!parentTd) return;
-        const opt = select.options[select.selectedIndex];
-        
-        const labels = {
-            b: parentTd.querySelector('.req-val-b'),
-            s: parentTd.querySelector('.req-val-s'),
-            g: parentTd.querySelector('.req-val-g'),
-            unit: parentTd.querySelector('.req-unit')
-        };
-        const input = parentTd.querySelector('input[data-type="leistung"]');
-
-        if (!opt || !opt.value) {
-            Object.values(labels).forEach(l => l && (l.textContent = ''));
-            if(input) input.disabled = true;
-            return;
-        }
-
-        const prettyUnit = opt.getAttribute('data-unit-label') || '';
-        const implicitPoints = parseInt(opt.getAttribute('data-implicit-points') || 0);
-        const unitRaw = opt.getAttribute('data-unit');
-        const isVerband = (unitRaw === 'NONE' || unitRaw === 'UNIT_NONE' || implicitPoints > 0);
-
-        if (isVerband) {
-            Object.values(labels).forEach(l => l && (l.textContent = ''));
-        } else {
-            if(labels.b) labels.b.textContent = opt.getAttribute('data-bronze') || '-';
-            if(labels.s) labels.s.textContent = opt.getAttribute('data-silber') || '-';
-            if(labels.g) labels.g.textContent = opt.getAttribute('data-gold') || '-';
-            if(labels.unit) labels.unit.textContent = prettyUnit;
         }
     }
 });
