@@ -23,8 +23,10 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
         
+        // ÄNDERUNG 1: Wir filtern nicht mehr nach Creator
+        // ['creator' => $this->getUser()] wurde zu []
         $exams = $examRepository->findBy(
-            ['creator' => $this->getUser()],
+            [], // Zeige ALLE Prüfungen, egal von wem
             ['year' => 'DESC', 'date' => 'DESC']
         );
 
@@ -71,7 +73,9 @@ final class ExamController extends AbstractPageController
                 $exam->setName($name);
                 $exam->setYear($year);
                 $exam->setDate($date);
-                $exam->setCreator($this->getUser());
+                
+                // ÄNDERUNG 2: Creator auskommentiert
+                // $exam->setCreator($this->getUser());
 
                 $em->persist($exam);
                 $em->flush();
@@ -94,11 +98,12 @@ final class ExamController extends AbstractPageController
                     }
                 }
 
-                $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
+                $this->addFlash('success', 'Prüfung erfolgreich angelegt (OHNE Creator).');
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
-                $this->addFlash('error', 'Fehler beim Anlegen: ' . $e->getMessage());
+                // Wir geben den kompletten Trace aus, falls es knallt
+                $this->addFlash('error', 'Fehler: ' . $e->getMessage());
             }
         }
 
@@ -108,34 +113,25 @@ final class ExamController extends AbstractPageController
         ]);
     }
 
-    // --- HILFSMETHODE 1: KLASSEN (Überarbeitet: Index-basiert) ---
+    // --- HILFSMETHODE 1: KLASSEN ---
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // TRICK 1: fetchFirstColumn
-        // Wir holen direkt ein Array von Strings: ['123', '456', ...].
-        // Kein Array-Key 'importid' mehr nötig!
         $importIds = $conn->fetchFirstColumn("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($importIds as $importId) {
-            // Falls fetchFirstColumn doch mal leere Strings liefert
             if (empty($importId)) continue;
 
-            // TRICK 2: fetchNumeric
-            // Gibt [0 => id, 1 => geburtsdatum] zurück.
-            // Egal ob die DB 'ID', 'id', 'Id' liefert -> Wir nehmen Index 0.
             $row = $conn->fetchNumeric("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$importId]);
 
-            // Prüfung: Array da? Datum an Stelle 1 da?
             if (!$row || empty($row[1])) continue;
 
             $pId = $row[0];
             $pDob = $row[1];
-
             $age = $examYear - (int)substr($pDob, 0, 4);
 
             $conn->executeStatement("
@@ -145,7 +141,7 @@ final class ExamController extends AbstractPageController
         }
     }
 
-    // --- HILFSMETHODE 2: GRUPPEN (Überarbeitet: Index-basiert) ---
+    // --- HILFSMETHODE 2: GRUPPEN ---
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
@@ -157,27 +153,22 @@ final class ExamController extends AbstractPageController
             
             $row = false;
 
-            // Suche 1: ImportID
             if (!empty($importId)) {
-                // TRICK 2: fetchNumeric auch hier
                 $row = $conn->fetchNumeric("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
             }
 
-            // Suche 2: Username
             if (!$row && !empty($username)) {
                 $row = $conn->fetchNumeric("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
             }
 
-            // Prüfung: Array da? Datum an Stelle 1 da?
             if (!$row || empty($row[1])) continue;
 
-            $pId = $row[0]; // ID ist immer Index 0
-            $pDob = $row[1]; // Datum ist immer Index 1
-
+            $pId = $row[0];
+            $pDob = $row[1];
             $age = $exam->getYear() - (int)substr($pDob, 0, 4);
             
             $conn->executeStatement("
