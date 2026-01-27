@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const allRows = document.querySelectorAll('.participant-row');
         const classes = new Set();
 
-        // Dropdown füllen: Mit .trim() säubern, um Leerzeichen-Fehler zu vermeiden
+        // Dropdown füllen: Mit .trim() säubern
         allRows.forEach(row => {
             const rawClass = row.getAttribute('data-class');
             if (rawClass) {
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 1. Hole die ausgewählten Werte sicher als Array
             let selectedClasses = $classFilterSelect.val();
 
-            // Fix: Sicherstellen, dass es immer ein Array ist (auch bei Single-Select oder null)
+            // Fix: Sicherstellen, dass es immer ein Array ist
             if (!selectedClasses) {
                 selectedClasses = [];
             } else if (!Array.isArray(selectedClasses)) {
@@ -83,54 +83,63 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const searchTerm = searchInput.value.toLowerCase().trim();
             
-            // Wichtig: Rows neu abfragen, falls sie dynamisch geladen wurden
+            // Rows neu abfragen (falls dynamisch geladen)
             const currentRows = document.querySelectorAll('.participant-row');
 
             currentRows.forEach(row => {
-                // Daten aus der Zeile holen und säubern
                 const rowClass = (row.getAttribute('data-class') || '').trim();
                 const nameEl = row.querySelector('.name-main');
                 const nameText = nameEl ? nameEl.textContent.toLowerCase() : ''; 
 
                 // Logik Prüfung
-                // Zeige an, wenn KEINE Klasse gewählt ist (Länge 0) ODER die Zeilen-Klasse im Array ist
                 const matchClass = (selectedClasses.length === 0 || selectedClasses.includes(rowClass));
                 const matchSearch = (searchTerm === '' || nameText.includes(searchTerm));
 
                 // Sichtbarkeit setzen
                 if (matchClass && matchSearch) {
-                    row.style.display = ''; // Anzeigen (Standard)
+                    row.style.display = ''; 
                 } else {
-                    row.style.display = 'none'; // Ausblenden
+                    row.style.display = 'none'; 
                 }
             });
+
+            // ---------------------------------------------------------
+            // UPDATE: GROUPCARD BUTTON URL
+            // ---------------------------------------------------------
             const $printBtn = $('#btn-print-groupcard'); 
 
             if ($printBtn.length) {
-                // 2. Basis-URL holen (beim ersten Mal speichern wir sie in einem Attribut, damit wir sie nicht verlieren)
+                // Basis-URL holen
                 if (!$printBtn.data('base-href')) {
                     $printBtn.data('base-href', $printBtn.attr('href'));
                 }
                 const baseUrl = $printBtn.data('base-href');
 
-                // 3. Parameter bauen
-                // Wir nehmen den ersten gewählten Filter (falls Multiselect, entscheiden wir uns für den ersten oder joinen)
+                // A. Klasse ermitteln (nimmt die erste gewählte oder leer)
                 const selectedClass = (Array.isArray(selectedClasses) && selectedClasses.length > 0) 
-                                    ? selectedClasses[0] // Oder selectedClasses.join(',')
+                                    ? selectedClasses[0] 
                                     : '';
 
-                // 4. URL aktualisieren
+                // B. Suchbegriff ermitteln (NEU)
+                const rawSearchTerm = searchInput.value.trim();
+
+                // URL zusammenbauen
                 // Prüfen, ob schon ein '?' in der URL ist
                 const separator = baseUrl.includes('?') ? '&' : '?';
-                const newUrl = baseUrl + separator + 'class_filter=' + encodeURIComponent(selectedClass);
+                
+                let newUrl = baseUrl + separator + 'class_filter=' + encodeURIComponent(selectedClass);
+                
+                // Nur anhängen, wenn tatsächlich gesucht wird
+                if (rawSearchTerm) {
+                    newUrl += '&search_query=' + encodeURIComponent(rawSearchTerm);
+                }
 
                 $printBtn.attr('href', newUrl);
             }
         };
 
-        // Event Listener: Auf 'change' UND 'changed.bs.select' hören für maximale Kompatibilität
+        // Event Listener
         $classFilterSelect.on('change changed.bs.select', filterRows);
-        
         searchInput.addEventListener('keyup', filterRows);
         searchInput.addEventListener('input', filterRows);
     }
