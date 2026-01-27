@@ -393,6 +393,12 @@ final class ExamResultController extends AbstractPageController
     public function printGroupcard(int $examId, Request $request): Response
     {
         $selectedClass = $request->query->get('class');
+        $selectedIds   = $request->query->get('ids'); // Erwartet kommagetrennte IDs z.B. "1,2,5"
+        
+        // Sortierung aus Request laden (Standard: Nachname ASC)
+        $sort = $request->query->get('sort', 'lastname');
+        $order = strtoupper($request->query->get('order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
+
         $conn = $this->em->getConnection();
 
         // 1. Prüfungsdaten
@@ -402,7 +408,9 @@ final class ExamResultController extends AbstractPageController
         $examYear = (int)$exam['exam_year'];
         $examYearEnd = $examYear . '-12-31';
 
-        // 2. Teilnehmer laden (nur Bronze/Silber/Gold)
+        // 2. Query Builder für Raw SQL vorbereiten
+        // HINWEIS: Ich habe den JOIN auf "u.id = p.user_id" geändert, da dies der Standard-Weg ist.
+        // Falls das bei dir nicht geht, ändere es zurück auf "u.importid = p.import_id".
         $sql = "
             SELECT 
                 ep.id as ep_id, 
@@ -417,19 +425,49 @@ final class ExamResultController extends AbstractPageController
                 ) as swimming_proof_year
             FROM sportabzeichen_exam_participants ep
             JOIN sportabzeichen_participants p ON p.id = ep.participant_id
-            JOIN users u ON u.importid = p.import_id
+            JOIN users u ON u.id = p.user_id  
             WHERE ep.exam_id = :examId 
               AND ep.final_medal IN ('bronze', 'silber', 'silver', 'gold')
         ";
         
         $params = ['examId' => $examId, 'year' => $examYear, 'yearEnd' => $examYearEnd];
 
-        if ($selectedClass) {
+        // --- FILTER LOGIK ---
+
+        // A) Explizite IDs (z.B. durch Checkbox-Auswahl) haben Vorrang
+        if (!empty($selectedIds)) {
+            // IDs sicher in Integers wandeln
+            $idArray = array_map('intval', explode(',', $selectedIds));
+            // Sicherstellen, dass das Array nicht leer ist, um SQL Fehler zu vermeiden
+            if (count($idArray) > 0) {
+                $sql .= " AND ep.id IN (" . implode(',', $idArray) . ")";
+            }
+        } 
+        // B) Falls keine IDs gewählt, greift der Klassenfilter
+        elseif ($selectedClass) {
             $sql .= " AND u.auxinfo = :cls";
             $params['cls'] = $selectedClass;
         }
-        
-        $participants = $conn->fetchAllAssociative($sql . " ORDER BY u.lastname, u.firstname", $params);
+
+        // --- SORTIERUNG ---
+        // Mapping von URL-Parameter zu Datenbank-Spalten
+        switch ($sort) {
+            case 'firstname':
+                $orderBy = "u.firstname $order, u.lastname ASC";
+                break;
+            case 'points':
+                $orderBy = "ep.total_points $order, u.lastname ASC";
+                break;
+            case 'age':
+                $orderBy = "ep.age_year $order, u.lastname ASC";
+                break;
+            case 'lastname':
+            default:
+                $orderBy = "u.lastname $order, u.firstname ASC";
+                break;
+        }
+
+        $participants = $conn->fetchAllAssociative($sql . " ORDER BY " . $orderBy, $params);
 
         // Mappings
         $unitMap = [
@@ -447,10 +485,11 @@ final class ExamResultController extends AbstractPageController
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
-            // Ergebnisse laden (inkl. Verbands-Info)
+            // Ergebnisse laden (Hier nutzen wir Doctrine Param Converter Logik im Raw SQL)
+            // Prüfen ob 'verband' NULL ist, um Fehler zu vermeiden
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
-                        d.kategorie, d.einheit, d.name as d_name, d.verband
+                       d.kategorie, d.einheit, d.name as d_name, d.verband
                 FROM sportabzeichen_exam_results res
                 JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
                 LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 
@@ -476,7 +515,7 @@ final class ExamResultController extends AbstractPageController
                     $isUnitNone = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
 
                     if (!empty($res['verband']) && $isUnitNone) {
-                        // FALL 1: Verbandsabzeichen (z.B. DLRG) -> "A" und Verbandsname
+                        // FALL 1: Verbandsabzeichen
                         $displayNr = 'A';
                         $displayRes = $res['verband'];
                     } else {
@@ -504,6 +543,7 @@ final class ExamResultController extends AbstractPageController
 
         // Batches für Seitenumbruch (je 10)
         $batches = array_chunk($enrichedParticipants, 10);
+        // Leere Zeilen auffüllen für sauberes Layout der letzten Seite
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
             while (count($batches[$lastIndex]) < 10) {
