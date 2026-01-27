@@ -1,12 +1,17 @@
 {# templates/admin/_tabs.html.twig #}
 
-{# Container für Scroll-Verhalten auf Mobile #}
-<div class="sportabzeichen-tabs-scroll-container">
-    <ul class="nav nav-tabs" style="margin-bottom: 20px;">
+<div class="sportabzeichen-nav-container">
+    {# 
+       Wir nutzen 'nav-pills' statt 'nav-tabs', weil diese robuster sind.
+       Die Klasse 'nav-stacked-mobile' definieren wir gleich unten im CSS.
+    #}
+    <ul class="nav nav-pills nav-stacked-mobile">
         
         <li class="{{ activeTab == 'dashboard' ? 'active' : '' }}">
             <a href="{{ path('sportabzeichen_admin_dashboard') }}">
-                {{ icon('home') }} {{ _('Übersicht') }}
+                {{ icon('home') }} 
+                <span class="hidden-xs">{{ _('Übersicht') }}</span>
+                <span class="visible-xs-inline">{{ _('Übersicht') }}</span>
             </a>
         </li>
 
@@ -31,30 +36,46 @@
     </ul>
 </div>
 
+{# WICHTIG: Ein Clearfix, damit nachfolgender Inhalt nicht hochrutscht #}
+<div class="clearfix" style="margin-bottom: 20px;"></div>
+
 <style>
-    /* CSS direkt hier einbetten oder in deine CSS-Datei auslagern */
-    
-    /* Auf kleinen Bildschirmen: Scrollbar aktivieren */
+    /* Desktop-Ansicht: Normaler Abstand */
+    .sportabzeichen-nav-container {
+        margin-bottom: 20px;
+        margin-top: 10px; /* Sicherheitsabstand nach oben */
+    }
+
+    /* Handy-Ansicht (IServ Breakpoint oft bei 768px) */
     @media (max-width: 767px) {
-        .sportabzeichen-tabs-scroll-container {
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch; /* Weiches Scrollen auf iOS */
-            padding-bottom: 5px; /* Platz für Scrollbalken */
-            margin-bottom: 15px;
-            border-bottom: 1px solid #ddd; /* Linie durchziehen, falls Tabs scrollen */
+        .sportabzeichen-nav-container {
+            background-color: #f5f5f5; /* Leichter Hintergrund zur Abgrenzung */
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
         }
 
-        .sportabzeichen-tabs-scroll-container .nav-tabs {
-            border-bottom: none; /* Doppelten Rahmen vermeiden */
-            display: flex;       /* Flexbox sorgt dafür, dass sie nebeneinander bleiben */
-            flex-wrap: nowrap;   /* Kein Umbruch -> Scrollen erzwingen */
-            white-space: nowrap;
+        /* Macht aus den Tabs breite Buttons untereinander */
+        .nav-stacked-mobile > li {
+            float: none;
+            display: block;
+            margin-bottom: 5px;
         }
 
-        .sportabzeichen-tabs-scroll-container .nav-tabs > li {
-            float: none;         /* Altes Float-Verhalten deaktivieren */
-            display: inline-block;
+        .nav-stacked-mobile > li > a {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-align: left;
+            padding: 10px 15px;
+            background-color: #fff;
+        }
+
+        /* Aktiver Tab hervorgehoben */
+        .nav-stacked-mobile > li.active > a,
+        .nav-stacked-mobile > li.active > a:hover {
+            background-color: #337ab7; /* IServ Blau */
+            color: #fff;
+            border-color: #337ab7;
         }
     }
 </style>
