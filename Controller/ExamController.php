@@ -141,29 +141,40 @@ final class ExamController extends AbstractPageController
     // 1. Die bestehende SQL Methode für Klassen (Auxinfo)
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // Wir holen die Import-IDs der User aus der Klasse
+        // 1. User aus der Klasse holen
+        // Wir nutzen "AS importid", um sicherzugehen, dass der Key stimmt
         $users = $conn->fetchAllAssociative("
-            SELECT importid FROM users 
-            WHERE auxinfo = ? AND importid IS NOT NULL
+            SELECT importid AS importid FROM users 
+            WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($users as $u) {
-            // Sicherheitshalber Key-Case normalisieren (falls DB 'ImportID' oder 'importid' liefert)
+            // Sicherheitshalber alles klein machen
             $u = array_change_key_case($u, CASE_LOWER);
             
             if (empty($u['importid'])) continue;
 
+            // 2. Participant suchen
+            // Wir erzwingen Kleinschreibung via SQL Alias "AS id"
             $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+                SELECT id AS id, geburtsdatum AS geburtsdatum 
+                FROM sportabzeichen_participants 
+                WHERE import_id = ?
             ", [$u['importid']]);
 
             if (!$participant) continue;
             
-            // WICHTIG: Keys normalisieren -> 'ID' wird zu 'id'
+            // Zur Sicherheit auch hier Array-Keys normalisieren
             $participant = array_change_key_case($participant, CASE_LOWER);
 
-            // Jetzt sicher zugreifen
-            if (empty($participant['geburtsdatum']) || empty($participant['id'])) continue;
+            // 3. Existenz prüfen mit isset()
+            if (!isset($participant['id']) || !isset($participant['geburtsdatum'])) {
+                // Falls Daten fehlen, überspringen
+                continue;
+            }
+
+            // Geburtsdatum prüfen
+            if (!$participant['geburtsdatum']) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -174,7 +185,6 @@ final class ExamController extends AbstractPageController
         }
     }
 
-    // 2. Sichere Methode für Gruppen
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
@@ -184,13 +194,19 @@ final class ExamController extends AbstractPageController
             $importId = $user->getImportId();
 
             if ($importId) {
-                $row = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", [$importId]);
+                // Auch hier: SQL Alias verwenden
+                $row = $conn->fetchAssociative("
+                    SELECT id AS id, geburtsdatum AS geburtsdatum 
+                    FROM sportabzeichen_participants 
+                    WHERE import_id = ?
+                ", [$importId]);
                 
                 if ($row) {
-                    // WICHTIG: Keys normalisieren -> 'ID' wird zu 'id'
                     $row = array_change_key_case($row, CASE_LOWER);
-                    
-                    if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
+
+                    // Harte Prüfung: Existiert der Key 'id'?
+                    if (isset($row['id']) && !empty($row['geburtsdatum'])) {
+                        
                         $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
                         
                         $conn->executeStatement("

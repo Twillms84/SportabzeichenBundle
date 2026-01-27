@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
     exam_date   DATE,
     exam_year   INT NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW()
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    creator_id  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
