@@ -1,14 +1,25 @@
 {% extends '@IServCore/page.html.twig' %}
 
-{% block content %}
-    {# 1. Die Navigation holen (aus der ausgelagerten Datei) #}
-    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': activeTab} %}
+{% block page_title %}
+    {{ 'Sportabzeichen – Verwaltung'|trans }}
+{% endblock %}
 
-    {# 2. Der INHALT, der nur auf der Startseite zu sehen ist #}
-    <div class="panel panel-default">
-        <div class="panel-body">
-            <h3>Herzlich Willkommen in der Verwaltung</h3>
-            <p>Wählen Sie oben einen Reiter aus...</p>
+{# WICHTIG: page_content statt content nutzen! #}
+{% block page_content %}
+    
+    <div class="content"> {# Dieser Wrapper hilft oft für das Padding #}
+        
+        {# 1. Navigation #}
+        {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'dashboard'} %}
+
+        {# 2. Inhalt #}
+        <div class="panel panel-default">
+            <div class="panel-body">
+                <h3>Herzlich Willkommen in der Verwaltung</h3>
+                <p>Wählen Sie oben einen Reiter aus, um Teilnehmer oder Anforderungen zu verwalten.</p>
+            </div>
         </div>
+
     </div>
+
 {% endblock %}
