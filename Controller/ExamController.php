@@ -135,43 +135,50 @@ final class ExamController extends AbstractPageController
     // ... (EDIT Methode bleibt wie sie ist) ...
     // ... (DELETE Methode bleibt wie sie ist) ...
 
-    // --- HILFSMETHODE MIT DEBUGGING ---
+    // --- HILFSMETHODEN (Debug-Modus) ---
 
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // 1. User aus der IServ-Tabelle 'users' holen
-        // Wir holen die IServ-Import-ID
+        // 1. User holen
+        // Wir erzwingen Kleinschreibung schon im SQL für die Hilfstabelle
         $users = $conn->fetchAllAssociative("
-            SELECT importid FROM users 
+            SELECT importid AS importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($users as $u) {
-            // Normalisieren (Array-Keys klein machen), falls DB 'ImportID' liefert
+            // Check 1: ImportID Key
             $u = array_change_key_case($u, CASE_LOWER);
-            
-            if (empty($u['importid'])) continue;
+            if (!isset($u['importid'])) {
+                echo "<h1>DEBUG ERROR: Key 'importid' fehlt im User-Array!</h1>";
+                echo "<pre>"; print_r($u); echo "</pre>";
+                die(); // Stop script
+            }
 
-            // 2. Passenden Participant aus 'sportabzeichen_participants' suchen
-            // WICHTIG: Wir nutzen 'import_id' und 'geburtsdatum' wie in deiner Entity definiert
+            $importId = $u['importid'];
+
+            // 2. Participant suchen
             $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum 
-                FROM sportabzeichen_participants 
-                WHERE import_id = ?
-            ", [$u['importid']]);
+                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+            ", [$importId]);
 
             if (!$participant) continue;
             
-            // WICHTIG: Normalisieren -> 'ID' wird zu 'id'
+            // Check 2: Participant ID Key
             $participant = array_change_key_case($participant, CASE_LOWER);
+            
+            // HIER IST DER KNACKPUNKT
+            if (!array_key_exists('id', $participant)) {
+                echo "<h1>DEBUG ERROR: Key 'id' fehlt beim Teilnehmer! (Klasse)</h1>";
+                echo "Gesuchte ImportID: " . $importId . "<br>";
+                echo "Datenbank lieferte:<br><pre>"; print_r($participant); echo "</pre>";
+                die(); // Stop script
+            }
 
-            // Prüfen ob ID und Geburtsdatum vorhanden sind
-            if (empty($participant['id']) || empty($participant['geburtsdatum'])) continue;
+            if (empty($participant['geburtsdatum'])) continue;
 
-            // Alter berechnen
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
-            // 3. Verknüpfung speichern
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
@@ -181,18 +188,16 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. Die IServ-Gruppe laden
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // 2. Alle User der Gruppe durchgehen
         foreach ($group->getUsers() as $user) {
             $importId = $user->getImportId();
             $username = $user->getUsername();
             
             $row = false;
 
-            // VERSUCH A: Suche über Import-ID (falls vorhanden)
+            // A: Suche per ImportID
             if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum 
@@ -201,8 +206,7 @@ final class ExamController extends AbstractPageController
                 ", [$importId]);
             }
 
-            // VERSUCH B: Suche über Username (falls A fehlgeschlagen oder keine ImportID)
-            // Das ist entscheidend für Lehrer!
+            // B: Suche per Username (für Lehrer ohne ImportID)
             if (!$row && !empty($username)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum 
@@ -210,17 +214,20 @@ final class ExamController extends AbstractPageController
                     WHERE username = ?
                 ", [$username]);
             }
-            
-            // Wenn immer noch nichts gefunden wurde, ist diese Person wohl 
-            // noch nie im Sportabzeichen-Modul erfasst worden.
+
             if (!$row) continue;
 
-            // 3. Daten verarbeiten (mit Sicherheit gegen Groß-/Kleinschreibung)
+            // Check 3: Participant ID Key (Gruppe)
             $row = array_change_key_case($row, CASE_LOWER);
+
+            if (!array_key_exists('id', $row)) {
+                echo "<h1>DEBUG ERROR: Key 'id' fehlt beim Teilnehmer! (Gruppe)</h1>";
+                echo "User: " . $username . "<br>";
+                echo "Datenbank lieferte:<br><pre>"; print_r($row); echo "</pre>";
+                die(); // Stop script
+            }
             
-            // Wir brauchen zwingend ID und Geburtsdatum für die Altersberechnung
             if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
-                
                 $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
                 
                 $conn->executeStatement("
