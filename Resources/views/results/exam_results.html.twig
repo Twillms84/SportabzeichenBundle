@@ -16,7 +16,7 @@
     <div class="d-flex justify-content-end gap-2 mb-2">
         {# ZURÜCK #}
         <a href="{{ path('sportabzeichen_exams_dashboard') }}" 
-           class="btn btn-outline-secondary btn-sm d-flex align-items-center shadow-sm">
+           class="btn btn-primary btn-sm d-flex align-items-center shadow-sm">
             {{ icon('arrow-left')|raw }} <span class="ms-2">{{ 'Zurück'|trans }}</span>
         </a>
 
@@ -40,8 +40,7 @@
                             data-select-all-text="Alle"
                             data-deselect-all-text="Keine"
                             data-none-selected-text="Ansicht / Disziplinen..."
-                            data-width="100%"
-                            data-style="btn-white border">
+                            data-width="100%">
                         
                         <option value="SWIMMING" selected>Schwimmen</option>
 
@@ -62,8 +61,7 @@
                             data-select-all-text="Alle"
                             data-deselect-all-text="Keine"
                             data-none-selected-text="Klasse filtern..."
-                            data-width="100%"
-                            data-style="btn-white border">
+                            data-width="100%">
                         {# Optionen werden per JS befüllt #}
                     </select>
                 </div>
