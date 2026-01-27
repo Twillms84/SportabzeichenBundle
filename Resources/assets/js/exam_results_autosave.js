@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (medalBadge) {
             const labelSpan = medalBadge.querySelector('.js-medal-label');
             
-            // 1. RESET (Benutze DEINE CSS Klasse 'result-badge-box', nicht 'badge')
+            // 1. RESET
             medalBadge.className = 'result-badge-box'; 
 
             // 2. Deine Farb-Klassen anwenden
@@ -316,8 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     labelText = 'Bronze';
                     break;
                 default:
-                    // Wenn keine Medaille, Standard grau
-                    colorClass = ''; // result-badge-box hat schon grauen Hintergrund
+                    colorClass = ''; 
                     labelText = '-';
             }
 
@@ -329,18 +328,10 @@ document.addEventListener('DOMContentLoaded', function() {
             triggerPulse(medalBadge);
         }
 
-        // C. SCHWIMMEN (Icon + Text Update)
-        // Prüfen auf verschiedene Boolean Formate
+        // C. SCHWIMMEN (Nur noch Wrapper Umschaltung: Badge vs. Dropdown)
         const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || String(data.has_swimming) === '1');
         
-        // Icon Update
-        const swimIcon = document.getElementById('swim-icon-' + epId);
-        if(swimIcon) {
-            swimIcon.className = hasSwimming 
-                ? 'fas fa-swimmer ms-2 text-success' 
-                : 'fas fa-swimmer ms-2 text-danger opacity-50';
-            triggerPulse(swimIcon);
-        }
+        // --- HIER WURDE DER ICON-CODE ENTFERNT ---
         
         // Wrapper Bereiche umschalten
         const wrapper = document.getElementById('swimming-wrapper-' + epId);
@@ -354,28 +345,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (textEl) {
                     let displayName = '';
 
-                    // 1. Priorität: Wir holen den Text direkt aus dem Dropdown, das der User gewählt hat.
-                    // Das ist am sichersten, da Twig hier die korrekten Namen gerendert hat.
-                    const select = wrapper.querySelector('select');
-                    if (select && select.selectedIndex > -1) {
-                        const selectedOption = select.options[select.selectedIndex];
-                        // Prüfen, ob eine echte Option gewählt ist (Value ist nicht leer)
-                        if (selectedOption.value) {
-                            displayName = selectedOption.text;
-                        }
+                    // 1. Priorität: Server Antwort (außer es enthält "DISCIPLINE")
+                    if (data.swimming_name && !String(data.swimming_name).includes('DISCIPLINE')) {
+                         displayName = data.swimming_name;
                     }
 
-                    // 2. Fallback: Server Antwort nutzen, ABER "DISCIPLINE:" ausfiltern
-                    if (!displayName && data.swimming_name) {
-                        if (!String(data.swimming_name).includes('DISCIPLINE')) {
-                            displayName = data.swimming_name;
+                    // 2. Fallback: Dropdown Text
+                    if (!displayName) {
+                        const select = wrapper.querySelector('select');
+                        if (select && select.selectedIndex > -1) {
+                            const selectedOption = select.options[select.selectedIndex];
+                            if (selectedOption.value) displayName = selectedOption.text;
                         }
                     }
 
                     // 3. Notlösung
-                    if (!displayName) {
-                        displayName = 'Nachweis erbracht';
-                    }
+                    if (!displayName) displayName = 'Nachweis erbracht';
 
                     textEl.textContent = displayName;
                 }
