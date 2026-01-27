@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
         checkVerbandInput(select);
     });
 
-    // --- CHANGE LISTENER ---
+    // --- CHANGE LISTENER (SPEICHERN) ---
     form.addEventListener('change', async function(event) {
         const el = event.target;
         if (!el.hasAttribute('data-save')) return;
@@ -160,14 +160,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (data.status === 'ok' || data.success) {
-                // 1. Zelle aktualisieren (Farben)
-                if (type !== 'swimming_select' && cell) {
-                    handleDisciplineColors(data, cell, row, kat, el);
-                    if (data.new_requirements) updateRequirementsBadges(cell, data.new_requirements);
+                // UI Updates vom Try/Catch entkoppeln, damit Fehler hier nicht als "Netzwerkfehler" gelten
+                try {
+                    // 1. Zelle aktualisieren
+                    if (type !== 'swimming_select' && cell) {
+                        handleDisciplineColors(data, cell, row, kat, el);
+                        if (data.new_requirements) updateRequirementsBadges(cell, data.new_requirements);
+                    }
+                    // 2. Live Update Widgets
+                    updateUIWidgets(epId, row, data);
+                } catch (uiErr) {
+                    console.error('UI Update Warning:', uiErr);
                 }
-                
-                // 2. LIVE UPDATE WIDGETS (Gesamtpunkte & Medaille & Schwimmen-Text)
-                updateUIWidgets(epId, row, data);
 
             } else {
                 throw new Error(data.message || 'Fehler beim Speichern');
@@ -182,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // --- CLICK LISTENER (Schwimmen Löschen) ---
+    // --- CLICK LISTENER (Schwimmen LÖSCHEN) ---
     document.addEventListener('click', async function(event) {
         const btn = event.target.closest('.btn-delete-swimming');
         if (!btn) return;
@@ -224,33 +228,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
 
-            if (data.status === 'ok' || data.success) {
-                const row = btn.closest('tr');
-                updateUIWidgets(epId, row, data);
+            // Erfolgsfall prüfen (egal ob data.status oder data.success)
+            if (data.status === 'ok' || data.success === true) {
+                
+                // UI Logik in eigenen Block, damit Fehler hier nicht in den Catch rutschen
+                try {
+                    const row = btn.closest('tr');
+                    updateUIWidgets(epId, row, data);
 
-                const wrapper = document.getElementById('swimming-wrapper-' + epId);
-                if (wrapper) {
-                    // Reset UI
-                    wrapper.querySelector('.swim-badge-container')?.classList.add('d-none');
-                    wrapper.querySelector('.swim-dropdown-container')?.classList.remove('d-none');
-                    
-                    const select = wrapper.querySelector('select');
-                    if (select) select.value = "";
-                    
-                    // Text leeren
-                    const textEl = wrapper.querySelector('.swim-info-text');
-                    if(textEl) textEl.textContent = '';
+                    const wrapper = document.getElementById('swimming-wrapper-' + epId);
+                    if (wrapper) {
+                        // Reset UI manuell erzwingen, falls updateUIWidgets es übersehen hat
+                        const badgeCont = wrapper.querySelector('.swim-badge-container');
+                        const dropCont = wrapper.querySelector('.swim-dropdown-container');
+                        
+                        if(badgeCont) badgeCont.classList.add('d-none');
+                        if(dropCont) dropCont.classList.remove('d-none');
+                        
+                        // Select zurücksetzen
+                        const select = wrapper.querySelector('select');
+                        if (select) select.value = "";
+                        
+                        // Text leeren
+                        const textEl = wrapper.querySelector('.swim-info-text');
+                        if(textEl) textEl.textContent = '';
+                    }
+                } catch(uiError) {
+                    console.error('Löschen UI Update Error:', uiError);
                 }
+
             } else {
                 alert('Fehler: ' + (data.message || 'Fehler beim Löschen.'));
             }
         } catch (e) {
-            console.error('Delete Error:', e);
-            alert('Kommunikationsfehler.');
+            console.error('Delete Request Error:', e);
+            alert('Kommunikationsfehler: Der Server konnte nicht erreicht werden.');
         } finally {
-            btn.style.opacity = '1';
-            btn.disabled = false;
-            btn.innerHTML = originalContent;
+            if(btn) {
+                btn.style.opacity = '1';
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
         }
     });
 
@@ -268,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
             triggerPulse(totalBadge);
         }
 
-        // B. FINAL MEDAILLE (Live Update mit korrektem CSS)
+        // B. FINAL MEDAILLE (Live Update)
         const medalBadge = document.getElementById('final-medal-' + epId);
         let medalValue = data.final_medal || data.medal || 'none';
         medalValue = String(medalValue).toLowerCase();
@@ -276,37 +294,34 @@ document.addEventListener('DOMContentLoaded', function() {
         if (medalBadge) {
             const labelSpan = medalBadge.querySelector('.js-medal-label');
             
-            // 1. HARD RESET
-            // Wir nutzen 'badge border' als Basis und 'rounded-2', damit es NICHT oval ist (wie deine Inputs)
-            medalBadge.className = 'badge border rounded-2'; 
+            // 1. RESET (Benutze DEINE CSS Klasse 'result-badge-box', nicht 'badge')
+            medalBadge.className = 'result-badge-box'; 
 
-            // 2. Deine CSS Klassen anwenden
+            // 2. Deine Farb-Klassen anwenden
             let labelText = '-';
-            let colorClass = 'bg-light text-muted'; // Fallback
+            let colorClass = 'bg-light text-muted'; 
 
             switch (medalValue) {
                 case 'gold':
-                    colorClass = 'medal-gold'; // Deine CSS Klasse
+                    colorClass = 'medal-gold'; 
                     labelText = 'Gold';
                     break;
                 case 'silver':
                 case 'silber':
-                    colorClass = 'medal-silber'; // Deine CSS Klasse
+                    colorClass = 'medal-silber'; 
                     labelText = 'Silber';
                     break;
                 case 'bronze':
-                    colorClass = 'medal-bronze'; // Deine CSS Klasse
+                    colorClass = 'medal-bronze'; 
                     labelText = 'Bronze';
                     break;
                 default:
-                    colorClass = 'bg-light text-muted';
+                    // Wenn keine Medaille, Standard grau
+                    colorClass = ''; // result-badge-box hat schon grauen Hintergrund
                     labelText = '-';
             }
 
-            medalBadge.classList.add(colorClass);
-            
-            // Optional: Padding anpassen für bessere Optik
-            medalBadge.classList.add('p-2'); 
+            if(colorClass) medalBadge.classList.add(colorClass);
 
             if (labelSpan) labelSpan.textContent = labelText;
             else medalBadge.textContent = labelText;
@@ -315,9 +330,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // C. SCHWIMMEN (Icon + Text Update)
+        // Prüfen auf verschiedene Boolean Formate
         const hasSwimming = (data.has_swimming === true || data.has_swimming === 1 || String(data.has_swimming) === '1');
         
-        // Icon
+        // Icon Update
         const swimIcon = document.getElementById('swim-icon-' + epId);
         if(swimIcon) {
             swimIcon.className = hasSwimming 
@@ -334,27 +350,26 @@ document.addEventListener('DOMContentLoaded', function() {
             const textEl = wrapper.querySelector('.swim-info-text');
 
             if (hasSwimming) {
-                // TEXT UPDATE: Wir holen den Text aus dem Select, das gerade noch sichtbar war
+                // TEXT UPDATE
                 if (textEl) {
-                    // Falls Server den Namen mitschickt (ideal):
                     if (data.swimming_name) {
                         textEl.textContent = data.swimming_name;
                     } 
-                    // Fallback: Text aus dem Dropdown holen, bevor wir es verstecken
                     else {
+                        // Fallback: Text aus Select holen
                         const select = wrapper.querySelector('select');
                         if (select && select.selectedOptions.length > 0 && select.value) {
-                             // Nur Text holen, wenn auch wirklich was gewählt wurde
                              textEl.textContent = select.selectedOptions[0].text;
                         }
                     }
                 }
-
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont) dropCont.classList.add('d-none');
             } else {
+                // ZURÜCKSETZEN
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont) dropCont.classList.remove('d-none');
+                if (textEl) textEl.textContent = ''; // Text leeren
             }
         }
     }
