@@ -21,8 +21,9 @@
         </a>
 
         {# DRUCKEN #}
-        <a href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
-           class="btn btn-primary btn-sm d-flex align-items-center shadow-sm" target="_blank">
+        <a id="btn-print-groupcard" 
+            href="{{ path('sportabzeichen_results_print_groupcard', {'examId': exam.id, 'class': app.request.query.get('class')}) }}" 
+            class="btn btn-primary btn-sm d-flex align-items-center shadow-sm" target="_blank">
             {{ icon('print')|raw }} <span class="ms-2">{{ 'Drucken'|trans }}</span>
         </a>
     </div>
