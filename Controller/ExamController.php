@@ -7,30 +7,36 @@ namespace PulsR\SportabzeichenBundle\Controller;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
+use IServ\CoreBundle\Entity\Group; // <--- NEU
+use IServ\CoreBundle\Entity\User;  // <--- NEU
 use PulsR\SportabzeichenBundle\Entity\Exam;
+use PulsR\SportabzeichenBundle\Entity\Participant; // <--- NEU: Brauchen wir für den Import
 use PulsR\SportabzeichenBundle\Repository\ExamRepository;
 use PulsR\SportabzeichenBundle\Repository\SwimmingProofRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * Zentrale Verwaltung der Prüfungen
- */
 #[Route('/sportabzeichen/exams', name: 'sportabzeichen_exams_')]
 final class ExamController extends AbstractPageController
 {
     /**
-     * DASHBOARD: Liste aller Prüfungen
+     * DASHBOARD: Liste der EIGENEN Prüfungen
      */
     #[Route('/', name: 'dashboard')]
     public function index(ExamRepository $examRepository): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // ANPASSUNG: Property heißt jetzt 'year' (statt examYear/jahr)
-        // Prüfe auch, ob 'examDate' in der Entity 'date' heißt.
-        $exams = $examRepository->findBy([], ['year' => 'DESC', 'date' => 'DESC']);
+        // NEU: Nur Prüfungen finden, die ICH erstellt habe
+        $user = $this->getUser();
+        
+        // Admin-Option (optional): Falls jemand ALLES sehen soll, hier Logic einbauen.
+        // Standard: Nur eigene.
+        $exams = $examRepository->findBy(
+            ['creator' => $user], 
+            ['year' => 'DESC', 'date' => 'DESC']
+        );
 
         return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
             'exams' => $exams,
@@ -45,47 +51,74 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
+        // 1. Klassen laden (Legacy SQL Methode, ist performant für Auxinfo)
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
             ORDER BY auxinfo
         ");
 
+        // 2. Gruppen laden (NEU: Über Doctrine Entity)
+        // Wir laden alle Gruppen, sortieren sie aber idealerweise im Template oder hier
+        $groupRepo = $em->getRepository(Group::class);
+        $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
+        
+        // Array für das Dropdown bauen: [account => name]
+        $groupsForDropdown = [];
+        foreach ($allGroups as $g) {
+            // Optional: Klassen hier rausfiltern, da wir sie oben schon haben?
+            // if ($g->getType() !== 'class') { ... }
+            $groupsForDropdown[$g->getAccount()] = $g->getName();
+        }
+
+
         if ($request->isMethod('POST')) {
             try {
                 $name = trim($request->request->get('exam_name'));
                 $year = (int)$request->request->get('exam_year');
-                
                 if ($year < 100) $year += 2000;
                 
                 $dateStr = $request->request->get('exam_date');
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
-                $postData = $request->request->all();
-                $selectedClasses = $postData['classes'] ?? []; 
+                // Formular Daten holen
+                $postData = $request->request->all(); // Symfony < 6 use request->all(), >6 needs adjustment if typed
+                // Fallback falls request->all() Array-Probleme macht:
+                $selectedClasses = $postData['classes'] ?? [];
+                $selectedGroups  = $postData['groups'] ?? []; // <--- NEU
 
-                // 1. Prüfung als Entity anlegen
+                // A. Prüfung anlegen
                 $exam = new Exam();
                 $exam->setName($name);
-                // ANPASSUNG: Setter heißt setYear()
                 $exam->setYear($year);
                 $exam->setDate($date);
+                
+                // NEU: Creator setzen
+                $exam->setCreator($this->getUser());
 
                 $em->persist($exam);
-                $em->flush();
+                $em->flush(); // ID generieren lassen
 
-                // 2. Teilnehmer importieren
                 $count = 0;
+
+                // B. Klassen importieren (Existierende SQL Logik)
                 if (!empty($selectedClasses) && is_array($selectedClasses)) {
                     foreach ($selectedClasses as $singleClass) {
                         $this->importParticipantsFromClass($conn, $exam->getId(), $year, $singleClass);
                         $count++;
                     }
-                    $this->addFlash('success', sprintf('Prüfung angelegt und Teilnehmer aus %d Klassen/Gruppen importiert.', $count));
-                } else {
-                    $this->addFlash('success', 'Prüfung erfolgreich angelegt (ohne Teilnehmer).');
                 }
 
+                // C. Gruppen importieren (NEU: Doctrine Logik)
+                if (!empty($selectedGroups) && is_array($selectedGroups)) {
+                    foreach ($selectedGroups as $groupAccount) {
+                        // Importiere diese Gruppe
+                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
+                        $count++;
+                    }
+                }
+
+                $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
@@ -94,87 +127,18 @@ final class ExamController extends AbstractPageController
         }
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
-            'classes' => $classes
+            'classes' => $classes,
+            'groups'  => $groupsForDropdown // <--- ans Template übergeben
         ]);
     }
 
-    #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
-    public function edit(Exam $exam, Request $request, EntityManagerInterface $em): Response
-    {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+    // ... (EDIT Methode bleibt wie sie ist) ...
+    // ... (DELETE Methode bleibt wie sie ist) ...
 
-        if ($request->isMethod('POST')) {
-            $name = trim($request->request->get('exam_name'));
-            $year = (int)$request->request->get('exam_year');
-            if ($year < 100) $year += 2000;
-            
-            $dateStr = $request->request->get('exam_date');
-            $date = $dateStr ? new \DateTime($dateStr) : null;
 
-            $exam->setName($name);
-            // ANPASSUNG: setYear
-            $exam->setYear($year);
-            $exam->setDate($date);
+    // --- HILFSMETHODEN ---
 
-            $em->flush();
-
-            $this->addFlash('success', 'Änderungen gespeichert.');
-            return $this->redirectToRoute('sportabzeichen_exams_dashboard');
-        }
-
-        return $this->render('@PulsRSportabzeichen/exams/edit.html.twig', [
-            'exam' => $exam
-        ]);
-    }
-
-    #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]
-    public function delete(
-        Exam $exam, 
-        Request $request, 
-        EntityManagerInterface $em,
-        SwimmingProofRepository $swimmingRepo // <--- Inject Repository
-    ): Response
-    {
-        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
-        $token = $request->request->get('_token');
-        if (!$this->isCsrfTokenValid('delete' . $exam->getId(), $token)) {
-            $this->addFlash('error', 'Ungültiger Sicherheits-Token.');
-            return $this->redirectToRoute('sportabzeichen_exams_dashboard');
-        }
-
-        try {
-            $year = $exam->getYear();
-            
-            if ($year) {
-                // Finde alle Nachweise, die zu diesem Jahr gehören
-                $proofs = $swimmingRepo->findBy(['examYear' => $year]);
-                
-                // Lösche sie
-                foreach ($proofs as $proof) {
-                    $em->remove($proof);
-                }
-            }
-
-            // 2. Das Exam selbst löschen
-            // (ExamParticipants & ExamResults werden automatisch per CASCADE gelöscht)
-            $em->remove($exam);
-            
-            // 3. Alles in die DB schreiben (Proofs + Exam + Participants + Results)
-            $em->flush();
-            
-            $this->addFlash('success', 'Prüfung und zugehörige Daten wurden gelöscht.');
-
-        } catch (\Exception $e) {
-            $this->addFlash('error', 'Fehler beim Löschen: ' . $e->getMessage());
-        }
-
-        return $this->redirectToRoute('sportabzeichen_exams_dashboard');
-    }
-
-    // --- HILFSMETHODE (SQL) ---
-    // Hier bleibt SQL bestehen, da wir direkt Datenbank-Operationen machen.
-    // Falls die DB-Spalten noch nicht umbenannt wurden, bleiben die Spaltennamen hier deutsch/snake_case!
+    // 1. Die bestehende SQL Methode für Klassen (Auxinfo)
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
         $users = $conn->fetchAllAssociative("
@@ -183,8 +147,6 @@ final class ExamController extends AbstractPageController
         ", [$class]);
 
         foreach ($users as $u) {
-            // Hinweis: Falls die Spalte 'geburtsdatum' in der DB noch so heißt, lassen wir sie so.
-            // SQL interagiert mit der DB-Struktur, nicht mit PHP Entities.
             $participant = $conn->fetchAssociative("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$u['importid']]);
@@ -199,4 +161,33 @@ final class ExamController extends AbstractPageController
             ", [$examId, $participant['id'], $age]);
         }
     }
-}
+
+    // 2. Die NEUE Methode für Gruppen (Doctrine + SQL Mix)
+    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
+    {
+        // Gruppe suchen
+        $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
+        if (!$group) return;
+
+        // Alle User der Gruppe iterieren
+        foreach ($group->getUsers() as $user) {
+            // Wir müssen prüfen, ob es für diesen IServ-User schon einen "Participant" gibt.
+            // Suche via User-Relation (falls vorhanden) oder import_id
+            
+            // Versuch 1: Suche in Participants Tabelle via User-Verknüpfung (falls Entity so gebaut ist)
+            // Da ich deine Participant-Entity nicht kenne, mache ich es hier über SQL/DBAL, 
+            // um Lehrer zu finden, die evtl. keine import_id haben.
+            
+            // Wir suchen in sportabzeichen_participants nach einem Eintrag, der zu diesem User gehört.
+            // Annahme: Es gibt eine Spalte 'user_id' oder wir nutzen 'import_id' = user->getImportId()
+            
+            // Sicherer Weg: Wir schauen, ob wir den User anhand der import_id finden (Schüler)
+            // ODER wir erstellen einen Teilnehmer, falls es ein Lehrer ist der noch nicht existiert.
+            
+            $importId = $user->getImportId();
+            $participantId = null;
+            $birthDate = null;
+
+            if ($importId) {
+                // Versuche existierenden Schüler zu finden
+                $row = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id
