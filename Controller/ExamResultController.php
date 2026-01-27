@@ -145,6 +145,7 @@ final class ExamResultController extends AbstractPageController
                 'vorname' => $user->getFirstname(),
                 'nachname' => $user->getLastname(),
                 'klasse' => $categoryName, // WICHTIG: Hier nutzen wir jetzt unsere ermittelte Kategorie!
+                'group'  => $categoryName,
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(),
                 'total_points' => $ep->getTotalPoints(),
