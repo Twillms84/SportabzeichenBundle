@@ -116,17 +116,24 @@
                 <tbody>
                 {% for p in participants %}
                     {% set epResults = results[p.ep_id] ?? {} %}
-                    <tr data-ep-id="{{ p.ep_id }}" id="row-{{ p.ep_id }}" class="participant-row" data-class="{{ p.klasse|default('Ohne Klasse') }}">
-                        
+                    <tr data-ep-id="{{ p.ep_id }}" 
+                        id="row-{{ p.ep_id }}" 
+                        class="participant-row" 
+                        data-class="{{ p.klasse|default('') }}"
+                        data-group="{{ p.group|default('') }}">
+
                         {# 1. TEILNEHMER INFOS (Sticky via CSS Class) #}
                         <td class="col-name py-2 shadow-sm col-sticky-left">
                             <div class="name-container text-truncate ps-1">
                                 <div class="name-main text-truncate">
                                     {{ p.nachname }}<span class="fw-normal">, {{ p.vorname }}</span>
                                 </div>
+                                
+                                {# HIER AUCH ANPASSEN: Wenn keine Klasse, zeige die Gruppe an #}
                                 <div class="name-age text-truncate mb-2">
-                                    {{ p.klasse|default('-') }} | {{ p.age_year }} J.
+                                    {{ p.klasse|default(p.group)|default('-') }} | {{ p.age_year }} J.
                                 </div>
+
                                 <div class="d-flex gap-2 align-items-center">
                                     {# Punkte Badge #}
                                     <div class="result-badge-box bg-light" title="Gesamtpunkte">
