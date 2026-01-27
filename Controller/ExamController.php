@@ -139,42 +139,54 @@ final class ExamController extends AbstractPageController
     // --- HILFSMETHODEN ---
 
     // 1. Die bestehende SQL Methode für Klassen (Auxinfo)
+    Alles klar, wir bauen eine "Notbremse" ein.
+
+Da der Fehler Undefined array key "id" immer noch auftritt, bedeutet das: Die Datenbank liefert zwar Daten zurück (es ist also kein false), aber das Array hat nicht den Key id (vielleicht heißt er ID, sportabzeichen_participants.id oder ganz anders).
+
+Wir fügen jetzt Code ein, der sofort das Script stoppt und dir den Inhalt des Arrays auf den Bildschirm knallt, sobald der Key fehlt.
+
+Ersetze die beiden Methoden unten im ExamController hiermit:
+
+PHP
+
+    // --- HILFSMETHODE MIT DEBUGGING ---
+
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // 1. User aus der Klasse holen
-        // Wir nutzen "AS importid", um sicherzugehen, dass der Key stimmt
         $users = $conn->fetchAllAssociative("
-            SELECT importid AS importid FROM users 
+            SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($users as $u) {
-            // Sicherheitshalber alles klein machen
+            // Schritt 1: User-Keys normalisieren
             $u = array_change_key_case($u, CASE_LOWER);
             
             if (empty($u['importid'])) continue;
 
-            // 2. Participant suchen
-            // Wir erzwingen Kleinschreibung via SQL Alias "AS id"
+            // Schritt 2: Teilnehmer laden
             $participant = $conn->fetchAssociative("
-                SELECT id AS id, geburtsdatum AS geburtsdatum 
-                FROM sportabzeichen_participants 
-                WHERE import_id = ?
+                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
             ", [$u['importid']]);
 
+            // Wenn kein Teilnehmer gefunden wurde -> weiter
             if (!$participant) continue;
-            
-            // Zur Sicherheit auch hier Array-Keys normalisieren
+
+            // Schritt 3: Keys normalisieren
             $participant = array_change_key_case($participant, CASE_LOWER);
 
-            // 3. Existenz prüfen mit isset()
-            if (!isset($participant['id']) || !isset($participant['geburtsdatum'])) {
-                // Falls Daten fehlen, überspringen
-                continue;
+            // --- DEBUG START ---
+            // Wenn 'id' fehlt, werfen wir sofort einen Fehler mit dem Array-Inhalt
+            if (!array_key_exists('id', $participant)) {
+                throw new \Exception(
+                    "DEBUG ERROR (Class Import): Key 'id' fehlt! \n" .
+                    "ImportID: " . $u['importid'] . "\n" .
+                    "Gefundene DB-Daten: " . print_r($participant, true)
+                );
             }
+            // --- DEBUG ENDE ---
 
-            // Geburtsdatum prüfen
-            if (!$participant['geburtsdatum']) continue;
+            if (empty($participant['geburtsdatum'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -194,19 +206,24 @@ final class ExamController extends AbstractPageController
             $importId = $user->getImportId();
 
             if ($importId) {
-                // Auch hier: SQL Alias verwenden
                 $row = $conn->fetchAssociative("
-                    SELECT id AS id, geburtsdatum AS geburtsdatum 
-                    FROM sportabzeichen_participants 
-                    WHERE import_id = ?
+                    SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
                 
                 if ($row) {
                     $row = array_change_key_case($row, CASE_LOWER);
 
-                    // Harte Prüfung: Existiert der Key 'id'?
-                    if (isset($row['id']) && !empty($row['geburtsdatum'])) {
-                        
+                    // --- DEBUG START ---
+                    if (!array_key_exists('id', $row)) {
+                        throw new \Exception(
+                            "DEBUG ERROR (Group Import): Key 'id' fehlt! \n" .
+                            "User: " . $user->getUsername() . "\n" .
+                            "Gefundene DB-Daten: " . print_r($row, true)
+                        );
+                    }
+                    // --- DEBUG ENDE ---
+                    
+                    if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
                         $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
                         
                         $conn->executeStatement("
