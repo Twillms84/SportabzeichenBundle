@@ -104,7 +104,7 @@ final class ExamController extends AbstractPageController
                 $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
-            } catch catch (\Throwable $e) {
+            } catch (\Throwable $e) {
                 // 1. Infos über den aktuellen User (Creator) sammeln
                 $currentUser = $this->getUser();
                 $creatorInfo = 'NULL';
