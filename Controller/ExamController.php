@@ -7,11 +7,11 @@ namespace PulsR\SportabzeichenBundle\Controller;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use IServ\CoreBundle\Entity\Group;
+use IServ\CoreBundle\Entity\Group; // <--- Wichtig für Gruppen
 use IServ\CoreBundle\Entity\User;
 use PulsR\SportabzeichenBundle\Entity\Exam;
-use PulsR\SportabzeichenBundle\Entity\Participant;
 use PulsR\SportabzeichenBundle\Repository\ExamRepository;
+use PulsR\SportabzeichenBundle\Repository\SwimmingProofRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -23,10 +23,9 @@ final class ExamController extends AbstractPageController
     public function index(ExamRepository $examRepository): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-        $user = $this->getUser();
-        
+
         $exams = $examRepository->findBy(
-            ['creator' => $user], 
+            ['creator' => $this->getUser()], // Optional: Nur eigene anzeigen
             ['year' => 'DESC', 'date' => 'DESC']
         );
 
@@ -40,14 +39,14 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Klassen laden
+        // 1. Klassen laden (wie gehabt)
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
             ORDER BY auxinfo
         ");
 
-        // 2. Gruppen laden
+        // 2. Gruppen laden (NEU)
         $groupRepo = $em->getRepository(Group::class);
         $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
         
@@ -67,9 +66,9 @@ final class ExamController extends AbstractPageController
                 
                 $postData = $request->request->all();
                 $selectedClasses = $postData['classes'] ?? [];
-                $selectedGroups  = $postData['groups'] ?? [];
+                $selectedGroups  = $postData['groups'] ?? []; // <--- NEU
 
-                // A. Prüfung anlegen
+                // Entity anlegen
                 $exam = new Exam();
                 $exam->setName($name);
                 $exam->setYear($year);
@@ -79,17 +78,21 @@ final class ExamController extends AbstractPageController
                 $em->persist($exam);
                 $em->flush();
 
-                // B. Klassen importieren
+                $count = 0;
+
+                // A. Klassen importieren
                 if (!empty($selectedClasses) && is_array($selectedClasses)) {
                     foreach ($selectedClasses as $singleClass) {
                         $this->importParticipantsFromClass($conn, $exam->getId(), $year, $singleClass);
+                        $count++;
                     }
                 }
 
-                // C. Gruppen importieren
+                // B. Gruppen importieren (NEU)
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
+                        $count++;
                     }
                 }
 
@@ -103,11 +106,11 @@ final class ExamController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
             'classes' => $classes,
-            'groups'  => $groupsForDropdown
+            'groups'  => $groupsForDropdown // <--- ans Template übergeben
         ]);
     }
 
-    // --- HILFSMETHODE 1: KLASSEN (Unverändert, da funktionierend) ---
+    // --- HILFSMETHODE 1: KLASSEN (Dein funktionierender Code + 1 Sicherheitszeile) ---
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
         $users = $conn->fetchAllAssociative("
@@ -116,14 +119,23 @@ final class ExamController extends AbstractPageController
         ", [$class]);
 
         foreach ($users as $u) {
-            $importId = $u['importid'] ?? $u['ImportID'] ?? null;
-            if (!$importId) continue;
+            // Normierung, falls DB mal 'ImportID' statt 'importid' liefert
+            $u = array_change_key_case($u, CASE_LOWER);
+            
+            if (empty($u['importid'])) continue;
 
             $participant = $conn->fetchAssociative("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
-            ", [$importId]);
+            ", [$u['importid']]);
 
-            if (!$participant || empty($participant['geburtsdatum'])) continue;
+            // WICHTIG: Wenn DB nix liefert -> continue.
+            if (!$participant) continue;
+
+            // SICHERHEIT: Alles klein schreiben. Verhindert Fehler bei "ID" vs "id".
+            $participant = array_change_key_case($participant, CASE_LOWER);
+
+            // LOGIK: Wenn ID fehlt ODER Geburtsdatum leer ist -> Überspringen
+            if (!isset($participant['id']) || empty($participant['geburtsdatum'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -134,50 +146,46 @@ final class ExamController extends AbstractPageController
         }
     }
 
-    // --- HILFSMETHODE 2: GRUPPEN (Bulletproof Version) ---
+    // --- HILFSMETHODE 2: GRUPPEN (Die gleiche Logik wie oben) ---
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
+        // 1. IServ Gruppe holen
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
+        // 2. Über User iterieren
         foreach ($group->getUsers() as $user) {
             $importId = $user->getImportId();
             $username = $user->getUsername();
             
             $row = false;
 
-            // 1. Versuch: Über ImportID (bevorzugt)
+            // Suche A: Import ID
             if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
             }
 
-            // 2. Versuch: Über Username (Fallback für Lehrer ohne ImportID)
+            // Suche B: Username (Fallback)
             if (!$row && !empty($username)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
             }
 
-            // Wenn SQL nichts geliefert hat -> Abbruch für diesen User
+            // Wenn immer noch nichts gefunden -> Nächster User
             if (!$row) continue;
 
-            // SICHERHEITSSCHRITT: Alle Keys auf Kleinschreibung normieren
-            // Das verhindert Probleme, falls DB 'ID' statt 'id' liefert.
+            // SICHERHEIT: Exakt wie oben. Array Keys klein machen.
             $row = array_change_key_case($row, CASE_LOWER);
 
-            // FINALER CHECK (Der "Bock"-Killer):
-            // Wir prüfen explizit mit ISSET auf 'id'. 
-            // Wenn 'id' fehlt ODER 'geburtsdatum' leer ist -> SKIP.
-            // Damit kann der Fehler "Undefined array key" unmöglich auftreten.
-            if (!isset($row['id']) || empty($row['geburtsdatum'])) {
-                continue;
-            }
+            // LOGIK: ID fehlt oder Datum fehlt -> Nächster User. 
+            // Das killt den Fehler "Undefined array key id".
+            if (!isset($row['id']) || empty($row['geburtsdatum'])) continue;
 
             $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
             
-            // Jetzt ist $row['id'] garantiert vorhanden.
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
