@@ -350,26 +350,46 @@ document.addEventListener('DOMContentLoaded', function() {
             const textEl = wrapper.querySelector('.swim-info-text');
 
             if (hasSwimming) {
-                // TEXT UPDATE
+                // TEXT UPDATE LOGIK
                 if (textEl) {
-                    if (data.swimming_name) {
-                        textEl.textContent = data.swimming_name;
-                    } 
-                    else {
-                        // Fallback: Text aus Select holen
-                        const select = wrapper.querySelector('select');
-                        if (select && select.selectedOptions.length > 0 && select.value) {
-                             textEl.textContent = select.selectedOptions[0].text;
+                    let displayName = '';
+
+                    // 1. Priorität: Wir holen den Text direkt aus dem Dropdown, das der User gewählt hat.
+                    // Das ist am sichersten, da Twig hier die korrekten Namen gerendert hat.
+                    const select = wrapper.querySelector('select');
+                    if (select && select.selectedIndex > -1) {
+                        const selectedOption = select.options[select.selectedIndex];
+                        // Prüfen, ob eine echte Option gewählt ist (Value ist nicht leer)
+                        if (selectedOption.value) {
+                            displayName = selectedOption.text;
                         }
                     }
+
+                    // 2. Fallback: Server Antwort nutzen, ABER "DISCIPLINE:" ausfiltern
+                    if (!displayName && data.swimming_name) {
+                        if (!String(data.swimming_name).includes('DISCIPLINE')) {
+                            displayName = data.swimming_name;
+                        }
+                    }
+
+                    // 3. Notlösung
+                    if (!displayName) {
+                        displayName = 'Nachweis erbracht';
+                    }
+
+                    textEl.textContent = displayName;
                 }
+
                 if(badgeCont) badgeCont.classList.remove('d-none');
                 if(dropCont) dropCont.classList.add('d-none');
             } else {
-                // ZURÜCKSETZEN
+                // RESET
                 if(badgeCont) badgeCont.classList.add('d-none');
                 if(dropCont) dropCont.classList.remove('d-none');
-                if (textEl) textEl.textContent = ''; // Text leeren
+                if (textEl) textEl.textContent = '';
+                
+                const select = wrapper.querySelector('select');
+                if (select) select.value = "";
             }
         }
     }
