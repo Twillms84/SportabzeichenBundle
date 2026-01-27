@@ -6,7 +6,7 @@
 
 {% block page_content %}
 <div class="content">
-    <h2> {{ 'Sportabzeichen – Anforderungen hochladen'|trans }}</h2>
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'requirements'} %}
 
     {% if message %}
         <div class="alert alert-success">{{ message|raw }}</div>

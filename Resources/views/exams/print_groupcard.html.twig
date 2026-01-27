@@ -1,0 +1,124 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}Drucken: Gruppenprüfkarte – {{ exam.exam_name }}{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/print_groupcard.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
+
+{% block content %}
+<div class="print-container">
+    {% for batch in batches %}
+        <div class="sheet">
+            {# Hintergrundbild über das Asset-System von IServ #}
+            <img src="{{ asset('img/dsa_groupcard.svg', 'pulsr-sportabzeichen') }}" class="bg-svg" alt="Hintergrund">
+
+            <div class="data-layer">
+                
+                {# 1. HEADER-INFOS (Stadt, Schule, etc.) #}
+                <div class="header-info">
+                    {# Das X für "Schule" #}
+                    <div class="mark-institution-type">X</div>
+
+                    <div class="header-item w-club"></div>
+                    <div class="header-item w-school">
+                        {% if selectedClass %}Schule: {{ selectedClass }}{% endif %}
+                    </div>
+                    <div class="header-item w-org"></div>
+                    
+                    {# Stadt / Institution #}
+                    <div class="header-item w-city">
+                        {{ institutionCity|default('Barßel') }}
+                    </div>
+                </div>
+
+                {# 2. JAHR (Oben links, einzeln in Kästchen) #}
+                <div class="header-year">
+                    {% set yearArr = exam_year_short|split('') %}
+                    {% for digit in yearArr %}
+                        <span>{{ digit }}</span>
+                    {% endfor %}
+                </div>
+
+                {# 3. HAUPTTABELLE DER TEILNEHMER #}
+                <div class="table-container">
+                    <table class="participant-table">
+                        <colgroup>
+                            <col class="col-name">
+                            <col class="col-gender">
+                            <col class="col-birth">
+                            {# 4 Kategorien à 3 Spalten (Nr, Ergebnis, Pkt) #}
+                            {% for i in 1..4 %}
+                                <col class="col-dis-nr">
+                                <col class="col-dis-res">
+                                <col class="col-dis-pts">
+                            {% endfor %}
+                            <col class="col-swim">
+                            <col class="col-sum">
+                        </colgroup>
+                        <tbody>
+                            {% for p in batch %}
+                                <tr class="participant-row">
+                                    {% if p %}
+                                        {# Name #}
+                                        <td class="col-name text-nowrap">
+                                            {{ p.lastname }}, {{ p.firstname }}
+                                        </td>
+                                        
+                                        {# Geschlecht (m/w) #}
+                                        <td class="col-gender">
+                                            {{ p.geschlecht_kurz }}
+                                        </td>
+                                        
+                                        {# Geburtsjahr #}
+                                        <td class="col-birth">
+                                            {{ p.birthday_fmt }}
+                                        </td>
+
+                                        {# Die 4 Disziplin-Slots #}
+                                        {% for i in 1..4 %}
+                                            <td class="col-dis-nr">{{ p.disciplines[i].nr }}</td>
+                                            <td class="col-dis-res">{{ p.disciplines[i].res }}</td>
+                                            <td class="col-dis-pts">{{ p.disciplines[i].pts }}</td>
+                                        {% endfor %}
+
+                                        {# Schwimmnachweis #}
+                                        <td class="col-swim">
+                                            {% if p.has_swimming %}
+                                                {{ p.swimming_year }}    
+                                            {% endif %}
+                                        </td>
+                                        
+                                        {# Gesamtpunkte #}
+                                        <td class="col-sum fw-bold">
+                                            {{ p.total_points }}
+                                        </td>
+                                    {% else %}
+                                        {# Leere Zeile zum Auffüllen auf 10 Zeilen #}
+                                        {% for i in 1..17 %}<td>&nbsp;</td>{% endfor %}
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {# 4. FOOTER (Prüfer & Datum) #}
+                <div class="footer-verifier">
+                    {{ app.user.firstname }} {{ app.user.lastname }} 
+                    {# Prüft, ob die Variable existiert und nicht leer ist #}
+                    {% if userNumber is defined and userNumber is not empty %}
+                        ({{ userNumber }})
+                    {% endif %}
+                </div>
+
+                <div class="footer-date">
+                    {{ today|date('d.m.Y') }}
+                </div>
+
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

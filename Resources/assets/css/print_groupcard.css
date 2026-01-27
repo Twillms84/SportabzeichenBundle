@@ -1,0 +1,204 @@
+/* public/css/print_groupcard.css */
+
+/* --- Druck-Spezifika --- */
+@page {
+    size: A4 landscape;
+    margin: 0;
+}
+
+@media print {
+    body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    /* Ausblenden von IServ-Navigationselementen beim Druck */
+    .iserv-nav, .iserv-header, .btn, .breadcrumb, .footer {
+        display: none !important;
+    }
+}
+/* Nach dem allerletzten .sheet keinen Umbruch mehr machen */
+.sheet:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+    background-color: transparent; /* Hintergrund der Seite transparent */
+    color: #000000; /* Schrift explizit schwarz */
+}
+
+/* --- Grundgerüst Blatt --- */
+.sheet {
+    /* Breite exakt A4 Landscape */
+    width: 297mm; 
+    
+    /* TRICK: Ein Hauch weniger als 210mm, um Überlauf zu verhindern */
+    height: 209.5mm; 
+    
+    position: relative;
+    
+    /* Schneidet unsichtbare Ränder oder herausragende Pixel ab */
+    overflow: hidden; 
+    background-color: white;
+    /* Umbruch erzwingen */
+    page-break-after: always; 
+    break-after: page;
+}
+
+/* --- Layering --- */
+.bg-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 297mm;
+    height: 210mm;
+    z-index: 1;
+}
+
+.data-layer {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* Sicherstellen, dass Layer nicht weiß ist */
+    color: #000000;
+}
+
+/* --- Header & Jahr --- */
+.header-year {
+    position: absolute;
+    top: 30mm;
+    left: 62mm;
+    font-weight: bold;
+    letter-spacing: 1.8mm; /* Abstand passend zu den SVG-Kästchen */
+    z-index: 3;
+}
+
+.header-info {
+    position: absolute;
+    top: 42.5mm;
+    left: 51mm;
+    width: 100%; /* Wichtig, damit die absoluten Kinder Platz haben */
+    height: 10mm;
+}
+
+.header-item {
+    height: 6mm;
+    line-height: 6mm;
+    padding-left: 2mm;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* Spezifische Breiten für Header */
+.w-club   { width: 18.5mm; }
+.w-org    { width: 28mm; }
+
+/* Optional: Falls "Schule:" auch festgenagelt werden muss */
+.w-school {
+    position: absolute;
+    top: 0;
+    left: 20mm; /* Wert anpassen, falls "Schule:" verschoben werden muss */
+}
+
+/* Die Institution / Stadt an die richtige Stelle zwingen */
+.w-city {
+    position: absolute;
+    top: -27mm;  /* Feintuning für die Höhe (ggf. auf 0 setzen) */
+    left: 125mm; /* Abstand von links (nach Verein/Schule/Org Kästchen) */
+    
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.mark-institution-type {
+    position: absolute;
+    /* Vertikal: Je nach Kästchenhöhe anpassen */
+    top: -26.8mm; 
+    
+    /* Horizontal: Abstand vom Start der Zeile (linkes Kästchen) */
+    /* 5mm  = ca. 1. Kästchen (Verein) */
+    /* 23mm = ca. 2. Kästchen (Schule) <-- Startwert */
+    /* 45mm = ca. 3. Kästchen (Org) */
+    left: 69.5mm; 
+    
+    font-weight: bold;
+    font-size: 11pt; /* Etwas größer, damit es wie ein Stift-Kreuz wirkt */
+    font-family: Arial, sans-serif;
+    z-index: 5;
+}
+
+/* --- Tabellen-Layout --- */
+.table-container {
+    background: transparent !important;
+    position: absolute;
+    top: 99.5mm; /* Diesen Wert leicht variieren (96 - 98mm), bis es perfekt in die Zeilen rutscht */
+    left: 12.9mm;
+}
+
+table {
+    background-color: transparent !important; /* Erzwingt Transparenz */
+    border-collapse: collapse;
+    table-layout: fixed;
+    border-spacing: 0;
+    width: auto;
+}
+
+tr {
+    background-color: transparent !important; /* Erzwingt Transparenz */
+    height: 5.75mm; /* Exakt das Maß der Formularzeilen */
+}
+
+td {
+    background-color: transparent !important; /* Erzwingt Transparenz */
+    height: 5.75mm;
+    border: none;
+    color: #000000;
+    padding: 0;
+    padding-left: 1mm;
+    white-space: nowrap;
+    overflow: hidden;
+    vertical-align: middle;
+    font-size: 9pt;
+}
+
+/* --- Spaltenbreiten & Ausrichtung --- */
+.col-name    { width: 64mm; }
+.col-gender  { width: 5.2mm; text-align: center; padding-left: 0; }
+.col-birth   { width: 19mm; text-align: center; padding-left: 0; }
+
+.col-dis-nr  { width: 5.2mm; text-align: center; padding-left: 0; }
+.col-dis-res { width: 19mm; text-align: center; padding-left: 0; }
+.col-dis-pts { width: 8mm; text-align: center; padding-left: 0; }
+
+.col-swim    { width: 8mm; text-align: center; padding-left: 0; }
+.col-sum     { width: 8mm; text-align: center; padding-left: 0; font-weight: bold; }
+
+/* --- Footer (Prüfer & Datum) --- */
+.footer-verifier {
+    position: absolute;
+    top: 169mm; /* Kalkuliert aus margin-top static-content footer */
+    left: 12.3mm;
+    width: 90mm;
+    font-size: 10pt;
+    z-index: 3;
+}
+
+.footer-date {
+    position: absolute;
+    top: 182mm; /* Angepasst an das Formular */
+    left: 103mm;
+    font-size: 10pt;
+    z-index: 3;
+}
+
+/* Hilfsklasse für Fettschrift ohne Inline-Style */
+.fw-bold {
+    font-weight: bold;
+}

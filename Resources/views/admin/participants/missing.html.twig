@@ -1,0 +1,86 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block page_title %}{{ _('Benutzer nacherfassen') }}{% endblock %}
+
+{% block content %}
+    {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'participants_manage'} %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading d-flex justify-content-between">
+            <h3 class="panel-title">{{ _('IServ-Benutzer manuell hinzufügen') }}</h3>
+            <a href="{{ path('sportabzeichen_admin_participants_index') }}" class="btn btn-default btn-sm">
+                {{ icon('arrow-left') }} {{ _('Zurück zur Liste') }}
+            </a>
+        </div>
+
+        <div class="panel-body">
+             
+            <form method="get" action="{{ path('sportabzeichen_admin_participants_missing') }}" class="mb-3">
+                <div class="input-group">
+                    <input type="text" name="q" class="form-control" 
+                           placeholder="{{ _('Nach Name suchen (mind. 3 Zeichen)...') }}" 
+                           value="{{ searchTerm }}" autofocus>
+                    <span class="input-group-btn">
+                        <button class="btn btn-primary" type="submit">{{ icon('search') }} {{ _('Suchen') }}</button>
+                    </span>
+                </div>
+                <div class="help-block small">
+                    {{ _('Benutzer, die bereits in der Teilnehmerliste sind, werden hier ausgeblendet.') }}
+                </div>
+            </form>
+
+            <hr>
+
+            {% if missingUsers is empty %}
+                {% if searchTerm %}
+                    <div class="alert alert-warning">
+                        {{ icon('warning') }} {{ _('Keine passenden Benutzer gefunden (oder sie sind bereits Teilnehmer).') }}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        {{ icon('info-circle') }} {{ _('Bitte geben Sie einen Namen ein, um Benutzer zu suchen.') }}
+                    </div>
+                {% endif %}
+            {% else %}
+                
+                {% if limitReached %}
+                    <div class="alert alert-warning">
+                        {{ _('Suche auf 50 Treffer begrenzt. Bitte präziser suchen.') }}
+                    </div>
+                {% endif %}
+
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Name') }}</th>
+                            <th>{{ _('Benutzername') }}</th>
+                            <th>{{ _('Klasse/Gruppen') }}</th>
+                            <th class="text-end">{{ _('Aktion') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for user in missingUsers %}
+                        <tr>
+                            <td><strong>{{ user.lastname }}</strong>, {{ user.firstname }}</td>
+                            <td><code>{{ user.username }}</code></td>
+                            <td>
+                                {% for group in user.groups %}
+                                    <span class="label label-default">{{ group.name }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endfor %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{{ path('sportabzeichen_admin_participants_add', {username: user.username}) }}" 
+                                   class="btn btn-success btn-sm">
+                                    {{ icon('plus') }} {{ _('Hinzufügen') }}
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

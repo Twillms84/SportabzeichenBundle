@@ -1,0 +1,32 @@
+{% extends "@IServCore/page.html.twig" %}
+
+{% block page_title %}{{ 'Prüfung bearbeiten'|trans }}{% endblock %}
+
+{% block page_content %}
+    <div class="content">
+        <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-default mb-3">
+            {{ icon('arrow-left') }} {{ 'Zurück'|trans }}
+        </a>
+
+        <h2>{{ 'Prüfung bearbeiten'|trans }}</h2>
+
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">{{ 'Bezeichnung (optional)'|trans }}</label>
+                <input type="text" name="exam_name" class="form-control" value="{{ exam.exam_name }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">{{ 'Jahr'|trans }} *</label>
+                <input type="number" name="exam_year" class="form-control" required value="{{ exam.exam_year }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">{{ 'Datum'|trans }}</label>
+                <input type="date" name="exam_date" class="form-control" value="{{ exam.exam_date }}">
+            </div>
+
+            <button type="submit" class="btn btn-primary">{{ 'Speichern'|trans }}</button>
+        </form>
+    </div>
+{% endblock %}

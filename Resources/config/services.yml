@@ -5,20 +5,29 @@ services:
         autowire: true
         public: false
 
+    # Controller explizit laden
+    PulsR\SportabzeichenBundle\Controller\:
+        resource: '../../Controller' # Kein /* am Ende, zeigt auf den Ordner
+        public: true
+        tags: ['controller.service_arguments']
+
+    # Service explizit laden
+    PulsR\SportabzeichenBundle\Service\:
+        resource: '../../Service'
+
+    # Repositories explizit laden
+    PulsR\SportabzeichenBundle\Repository\:
+        resource: '../../Repository'
+
     PulsR\SportabzeichenBundle\EventListener\MenuListener:
         arguments:
             - '@security.authorization_checker'
         tags:
             - { name: kernel.event_listener, event: iserv.menu.main, method: onBuildMainMenu}
-
-    PulsR\SportabzeichenBundle\Controller\:
-        resource: '../../Controller/*'
-        public: true
-        tags: ['controller.service_arguments']
-
-    PulsR\SportabzeichenBundle\Crud\:
-        resource: '../../Crud/*'
-        public: true
-        tags: ['iserv.crud']
-        autowire: true
-        autoconfigure: true
+        
+ #   PulsR\SportabzeichenBundle\Crud\:
+ #       resource: '../../Crud/*'
+ #       public: true
+ #       tags: ['iserv.crud']
+ #       autowire: true
+ #       autoconfigure: true
