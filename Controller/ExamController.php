@@ -137,6 +137,9 @@ final class ExamController extends AbstractPageController
 
     // --- HILFSMETHODEN (Strict Mode: Nur vollständige Datensätze) ---
 
+    // --- HILFSMETHODEN (Back to Basics) ---
+
+    // Das ist DEIN funktionierender Code (unverändert)
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
         $users = $conn->fetchAllAssociative("
@@ -145,27 +148,17 @@ final class ExamController extends AbstractPageController
         ", [$class]);
 
         foreach ($users as $u) {
-            $u = array_change_key_case($u, CASE_LOWER);
-            
-            if (empty($u['importid'])) continue;
+            // Falls der Key doch mal groß geschrieben ist (Sicherheitsnetz)
+            $importId = $u['importid'] ?? $u['ImportID'] ?? null;
+            if (!$importId) continue;
 
-            // VERSCHÄRFTE ABFRAGE:
-            // Wir fordern 'AND geburtsdatum IS NOT NULL'.
-            // Das sortiert User 10131 (ohne Datum) sofort aus.
             $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum 
-                FROM sportabzeichen_participants 
-                WHERE import_id = ? 
-                AND geburtsdatum IS NOT NULL
-            ", [$u['importid']]);
+                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+            ", [$importId]);
 
-            // Wenn SQL nichts liefert (weil User fehlt oder kein Datum hat) -> SKIP
-            if (!$participant) continue;
-            
-            $participant = array_change_key_case($participant, CASE_LOWER);
-
-            // Letzter Sicherheits-Check: Existiert die ID im Array?
-            if (!isset($participant['id'])) continue;
+            // WICHTIG: Das hier hat funktioniert, weil es User ohne Geburtsdatum (10131)
+            // sofort aussortiert, BEVOR auf ['id'] zugegriffen wird.
+            if (!$participant || empty($participant['geburtsdatum'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -176,6 +169,7 @@ final class ExamController extends AbstractPageController
         }
     }
 
+    // Das ist die angepasste Gruppen-Funktion (gleiche Logik wie oben + Username Fallback)
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
@@ -187,36 +181,28 @@ final class ExamController extends AbstractPageController
             
             $row = false;
 
-            // A: Suche per ImportID (Nur mit Geburtsdatum!)
+            // 1. Versuch: Über ImportID
             if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
-                    SELECT id, geburtsdatum 
-                    FROM sportabzeichen_participants 
-                    WHERE import_id = ? 
-                    AND geburtsdatum IS NOT NULL
+                    SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
             }
 
-            // B: Suche per Username (Nur mit Geburtsdatum!)
+            // 2. Versuch: Über Username (für Lehrer)
             if (!$row && !empty($username)) {
                 $row = $conn->fetchAssociative("
-                    SELECT id, geburtsdatum 
-                    FROM sportabzeichen_participants 
-                    WHERE username = ? 
-                    AND geburtsdatum IS NOT NULL
+                    SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
             }
 
-            // Wenn immer noch nichts gefunden -> User überspringen (SKIP)
-            if (!$row) continue;
+            // WICHTIG: Exakt die gleiche Prüfung wie in deiner funktionierenden Methode.
+            // Wenn kein User gefunden ODER kein Geburtsdatum da ist -> Raus hier.
+            // Das schützt vor dem Fehler bei User 10131.
+            if (!$row || empty($row['geburtsdatum'])) continue;
 
-            $row = array_change_key_case($row, CASE_LOWER);
-
-            // Sicherheits-Check
-            if (!isset($row['id'])) continue;
-            
             $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
-                
+            
+            // Da wir oben geprüft haben, dass $row existiert, können wir hier sicher zugreifen
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
