@@ -23,10 +23,9 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
         
-        // ÄNDERUNG 1: Wir filtern nicht mehr nach Creator
-        // ['creator' => $this->getUser()] wurde zu []
+        // Zeige sicherheitshalber erstmal ALLE Prüfungen (Creator-Filter raus)
         $exams = $examRepository->findBy(
-            [], // Zeige ALLE Prüfungen, egal von wem
+            [], 
             ['year' => 'DESC', 'date' => 'DESC']
         );
 
@@ -53,18 +52,23 @@ final class ExamController extends AbstractPageController
         
         $groupsForDropdown = [];
         foreach ($allGroups as $g) {
-            $groupsForDropdown[$g->getAccount()] = $g->getName();
+            // Sicherstellen, dass Account nicht null ist
+            $acc = $g->getAccount();
+            if ($acc) {
+                $groupsForDropdown[$acc] = $g->getName();
+            }
         }
 
         if ($request->isMethod('POST')) {
             try {
-                $name = trim($request->request->get('exam_name'));
+                $name = trim($request->request->get('exam_name', ''));
                 $year = (int)$request->request->get('exam_year');
                 if ($year < 100) $year += 2000;
                 
                 $dateStr = $request->request->get('exam_date');
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
+                // Array-Zugriff sicher machen mit '?? []'
                 $postData = $request->request->all();
                 $selectedClasses = $postData['classes'] ?? [];
                 $selectedGroups  = $postData['groups'] ?? [];
@@ -74,36 +78,37 @@ final class ExamController extends AbstractPageController
                 $exam->setYear($year);
                 $exam->setDate($date);
                 
-                // ÄNDERUNG 2: Creator auskommentiert
+                // Creator vorerst rauslassen, um Fehlerquelle auszuschließen
                 // $exam->setCreator($this->getUser());
 
                 $em->persist($exam);
-                $em->flush();
+                $em->flush(); // Hier wird die ID generiert
 
-                $count = 0;
+                $examId = $exam->getId();
+                if (!$examId) {
+                    throw new \Exception("Prüfung konnte nicht gespeichert werden (keine ID).");
+                }
 
-                // A. Klassen
+                // A. Klassen importieren
                 if (!empty($selectedClasses) && is_array($selectedClasses)) {
                     foreach ($selectedClasses as $singleClass) {
-                        $this->importParticipantsFromClass($conn, $exam->getId(), $year, $singleClass);
-                        $count++;
+                        $this->importParticipantsFromClass($conn, $examId, $year, (string)$singleClass);
                     }
                 }
 
-                // B. Gruppen
+                // B. Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
-                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
-                        $count++;
+                        $this->importParticipantsFromGroup($em, $conn, $exam, (string)$groupAccount);
                     }
                 }
 
-                $this->addFlash('success', 'Prüfung erfolgreich angelegt (OHNE Creator).');
+                $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
-                // Wir geben den kompletten Trace aus, falls es knallt
-                $this->addFlash('error', 'Fehler: ' . $e->getMessage());
+                // Zeigt den echten Fehlertext an, damit wir wissen, was los ist
+                $this->addFlash('error', 'CRASH: ' . $e->getMessage() . ' in Zeile ' . $e->getLine());
             }
         }
 
@@ -113,68 +118,113 @@ final class ExamController extends AbstractPageController
         ]);
     }
 
-    // --- HILFSMETHODE 1: KLASSEN ---
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        $importIds = $conn->fetchFirstColumn("
-            SELECT importid FROM users 
-            WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
-        ", [$class]);
+        // KORREKTUR: 'import_id' statt 'importid' (IServ Standard)
+        // Wir fangen auch Fehler ab, falls die Spalte doch anders heißt
+        try {
+            $importIds = $conn->fetchFirstColumn("
+                SELECT import_id FROM users 
+                WHERE auxinfo = ? AND import_id IS NOT NULL AND import_id <> ''
+            ", [$class]);
+        } catch (\Throwable $e) {
+            // Fallback: Versuch es mit 'importid' (ohne Unterstrich), falls die DB alt ist
+            try {
+                 $importIds = $conn->fetchFirstColumn("
+                    SELECT importid FROM users 
+                    WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
+                ", [$class]);
+            } catch (\Throwable $e2) {
+                return; // Aufgeben, wenn beide Spaltennamen nicht existieren
+            }
+        }
 
         foreach ($importIds as $importId) {
             if (empty($importId)) continue;
 
-            $row = $conn->fetchNumeric("
-                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
-            ", [$importId]);
-
-            if (!$row || empty($row[1])) continue;
-
-            $pId = $row[0];
-            $pDob = $row[1];
-            $age = $examYear - (int)substr($pDob, 0, 4);
-
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-            ", [$examId, $pId, $age]);
+            $this->insertParticipantByImportId($conn, $examId, $examYear, $importId);
         }
     }
 
-    // --- HILFSMETHODE 2: GRUPPEN ---
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
         foreach ($group->getUsers() as $user) {
+            // Methoden-Aufruf sicherstellen
+            if (!method_exists($user, 'getImportId')) continue;
+
             $importId = $user->getImportId();
             $username = $user->getUsername();
-            
-            $row = false;
+            $examId = $exam->getId();
+            $examYear = $exam->getYear();
 
+            // Versuch 1: Über Import-ID
             if (!empty($importId)) {
-                $row = $conn->fetchNumeric("
-                    SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
-                ", [$importId]);
+                $success = $this->insertParticipantByImportId($conn, $examId, $examYear, $importId);
+                if ($success) continue; // Wenn geklappt, weiter zum nächsten User
             }
 
-            if (!$row && !empty($username)) {
+            // Versuch 2: Über Username (Fallback)
+            if (!empty($username)) {
+                // Suche Teilnehmer über Username
                 $row = $conn->fetchNumeric("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
+
+                if ($this->isValidParticipantRow($row)) {
+                    $this->doInsert($conn, $examId, $examYear, $row);
+                }
             }
-
-            if (!$row || empty($row[1])) continue;
-
-            $pId = $row[0];
-            $pDob = $row[1];
-            $age = $exam->getYear() - (int)substr($pDob, 0, 4);
-            
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-            ", [$exam->getId(), $pId, $age]);
         }
+    }
+
+    /**
+     * Zentrale Methode, um "Undefined Array Key" sicher zu verhindern
+     */
+    private function insertParticipantByImportId(Connection $conn, int $examId, int $examYear, string $importId): bool
+    {
+        $row = $conn->fetchNumeric("
+            SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+        ", [$importId]);
+
+        if ($this->isValidParticipantRow($row)) {
+            $this->doInsert($conn, $examId, $examYear, $row);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Prüft extrem streng, ob das Ergebnis der DB brauchbar ist
+     */
+    private function isValidParticipantRow($row): bool
+    {
+        // 1. Ist es überhaupt ein Array? (fetchNumeric kann false liefern)
+        if (!is_array($row)) return false;
+        
+        // 2. Existieren die Indexe 0 (ID) und 1 (Datum)?
+        if (!array_key_exists(0, $row) || !array_key_exists(1, $row)) return false;
+
+        // 3. Ist das Datum gefüllt?
+        if (empty($row[1])) return false;
+
+        return true;
+    }
+
+    private function doInsert(Connection $conn, int $examId, int $examYear, array $row): void
+    {
+        $pId = $row[0];
+        $pDob = $row[1]; // String, z.B. "2010-05-01"
+
+        // Sicherstellen, dass substr nicht crasht
+        $dobYear = (int)substr((string)$pDob, 0, 4);
+        $age = $examYear - $dobYear;
+
+        $conn->executeStatement("
+            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+            VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+        ", [$examId, $pId, $age]);
     }
 }
