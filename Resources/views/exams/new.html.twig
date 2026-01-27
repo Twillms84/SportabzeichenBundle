@@ -20,7 +20,7 @@
         {% endfor %}
 
         <form method="post">
-            {# --- TEIL 1: Stammdaten der Prüfung --- #}
+            {# --- TEIL 1: Stammdaten --- #}
             <div class="panel panel-default">
                 <div class="panel-heading">
                     <h3 class="panel-title">{{ 'Stammdaten'|trans }}</h3>
@@ -51,29 +51,28 @@
                 </div>
                 <div class="panel-body">
                     <p class="text-muted">
-                        {{ 'Hier kannst du Klassen (Schüler) oder Gruppen (z.B. Lehrer, AGs) auswählen. Alle Mitglieder werden automatisch in die Prüfung importiert.'|trans }}
+                        {{ 'Wähle hier Klassen oder Gruppen aus. Alle enthaltenen Benutzer werden importiert.'|trans }}
                     </p>
 
                     <div class="row">
                         {# SPALTE 1: KLASSEN #}
                         <div class="col-md-6 mb-3">
                             <label class="form-label" for="classes">{{ 'Klassen'|trans }}</label>
-                            <select name="classes[]" id="classes" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Klassen wählen (z.B. 5a)...'|trans }}">
+                            {# classes[] ist wichtig für PHP #}
+                            <select name="classes[]" id="classes" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Klasse wählen...'|trans }}">
+                                {# classes ist ein einfaches Array: ['5a', '5b', ...] #}
                                 {% for c in classes %}
                                     <option value="{{ c }}">{{ c }}</option>
                                 {% endfor %}
                             </select>
                         </div>
 
-                        {# SPALTE 2: GRUPPEN (NEU) #}
+                        {# SPALTE 2: GRUPPEN #}
                         <div class="col-md-6 mb-3">
                             <label class="form-label" for="groups">{{ 'Gruppen'|trans }}</label>
-                            {# WICHTIG: name="groups[]" passend zum Controller #}
-                            <select name="groups[]" id="groups" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Gruppen wählen (z.B. Lehrer)...'|trans }}">
-                                {# 
-                                   Im Controller haben wir ein assoziatives Array gebaut: 
-                                   Key = Account-Name (z.B. 'lehrer'), Value = Anzeigename (z.B. 'Lehrer') 
-                                #}
+                            {# groups[] ist wichtig für PHP #}
+                            <select name="groups[]" id="groups" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Gruppe wählen...'|trans }}">
+                                {# groups ist ein assoziatives Array: key=account, value=Name #}
                                 {% for account, name in groups %}
                                     <option value="{{ account }}">{{ name }}</option>
                                 {% endfor %}
@@ -82,7 +81,7 @@
                     </div>
 
                     <small class="text-muted d-block mt-2">
-                        {{ icon('info-sign') }} {{ 'Hinweis: Wenn Personen in mehreren Gruppen sind, werden sie nur einmal importiert.'|trans }}
+                        {{ icon('info-sign') }} {{ 'Doppelte Einträge (z.B. Schüler ist in Klasse UND Gruppe) werden automatisch gefiltert.'|trans }}
                     </small>
                 </div>
             </div>

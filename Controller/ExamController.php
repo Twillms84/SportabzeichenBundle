@@ -7,11 +7,10 @@ namespace PulsR\SportabzeichenBundle\Controller;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use IServ\CoreBundle\Controller\AbstractPageController;
-use IServ\CoreBundle\Entity\Group; // <--- Wichtig für Gruppen
+use IServ\CoreBundle\Entity\Group;
 use IServ\CoreBundle\Entity\User;
 use PulsR\SportabzeichenBundle\Entity\Exam;
 use PulsR\SportabzeichenBundle\Repository\ExamRepository;
-use PulsR\SportabzeichenBundle\Repository\SwimmingProofRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -23,9 +22,9 @@ final class ExamController extends AbstractPageController
     public function index(ExamRepository $examRepository): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
-
+        
         $exams = $examRepository->findBy(
-            ['creator' => $this->getUser()], // Optional: Nur eigene anzeigen
+            ['creator' => $this->getUser()],
             ['year' => 'DESC', 'date' => 'DESC']
         );
 
@@ -39,14 +38,14 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Klassen laden (wie gehabt)
+        // 1. Klassen laden
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
             ORDER BY auxinfo
         ");
 
-        // 2. Gruppen laden (NEU)
+        // 2. Gruppen laden
         $groupRepo = $em->getRepository(Group::class);
         $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
         
@@ -66,9 +65,8 @@ final class ExamController extends AbstractPageController
                 
                 $postData = $request->request->all();
                 $selectedClasses = $postData['classes'] ?? [];
-                $selectedGroups  = $postData['groups'] ?? []; // <--- NEU
+                $selectedGroups  = $postData['groups'] ?? [];
 
-                // Entity anlegen
                 $exam = new Exam();
                 $exam->setName($name);
                 $exam->setYear($year);
@@ -80,7 +78,7 @@ final class ExamController extends AbstractPageController
 
                 $count = 0;
 
-                // A. Klassen importieren
+                // A. Klassen
                 if (!empty($selectedClasses) && is_array($selectedClasses)) {
                     foreach ($selectedClasses as $singleClass) {
                         $this->importParticipantsFromClass($conn, $exam->getId(), $year, $singleClass);
@@ -88,7 +86,7 @@ final class ExamController extends AbstractPageController
                     }
                 }
 
-                // B. Gruppen importieren (NEU)
+                // B. Gruppen
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
@@ -106,65 +104,48 @@ final class ExamController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
             'classes' => $classes,
-            'groups'  => $groupsForDropdown // <--- ans Template übergeben
+            'groups'  => $groupsForDropdown
         ]);
     }
 
-    // --- HILFSMETHODE 1: KLASSEN (Mit Debug-Falle) ---
+    // --- HILFSMETHODE 1: KLASSEN (Überarbeitet: Index-basiert) ---
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // Debug: Hole Zeilennamen als Kleinbuchstaben erzwingen
-        $users = $conn->fetchAllAssociative("
+        // TRICK 1: fetchFirstColumn
+        // Wir holen direkt ein Array von Strings: ['123', '456', ...].
+        // Kein Array-Key 'importid' mehr nötig!
+        $importIds = $conn->fetchFirstColumn("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
-        foreach ($users as $index => $u) {
-            // Keys normalisieren
-            $u = array_change_key_case($u, CASE_LOWER);
+        foreach ($importIds as $importId) {
+            // Falls fetchFirstColumn doch mal leere Strings liefert
+            if (empty($importId)) continue;
 
-            // DEBUG CHECK 1: Existiert importid?
-            if (!array_key_exists('importid', $u)) {
-                echo "<h1>DEBUG ALARM IN KLASSE (User Index: $index)</h1>";
-                echo "<p>Fehler: Key 'importid' fehlt in der users-Tabelle Abfrage.</p>";
-                echo "<pre>"; print_r($u); echo "</pre>";
-                die(); // Stop script
-            }
-            
-            if (empty($u['importid'])) continue;
-
-            $participant = $conn->fetchAssociative("
+            // TRICK 2: fetchNumeric
+            // Gibt [0 => id, 1 => geburtsdatum] zurück.
+            // Egal ob die DB 'ID', 'id', 'Id' liefert -> Wir nehmen Index 0.
+            $row = $conn->fetchNumeric("
                 SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
-            ", [$u['importid']]);
+            ", [$importId]);
 
-            if (!$participant) continue;
+            // Prüfung: Array da? Datum an Stelle 1 da?
+            if (!$row || empty($row[1])) continue;
 
-            // Keys normalisieren
-            $participant = array_change_key_case($participant, CASE_LOWER);
+            $pId = $row[0];
+            $pDob = $row[1];
 
-            // DEBUG CHECK 2: Existiert id im participant array?
-            if (!array_key_exists('id', $participant)) {
-                echo "<h1>DEBUG ALARM IN KLASSE (Participant)</h1>";
-                echo "<p>Fehler: Key 'id' fehlt im Ergebnis von sportabzeichen_participants.</p>";
-                echo "<p>ImportID war: " . $u['importid'] . "</p>";
-                echo "<h3>Das Array sieht so aus:</h3>";
-                echo "<pre>"; print_r($participant); echo "</pre>";
-                die(); // Stop script
-            }
-
-            // Wenn wir hier sind, MUSS 'id' da sein.
-            if (empty($participant['geburtsdatum'])) continue;
-
-            $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
+            $age = $examYear - (int)substr($pDob, 0, 4);
 
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-            ", [$examId, $participant['id'], $age]);
+            ", [$examId, $pId, $age]);
         }
     }
 
-    // --- HILFSMETHODE 2: GRUPPEN (Mit Debug-Falle) ---
+    // --- HILFSMETHODE 2: GRUPPEN (Überarbeitet: Index-basiert) ---
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
@@ -176,41 +157,33 @@ final class ExamController extends AbstractPageController
             
             $row = false;
 
+            // Suche 1: ImportID
             if (!empty($importId)) {
-                $row = $conn->fetchAssociative("
+                // TRICK 2: fetchNumeric auch hier
+                $row = $conn->fetchNumeric("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
                 ", [$importId]);
             }
 
+            // Suche 2: Username
             if (!$row && !empty($username)) {
-                $row = $conn->fetchAssociative("
+                $row = $conn->fetchNumeric("
                     SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?
                 ", [$username]);
             }
 
-            if (!$row) continue;
+            // Prüfung: Array da? Datum an Stelle 1 da?
+            if (!$row || empty($row[1])) continue;
 
-            // Keys normalisieren
-            $row = array_change_key_case($row, CASE_LOWER);
+            $pId = $row[0]; // ID ist immer Index 0
+            $pDob = $row[1]; // Datum ist immer Index 1
 
-            // DEBUG CHECK 3: Existiert id im Gruppen-User array?
-            if (!array_key_exists('id', $row)) {
-                echo "<h1>DEBUG ALARM IN GRUPPE</h1>";
-                echo "<p>User: $username (ImportID: $importId)</p>";
-                echo "<p>Fehler: Key 'id' fehlt im Ergebnis von sportabzeichen_participants.</p>";
-                echo "<h3>Das Array sieht so aus:</h3>";
-                echo "<pre>"; print_r($row); echo "</pre>";
-                die(); // Stop script
-            }
-
-            if (empty($row['geburtsdatum'])) continue;
-
-            $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
+            $age = $exam->getYear() - (int)substr($pDob, 0, 4);
             
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-            ", [$exam->getId(), $row['id'], $age]);
+            ", [$exam->getId(), $pId, $age]);
         }
     }
 }
