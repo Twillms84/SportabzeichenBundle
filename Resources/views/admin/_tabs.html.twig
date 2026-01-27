@@ -1,81 +1,36 @@
 {# templates/admin/_tabs.html.twig #}
 
-<div class="sportabzeichen-nav-container">
-    {# 
-       Wir nutzen 'nav-pills' statt 'nav-tabs', weil diese robuster sind.
-       Die Klasse 'nav-stacked-mobile' definieren wir gleich unten im CSS.
-    #}
-    <ul class="nav nav-pills nav-stacked-mobile">
-        
-        <li class="{{ activeTab == 'dashboard' ? 'active' : '' }}">
-            <a href="{{ path('sportabzeichen_admin_dashboard') }}">
-                {{ icon('home') }} 
-                <span class="hidden-xs">{{ _('Übersicht') }}</span>
-                <span class="visible-xs-inline">{{ _('Übersicht') }}</span>
-            </a>
-        </li>
+{# 1. Konfiguration: Wir definieren die Tabs zentral, damit wir den HTML-Code nicht doppelt pflegen müssen #}
+{% set tabs = [
+    { id: 'dashboard', route: 'sportabzeichen_admin_dashboard', icon: 'home', label: 'Übersicht' },
+    { id: 'participants_manage', route: 'sportabzeichen_admin_participants_index', icon: 'users', label: 'Teilnehmer' },
+    { id: 'import', route: 'sportabzeichen_admin_upload_participants', icon: 'upload', label: 'Import' },
+    { id: 'requirements', route: 'sportabzeichen_admin_upload', icon: 'list-alt', label: 'Anforderungen' }
+] %}
 
-        <li class="{{ activeTab == 'participants_manage' ? 'active' : '' }}">
-            <a href="{{ path('sportabzeichen_admin_participants_index') }}">
-                {{ icon('users') }} {{ _('Teilnehmer') }}
-            </a>
-        </li>
-
-        <li class="{{ activeTab == 'import' ? 'active' : '' }}">
-            <a href="{{ path('sportabzeichen_admin_upload_participants') }}">
-                {{ icon('upload') }} {{ _('Import') }}
-            </a>
-        </li>
-
-        <li class="{{ activeTab == 'requirements' ? 'active' : '' }}">
-            <a href="{{ path('sportabzeichen_admin_upload') }}">
-                {{ icon('list-alt') }} {{ _('Anforderungen') }}
-            </a>
-        </li>
-
+{# 2. Desktop-Ansicht: Klassische Tabs (Versteckt auf Handy 'hidden-xs') #}
+<div class="hidden-xs" style="margin-bottom: 20px;">
+    <ul class="nav nav-tabs">
+        {% for tab in tabs %}
+            <li class="{{ activeTab == tab.id ? 'active' : '' }}">
+                <a href="{{ path(tab.route) }}">
+                    {{ icon(tab.icon) }} {{ _(tab.label) }}
+                </a>
+            </li>
+        {% endfor %}
     </ul>
 </div>
 
-{# WICHTIG: Ein Clearfix, damit nachfolgender Inhalt nicht hochrutscht #}
-<div class="clearfix" style="margin-bottom: 20px;"></div>
-
-<style>
-    /* Desktop-Ansicht: Normaler Abstand */
-    .sportabzeichen-nav-container {
-        margin-bottom: 20px;
-        margin-top: 10px; /* Sicherheitsabstand nach oben */
-    }
-
-    /* Handy-Ansicht (IServ Breakpoint oft bei 768px) */
-    @media (max-width: 767px) {
-        .sportabzeichen-nav-container {
-            background-color: #f5f5f5; /* Leichter Hintergrund zur Abgrenzung */
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-
-        /* Macht aus den Tabs breite Buttons untereinander */
-        .nav-stacked-mobile > li {
-            float: none;
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        .nav-stacked-mobile > li > a {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            text-align: left;
-            padding: 10px 15px;
-            background-color: #fff;
-        }
-
-        /* Aktiver Tab hervorgehoben */
-        .nav-stacked-mobile > li.active > a,
-        .nav-stacked-mobile > li.active > a:hover {
-            background-color: #337ab7; /* IServ Blau */
-            color: #fff;
-            border-color: #337ab7;
-        }
-    }
-</style>
+{# 3. Handy-Ansicht: Gestapelte "Pills" (Nur sichtbar auf Handy 'visible-xs') #}
+<div class="visible-xs" style="margin-bottom: 20px;">
+    {# 'nav-pills' sieht aus wie Buttons, 'nav-stacked' stapelt sie untereinander #}
+    <ul class="nav nav-pills nav-stacked">
+        {% for tab in tabs %}
+            <li class="{{ activeTab == tab.id ? 'active' : '' }}">
+                <a href="{{ path(tab.route) }}">
+                    {{ icon(tab.icon) }} {{ _(tab.label) }}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
