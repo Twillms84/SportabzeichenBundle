@@ -44,14 +44,16 @@ final class ExamResultController extends AbstractPageController
     #[Route('/exam/{id}', name: 'index', methods: ['GET'])]
     public function index(Exam $exam, Request $request): Response
     {
-        $selectedClass = $request->query->get('class');
+        // Der gewünschte Filter (kann eine Klasse sein "5a" oder eine Gruppe "Lehrer")
+        $selectedFilter = $request->query->get('class'); // Wir lassen den Param-Namen 'class' der Einfachheit halber
 
         // 1. Teilnehmer mit allen relevanten Daten laden (Eager Loading)
         $qb = $this->em->createQueryBuilder();
-        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd')
+        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd', 'ug') // 'ug' für UserGroups dazu
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->join('p.user', 'u')
+            ->leftJoin('u.groups', 'ug') // Gruppen mitladen!
             ->leftJoin('p.swimmingProofs', 'sp')
             ->leftJoin('ep.results', 'res')
             ->leftJoin('res.discipline', 'd')
@@ -65,28 +67,59 @@ final class ExamResultController extends AbstractPageController
         if ($sort === 'lastname') {
             $qb->orderBy('u.lastname', $order)->addOrderBy('u.firstname', 'ASC');
         } else {
-            $qb->orderBy('u.lastname', 'ASC'); // Default fallback
+            $qb->orderBy('u.lastname', 'ASC'); 
         }
 
-        if ($selectedClass) {
-            $qb->andWhere('u.auxinfo = :class')->setParameter('class', $selectedClass);
-        }
+        // ACHTUNG: Wir filtern hier NICHT mehr per SQL nach auxinfo, 
+        // weil wir sonst die Gruppen-User verlieren würden. Das machen wir gleich in PHP.
 
         $examParticipants = $qb->getQuery()->getResult();
 
-        // 2. Daten für Twig aufbereiten
+        // 2. Daten aufbereiten & Filtern
         $participantsData = [];
         $resultsData = [];
+        $filterOptions = []; // Hier sammeln wir alle gefundenen Klassen/Gruppen
         $today = new \DateTime();
 
         foreach ($examParticipants as $ep) {
+            $user = $ep->getParticipant()->getUser();
+            
+            // --- LOGIK: KLASSE ODER GRUPPE ERMITTELN ---
+            $rawClass = trim((string)$user->getAuxinfo());
+            $categoryName = 'Sonstige';
+
+            if ($rawClass !== '') {
+                // User hat eine Klasse (z.B. "5a")
+                $categoryName = $rawClass;
+            } else {
+                // User hat KEINE Klasse -> Wir schauen in die Gruppen
+                // Wir nehmen einfach die erste Gruppe, die wir finden (oder eine spezifische Logik)
+                $groups = $user->getGroups();
+                foreach ($groups as $g) {
+                    // Optional: Systemgruppen wie "users" oder "teachers" ignorieren, wenn gewünscht?
+                    // Hier nehmen wir einfach den Namen der ersten Gruppe, die da ist.
+                    $categoryName = $g->getName();
+                    break; // Erste Gruppe reicht als Einordnung
+                }
+            }
+
+            // Für das Dropdown sammeln
+            $filterOptions[] = $categoryName;
+
+            // --- FILTER PRÜFUNG ---
+            // Wenn ein Filter gesetzt ist UND dieser User nicht dazu passt -> Überspringen
+            if ($selectedFilter && $categoryName !== $selectedFilter) {
+                continue;
+            }
+
+            // --- AB HIER DEINE BESTEHENDE LOGIK ---
+
             $hasSwimming = false;
             $swimmingExpiry = null;
             $metVia = null; 
             
-            // Schwimmstatus prüfen (Gültigkeit oder aktuelles Jahr)
+            // Schwimmstatus prüfen
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
-                // Check: Prüfung im gleichen Jahr ODER noch gültig
                 if ($proof->getExamYear() == $exam->getYear() || ($proof->getValidUntil() && $proof->getValidUntil() >= $today)) {
                     $hasSwimming = true;
                     $metVia = $proof->getRequirementMetVia(); 
@@ -96,7 +129,7 @@ final class ExamResultController extends AbstractPageController
                 }
             }
 
-            // Ergebnisse indizieren: [ep_id][discipline_id] => ResultData
+            // Ergebnisse indizieren
             foreach ($ep->getResults() as $res) {
                 $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
                     'leistung' => $res->getLeistung(),
@@ -109,9 +142,9 @@ final class ExamResultController extends AbstractPageController
             $participantsData[] = [
                 'entity' => $ep,
                 'ep_id' => $ep->getId(),
-                'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
-                'nachname' => $ep->getParticipant()->getUser()->getLastname(),
-                'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
+                'vorname' => $user->getFirstname(),
+                'nachname' => $user->getLastname(),
+                'klasse' => $categoryName, // WICHTIG: Hier nutzen wir jetzt unsere ermittelte Kategorie!
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(),
                 'total_points' => $ep->getTotalPoints(),
@@ -122,7 +155,12 @@ final class ExamResultController extends AbstractPageController
             ];
         }
 
+        // Filter-Optionen bereinigen (Unique & Sortiert)
+        $filterOptions = array_unique($filterOptions);
+        sort($filterOptions);
+
         // 3. Anforderungen/Disziplinen strukturiert laden
+        // (Dieser Teil bleibt exakt wie bei dir)
         $requirementsData = $this->em->createQueryBuilder()
             ->select('r', 'd')
             ->from(Requirement::class, 'r')
@@ -148,13 +186,9 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$cat][$dId]['requirements'][] = $reqRow;
         }
         
-        // Indizes für Twig-Loop glätten
         foreach($disciplines as $kat => $vals) {
             $disciplines[$kat] = array_values($vals);
         }
-
-        // 4. Listen für Filter und Dropdowns
-        $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
 
         // Spezielle Liste nur für Schwimm-Disziplinen im Dropdown
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
@@ -167,8 +201,8 @@ final class ExamResultController extends AbstractPageController
             'participants' => $participantsData,
             'disciplines' => $disciplines,
             'results' => $resultsData,
-            'classes' => $classes,
-            'selectedClass' => $selectedClass,
+            'classes' => $filterOptions, // <--- HIER NEU: Das sind jetzt Klassen UND Gruppen gemischt
+            'selectedClass' => $selectedFilter,
             'swimming_disciplines' => $swimmingDisciplines,
         ]);
     }
