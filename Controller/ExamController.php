@@ -190,4 +190,30 @@ final class ExamController extends AbstractPageController
 
             if ($importId) {
                 // Versuche existierenden Schüler zu finden
-                $row = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id
+                $row = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", [$importId]);
+                if ($row) {
+                    $participantId = $row['id'];
+                    $birthDate = $row['geburtsdatum'];
+                }
+            }
+
+            // Wenn kein Schüler gefunden wurde (z.B. Lehrer ohne Import-ID im Sportabzeichen-System),
+            // müssten wir hier eigentlich einen Teilnehmer anlegen. 
+            // HINWEIS: Das ist komplex, da wir Vorname/Nachname/Geschlecht/Geburtsdatum brauchen.
+            // IServ User Objekt hat: $user->getName(), $user->getFirstname(), $user->getLastname().
+            // Aber Geburtsdatum steht oft nicht im IServ User Objekt (Datenschutz).
+            
+            // Workaround für jetzt: Wir importieren nur User, die schon als Participant existieren.
+            // Wenn Lehrer mitmachen wollen, müssen sie vorher im "Teilnehmer"-Tab manuell oder per Import angelegt werden.
+            
+            if ($participantId && $birthDate) {
+                $age = $exam->getYear() - (int)substr($birthDate, 0, 4);
+                
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                    VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                ", [$exam->getId(), $participantId, $age]);
+            }
+        }
+    }
+}
