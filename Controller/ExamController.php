@@ -139,43 +139,39 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
+        // 1. User aus der IServ-Tabelle 'users' holen
+        // Wir holen die IServ-Import-ID
         $users = $conn->fetchAllAssociative("
             SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($users as $u) {
-            // Schritt 1: User-Keys normalisieren
+            // Normalisieren (Array-Keys klein machen), falls DB 'ImportID' liefert
             $u = array_change_key_case($u, CASE_LOWER);
             
             if (empty($u['importid'])) continue;
 
-            // Schritt 2: Teilnehmer laden
+            // 2. Passenden Participant aus 'sportabzeichen_participants' suchen
+            // WICHTIG: Wir nutzen 'import_id' und 'geburtsdatum' wie in deiner Entity definiert
             $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+                SELECT id, geburtsdatum 
+                FROM sportabzeichen_participants 
+                WHERE import_id = ?
             ", [$u['importid']]);
 
-            // Wenn kein Teilnehmer gefunden wurde -> weiter
             if (!$participant) continue;
-
-            // Schritt 3: Keys normalisieren
+            
+            // WICHTIG: Normalisieren -> 'ID' wird zu 'id'
             $participant = array_change_key_case($participant, CASE_LOWER);
 
-            // --- DEBUG START ---
-            // Wenn 'id' fehlt, werfen wir sofort einen Fehler mit dem Array-Inhalt
-            if (!array_key_exists('id', $participant)) {
-                throw new \Exception(
-                    "DEBUG ERROR (Class Import): Key 'id' fehlt! \n" .
-                    "ImportID: " . $u['importid'] . "\n" .
-                    "Gefundene DB-Daten: " . print_r($participant, true)
-                );
-            }
-            // --- DEBUG ENDE ---
+            // Prüfen ob ID und Geburtsdatum vorhanden sind
+            if (empty($participant['id']) || empty($participant['geburtsdatum'])) continue;
 
-            if (empty($participant['geburtsdatum'])) continue;
-
+            // Alter berechnen
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
+            // 3. Verknüpfung speichern
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
@@ -185,6 +181,7 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
+        // Gruppe über Entity Manager laden (IServ Core Gruppe)
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
@@ -192,22 +189,16 @@ final class ExamController extends AbstractPageController
             $importId = $user->getImportId();
 
             if ($importId) {
+                // Participant suchen
                 $row = $conn->fetchAssociative("
-                    SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
+                    SELECT id, geburtsdatum 
+                    FROM sportabzeichen_participants 
+                    WHERE import_id = ?
                 ", [$importId]);
                 
                 if ($row) {
+                    // Normalisieren
                     $row = array_change_key_case($row, CASE_LOWER);
-
-                    // --- DEBUG START ---
-                    if (!array_key_exists('id', $row)) {
-                        throw new \Exception(
-                            "DEBUG ERROR (Group Import): Key 'id' fehlt! \n" .
-                            "User: " . $user->getUsername() . "\n" .
-                            "Gefundene DB-Daten: " . print_r($row, true)
-                        );
-                    }
-                    // --- DEBUG ENDE ---
                     
                     if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
                         $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
