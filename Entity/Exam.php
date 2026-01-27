@@ -28,16 +28,16 @@ class Exam
     private ?\DateTimeInterface $date = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
-    // WICHTIG: referencedColumnName auf 'username' setzen!
-    // Damit sagt man: "Nimm den Wert aus 'creator_id' und suche ihn in der Spalte 'username' der User-Tabelle."
-    #[ORM\JoinColumn(name: 'creator_id', referencedColumnName: 'username', nullable: true)]
+    #[ORM\JoinColumn(name: 'creator_id', referencedColumnName: 'id', nullable: true)]
     private ?User $creator = null;
 
+    // --- GETTER (gibt jetzt ein User-Objekt zurück!) ---
     public function getCreator(): ?User
     {
         return $this->creator;
     }
 
+    // --- SETTER (erwartet ein User-Objekt) ---
     public function setCreator(?User $creator): self
     {
         $this->creator = $creator;

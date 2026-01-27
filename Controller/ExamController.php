@@ -77,10 +77,8 @@ final class ExamController extends AbstractPageController
                 $exam->setName($name);
                 $exam->setYear($year);
                 $exam->setDate($date);
-                
-                // Creator vorerst rauslassen, um Fehlerquelle auszuschließen
-                // $exam->setCreator($this->getUser());
 
+                $exam->setCreator($this->getUser()); 
                 $em->persist($exam);
                 $em->flush(); // Hier wird die ID generiert
 
