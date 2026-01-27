@@ -181,34 +181,52 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // Gruppe über Entity Manager laden (IServ Core Gruppe)
+        // 1. Die IServ-Gruppe laden
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
+        // 2. Alle User der Gruppe durchgehen
         foreach ($group->getUsers() as $user) {
             $importId = $user->getImportId();
+            $username = $user->getUsername();
+            
+            $row = false;
 
-            if ($importId) {
-                // Participant suchen
+            // VERSUCH A: Suche über Import-ID (falls vorhanden)
+            if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum 
                     FROM sportabzeichen_participants 
                     WHERE import_id = ?
                 ", [$importId]);
+            }
+
+            // VERSUCH B: Suche über Username (falls A fehlgeschlagen oder keine ImportID)
+            // Das ist entscheidend für Lehrer!
+            if (!$row && !empty($username)) {
+                $row = $conn->fetchAssociative("
+                    SELECT id, geburtsdatum 
+                    FROM sportabzeichen_participants 
+                    WHERE username = ?
+                ", [$username]);
+            }
+            
+            // Wenn immer noch nichts gefunden wurde, ist diese Person wohl 
+            // noch nie im Sportabzeichen-Modul erfasst worden.
+            if (!$row) continue;
+
+            // 3. Daten verarbeiten (mit Sicherheit gegen Groß-/Kleinschreibung)
+            $row = array_change_key_case($row, CASE_LOWER);
+            
+            // Wir brauchen zwingend ID und Geburtsdatum für die Altersberechnung
+            if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
                 
-                if ($row) {
-                    // Normalisieren
-                    $row = array_change_key_case($row, CASE_LOWER);
-                    
-                    if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
-                        $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
-                        
-                        $conn->executeStatement("
-                            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                            VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-                        ", [$exam->getId(), $row['id'], $age]);
-                    }
-                }
+                $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
+                
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                    VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                ", [$exam->getId(), $row['id'], $age]);
             }
         }
     }
