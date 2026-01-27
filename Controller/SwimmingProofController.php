@@ -145,32 +145,35 @@ final class SwimmingProofController extends AbstractPageController
             // LOGIK ANPASSUNG: Feedback bei historischem Nachweis
             // =================================================================
             if (!$proofToDelete) {
-                // Wir haben für 2026 nichts gefunden. 
-                // Prüfen wir, ob vielleicht ein alter, noch gültiger Nachweis existiert?
-                // Wir suchen den aktuellsten Nachweis für diesen Teilnehmer
+                // Wir haben für 2026 (examYear) nichts gefunden.
+                // Wir suchen den aktuellsten Nachweis, egal aus welchem Jahr.
                 $historicalProof = $repo->findOneBy(
                     ['participant' => $participant], 
-                    ['validUntil' => 'DESC']
+                    ['validUntil' => 'DESC'] // Den am längsten gültigen nehmen
                 );
 
-                if ($historicalProof && $historicalProof->isValidForYear($examYear)) {
-                    // Es gibt einen gültigen Nachweis, aber er ist nicht aus diesem Jahr
-                    return new JsonResponse([
-                        'success' => false,
-                        'message' => sprintf(
-                            'Der Schwimmnachweis stammt aus dem Jahr %s und ist bis %s gültig. Er kann im Prüfungsjahr %s nicht gelöscht werden.',
-                            $historicalProof->getExamYear(),
-                            $historicalProof->getValidUntil()->format('d.m.Y'),
-                            $examYear
-                        )
-                    ], 400); // 400 Bad Request sorgt für Fehler-Popup im Frontend
+                // Prüfen, ob dieser alte Nachweis noch gültig ist für das aktuelle Jahr
+                if ($historicalProof) {
+                    $validUntil = $historicalProof->getValidUntil();
+                    
+                    // Logik: Wenn das Gültigkeitsdatum (Jahr) >= Prüfungsjahr ist
+                    if ($validUntil && (int)$validUntil->format('Y') >= $examYear) {
+                        return new JsonResponse([
+                            'success' => false,
+                            'message' => sprintf(
+                                'Der Schwimmnachweis stammt aus dem Jahr %s und ist noch bis %s gültig. Er kann im aktuellen Prüfungsjahr (%s) nicht gelöscht werden, da er automatisch übernommen wird.',
+                                $historicalProof->getExamYear(),
+                                $validUntil->format('d.m.Y'),
+                                $examYear
+                            )
+                        ], 400); // 400 = Fehler-Popup im Frontend
+                    }
                 }
 
-                // Wenn gar kein Nachweis da ist, geben wir einfach OK zurück (Idempotenz)
-                // oder eine Info "Nichts zu löschen".
+                // Wenn gar kein Nachweis da ist oder er abgelaufen ist:
                 return new JsonResponse([
                     'success' => false, 
-                    'message' => 'Kein aktueller Schwimmnachweis für dieses Jahr gefunden.'
+                    'message' => 'Es wurde kein aktueller Schwimmnachweis zum Löschen gefunden.'
                 ], 400);
             }
 
