@@ -176,8 +176,8 @@
                                     {% set swimDisplayName = 'Nachweis erbracht' %}
                                 {% endif %}
 
-                                {# Daten für JS Prüfung #}
-                                {% set proofYear = p.swimming_year|default(currentYear) %} 
+                                {# --- FIX: currentYear existiert nicht, wir nutzen exam.year --- #}
+                                {% set proofYear = p.swimming_year|default(exam.year) %} 
                                 
                                 {# A) Anzeige #}
                                 <div class="swim-badge-container {{ hasSwimming ? '' : 'd-none' }}">
@@ -186,12 +186,12 @@
                                             {{ swimDisplayName }}
                                         </small>
                                         
-                                        {# DELETE BUTTON MIT DATEN #}
+                                        {# DELETE BUTTON MIT KORREKTEN DATEN FÜR JS #}
                                         <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 btn-delete-swimming mt-1" 
                                                 data-ep-id="{{ p.ep_id }}" 
-                                                data-year="{{ proofYear }}"
-                                                data-source="{{ swimSource }}"
-                                                data-current-year="{{ currentYear }}"
+                                                data-proof-year="{{ proofYear }}"     {# Das Jahr des Nachweises #}
+                                                data-exam-year="{{ exam.year }}"      {# Das Jahr der Prüfung (Referenz) #}
+                                                data-source="{{ swimSource }}"        {# Quelle #}
                                                 title="Nachweis löschen" style="font-size: 0.7rem;">
                                             {{ icon('trash')|raw }}
                                         </button>
