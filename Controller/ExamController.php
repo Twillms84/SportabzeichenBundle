@@ -135,47 +135,37 @@ final class ExamController extends AbstractPageController
     // ... (EDIT Methode bleibt wie sie ist) ...
     // ... (DELETE Methode bleibt wie sie ist) ...
 
-    // --- HILFSMETHODEN (Debug-Modus) ---
+    // --- HILFSMETHODEN (Strict Mode: Nur vollständige Datensätze) ---
 
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
     {
-        // 1. User holen
-        // Wir erzwingen Kleinschreibung schon im SQL für die Hilfstabelle
         $users = $conn->fetchAllAssociative("
-            SELECT importid AS importid FROM users 
+            SELECT importid FROM users 
             WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
         ", [$class]);
 
         foreach ($users as $u) {
-            // Check 1: ImportID Key
             $u = array_change_key_case($u, CASE_LOWER);
-            if (!isset($u['importid'])) {
-                echo "<h1>DEBUG ERROR: Key 'importid' fehlt im User-Array!</h1>";
-                echo "<pre>"; print_r($u); echo "</pre>";
-                die(); // Stop script
-            }
+            
+            if (empty($u['importid'])) continue;
 
-            $importId = $u['importid'];
-
-            // 2. Participant suchen
+            // VERSCHÄRFTE ABFRAGE:
+            // Wir fordern 'AND geburtsdatum IS NOT NULL'.
+            // Das sortiert User 10131 (ohne Datum) sofort aus.
             $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?
-            ", [$importId]);
+                SELECT id, geburtsdatum 
+                FROM sportabzeichen_participants 
+                WHERE import_id = ? 
+                AND geburtsdatum IS NOT NULL
+            ", [$u['importid']]);
 
+            // Wenn SQL nichts liefert (weil User fehlt oder kein Datum hat) -> SKIP
             if (!$participant) continue;
             
-            // Check 2: Participant ID Key
             $participant = array_change_key_case($participant, CASE_LOWER);
-            
-            // HIER IST DER KNACKPUNKT
-            if (!array_key_exists('id', $participant)) {
-                echo "<h1>DEBUG ERROR: Key 'id' fehlt beim Teilnehmer! (Klasse)</h1>";
-                echo "Gesuchte ImportID: " . $importId . "<br>";
-                echo "Datenbank lieferte:<br><pre>"; print_r($participant); echo "</pre>";
-                die(); // Stop script
-            }
 
-            if (empty($participant['geburtsdatum'])) continue;
+            // Letzter Sicherheits-Check: Existiert die ID im Array?
+            if (!isset($participant['id'])) continue;
 
             $age = $examYear - (int)substr($participant['geburtsdatum'], 0, 4);
 
@@ -197,44 +187,40 @@ final class ExamController extends AbstractPageController
             
             $row = false;
 
-            // A: Suche per ImportID
+            // A: Suche per ImportID (Nur mit Geburtsdatum!)
             if (!empty($importId)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum 
                     FROM sportabzeichen_participants 
-                    WHERE import_id = ?
+                    WHERE import_id = ? 
+                    AND geburtsdatum IS NOT NULL
                 ", [$importId]);
             }
 
-            // B: Suche per Username (für Lehrer ohne ImportID)
+            // B: Suche per Username (Nur mit Geburtsdatum!)
             if (!$row && !empty($username)) {
                 $row = $conn->fetchAssociative("
                     SELECT id, geburtsdatum 
                     FROM sportabzeichen_participants 
-                    WHERE username = ?
+                    WHERE username = ? 
+                    AND geburtsdatum IS NOT NULL
                 ", [$username]);
             }
 
+            // Wenn immer noch nichts gefunden -> User überspringen (SKIP)
             if (!$row) continue;
 
-            // Check 3: Participant ID Key (Gruppe)
             $row = array_change_key_case($row, CASE_LOWER);
 
-            if (!array_key_exists('id', $row)) {
-                echo "<h1>DEBUG ERROR: Key 'id' fehlt beim Teilnehmer! (Gruppe)</h1>";
-                echo "User: " . $username . "<br>";
-                echo "Datenbank lieferte:<br><pre>"; print_r($row); echo "</pre>";
-                die(); // Stop script
-            }
+            // Sicherheits-Check
+            if (!isset($row['id'])) continue;
             
-            if (!empty($row['id']) && !empty($row['geburtsdatum'])) {
-                $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
+            $age = $exam->getYear() - (int)substr($row['geburtsdatum'], 0, 4);
                 
-                $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                    VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-                ", [$exam->getId(), $row['id'], $age]);
-            }
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+            ", [$exam->getId(), $row['id'], $age]);
         }
     }
 }
