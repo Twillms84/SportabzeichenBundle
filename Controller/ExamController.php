@@ -135,20 +135,6 @@ final class ExamController extends AbstractPageController
     // ... (EDIT Methode bleibt wie sie ist) ...
     // ... (DELETE Methode bleibt wie sie ist) ...
 
-
-    // --- HILFSMETHODEN ---
-
-    // 1. Die bestehende SQL Methode für Klassen (Auxinfo)
-    Alles klar, wir bauen eine "Notbremse" ein.
-
-Da der Fehler Undefined array key "id" immer noch auftritt, bedeutet das: Die Datenbank liefert zwar Daten zurück (es ist also kein false), aber das Array hat nicht den Key id (vielleicht heißt er ID, sportabzeichen_participants.id oder ganz anders).
-
-Wir fügen jetzt Code ein, der sofort das Script stoppt und dir den Inhalt des Arrays auf den Bildschirm knallt, sobald der Key fehlt.
-
-Ersetze die beiden Methoden unten im ExamController hiermit:
-
-PHP
-
     // --- HILFSMETHODE MIT DEBUGGING ---
 
     private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
