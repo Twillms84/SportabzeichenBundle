@@ -472,9 +472,9 @@ final class ExamController extends AbstractPageController
         $selectedClass = $request->query->get('filter_class');
 
         if ($selectedClass) {
-            // SQL: Hole alle Schüler der Klasse, die NICHT (NOT IN) schon in der Prüfung sind.
+            // KORREKTUR: 'firstname' und 'lastname' statt 'vorname'/'nachname'
             $sql = "
-                SELECT u.act, u.vorname, u.nachname, u.birthday, u.sex
+                SELECT u.act, u.firstname, u.lastname, u.birthday, u.sex
                 FROM users u
                 WHERE u.auxinfo = :class
                 AND u.deleted IS NULL
@@ -484,7 +484,7 @@ final class ExamController extends AbstractPageController
                     JOIN sportabzeichen_participants sp ON sep.participant_id = sp.id
                     WHERE sep.exam_id = :examId
                 )
-                ORDER BY u.nachname, u.vorname
+                ORDER BY u.lastname, u.firstname
             ";
 
             $rows = $conn->fetchAllAssociative($sql, [
@@ -492,20 +492,20 @@ final class ExamController extends AbstractPageController
                 'examId' => $id
             ]);
 
-            // Daten aufbereiten (Geschlecht/Datum formatieren für das Formular)
             foreach ($rows as $row) {
                 // Geschlecht m/w zu MALE/FEMALE
-                $gender = 'MALE'; // Default
+                $gender = 'MALE'; 
                 if (isset($row['sex'])) {
                     $s = strtolower((string)$row['sex']);
-                    // IServ speichert oft 1=m, 2=w oder m/w
+                    // 1=m, 2=w, w=weiblich, f=female
                     if ($s == '2' || $s == 'w' || $s == 'female') $gender = 'FEMALE';
                 }
 
                 $missingStudents[] = [
                     'account' => $row['act'],
-                    'name'    => $row['vorname'] . ' ' . $row['nachname'],
-                    'dob'     => $row['birthday'], // Ist meist YYYY-MM-DD
+                    // KORREKTUR: Hier greifen wir auf die englischen Spaltennamen zu
+                    'name'    => $row['firstname'] . ' ' . $row['lastname'],
+                    'dob'     => $row['birthday'], 
                     'gender'  => $gender
                 ];
             }
