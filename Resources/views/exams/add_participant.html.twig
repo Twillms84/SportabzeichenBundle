@@ -29,12 +29,13 @@
             </ul>
 
             {# --- Das Auswahl-Formular --- #}
+            {# --- Das Auswahl-Formular --- #}
             <form method="get" class="row g-3 align-items-center">
-                {# Wichtig: Modus als Hidden Field behalten #}
+                {# Wichtig: Modus als Hidden Field behalten, damit er beim Suchen nicht verloren geht #}
                 <input type="hidden" name="mode" value="{{ mode }}">
 
                 <div class="col-auto">
-                    <label for="filter_value" class="col-form-label">
+                    <label for="filter_value" class="col-form-label fw-bold">
                         {% if mode == 'group' %}
                             {{ 'Gruppe wählen:'|trans }}
                         {% else %}
@@ -42,7 +43,9 @@
                         {% endif %}
                     </label>
                 </div>
+                
                 <div class="col-auto">
+                    {# onchange drin lassen für die, bei denen es geht, aber Button daneben stellen #}
                     <select name="filter_value" id="filter_value" class="form-select" onchange="this.form.submit()">
                         <option value="">-- {{ 'Bitte wählen'|trans }} --</option>
                         {% if mode == 'group' %}
@@ -59,6 +62,13 @@
                             {% endfor %}
                         {% endif %}
                     </select>
+                </div>
+
+                {# Neuer Button hier: #}
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        {{ icon('search') }} {{ 'Anzeigen'|trans }}
+                    </button>
                 </div>
             </form>
         </div>
