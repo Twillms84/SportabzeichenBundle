@@ -401,24 +401,14 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // 2. Modus bestimmen (Standard: Klasse)
+        // 2. Modus & Listen laden
         $mode = $request->query->get('mode', 'class'); 
         $filterValue = $request->query->get('filter_value');
 
-        // 3. Listen für Dropdowns laden
-        $classes = $conn->fetchFirstColumn("
-            SELECT DISTINCT auxinfo FROM users 
-            WHERE auxinfo IS NOT NULL AND auxinfo <> '' AND deleted IS NULL
-            ORDER BY auxinfo
-        ");
+        $classes = $conn->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo IS NOT NULL AND auxinfo <> '' AND deleted IS NULL ORDER BY auxinfo");
+        $groups = $conn->fetchAllAssociative("SELECT act, name FROM groups WHERE deleted IS NULL ORDER BY act ASC");
 
-        $groups = $conn->fetchAllAssociative("
-            SELECT act, name FROM groups 
-            WHERE deleted IS NULL 
-            ORDER BY act ASC
-        ");
-
-        // --- POST: TEILNEHMER HINZUFÜGEN ---
+        // --- POST: User hinzufügen ---
         if ($request->isMethod('POST')) {
             $account = trim($request->request->get('account', ''));
             $gender  = $request->request->get('gender');
@@ -429,7 +419,7 @@ final class ExamController extends AbstractPageController
                 
                 if ($userId) {
                     try {
-                        // A. Globalen Teilnehmer anlegen/aktualisieren (Upsert)
+                        // A. Participant Upsert
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
                              VALUES (:uid, :act, :gender, :dob)
@@ -439,93 +429,79 @@ final class ExamController extends AbstractPageController
                             ['uid' => $userId, 'act' => $account, 'gender' => $gender, 'dob' => $dobStr]
                         );
 
-                        // B. Zur aktuellen Prüfung verknüpfen
+                        // B. Link to Exam
                         $examYear  = (int)$exam['exam_year'];
                         $birthYear = (int)substr($dobStr, 0, 4);
                         $age       = $examYear - $birthYear;
-
-                        $pId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+                        $pId       = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
                         
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                              VALUES (:eid, :pid, :age) ON CONFLICT DO NOTHING",
                             ['eid' => $id, 'pid' => $pId, 'age' => $age]
                         );
-
-                        $this->addFlash('success', $account . ' wurde hinzugefügt.');
+                        $this->addFlash('success', $account . ' hinzugefügt.');
                     } catch (\Throwable $e) {
                         $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                     }
                 }
             }
-            
-            // Redirect auf die gleiche Seite (Filter behalten)
-            return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
-                'id' => $id, 
-                'mode' => $mode,
-                'filter_value' => $filterValue
-            ]);
+            return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id, 'mode' => $mode, 'filter_value' => $filterValue]);
         }
 
-        // --- GET: LISTE DER FEHLENDEN SCHÜLER LADEN ---
+        // --- GET: Liste laden ---
         $missingStudents = [];
 
         if ($filterValue) {
-            // Basis SQL Select
-            $selectSql = "
+            // KORREKTUR: u.sex entfernt!
+            $sql = "
                 SELECT 
-                    u.act, u.firstname, u.lastname, u.sex, 
+                    u.id, u.act, u.firstname, u.lastname,
                     sp.geburtsdatum, sp.geschlecht as sp_gender
                 FROM users u
+                LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             ";
 
-            // Join Logik je nach Modus
             if ($mode === 'group') {
-                $joinSql = "
+                $sql .= "
                     INNER JOIN users_groups ug ON u.id = ug.user_id
                     INNER JOIN groups g ON ug.group_id = g.id
-                    LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
                     WHERE g.act = :val
                 ";
             } else {
-                // Default: Class
-                $joinSql = "
-                    LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
-                    WHERE u.auxinfo = :val
-                ";
+                $sql .= " WHERE u.auxinfo = :val ";
             }
 
-            // Ausschluss-Logik: Wer schon in DIESER Prüfung ist, wird nicht angezeigt
-            $excludeSql = "
-                AND u.deleted IS NULL
-                AND u.id NOT IN (
-                    SELECT sp_inner.user_id 
-                    FROM sportabzeichen_exam_participants sep
+            $sql .= " AND u.deleted IS NULL ";
+
+            // Bereits hinzugefügte ausschließen
+            $sql .= "
+                AND NOT EXISTS (
+                    SELECT 1 FROM sportabzeichen_exam_participants sep
                     JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
-                    WHERE sep.exam_id = :examId
+                    WHERE sp_inner.user_id = u.id AND sep.exam_id = :examId
                 )
                 ORDER BY u.lastname, u.firstname
             ";
 
-            $rows = $conn->fetchAllAssociative($selectSql . $joinSql . $excludeSql, [
+            $rows = $conn->fetchAllAssociative($sql, [
                 'val' => $filterValue,
                 'examId' => $id
             ]);
 
             foreach ($rows as $row) {
-                // Geschlecht normalisieren
+                // Geschlecht bestimmen
+                // 1. Wenn in participants vorhanden, nimm das.
+                // 2. Wenn nicht, Default 'MALE' (da IServ es nicht weiß).
                 $gender = 'MALE';
                 if (!empty($row['sp_gender'])) {
                     $gender = $row['sp_gender'];
-                } else {
-                    $s = isset($row['sex']) ? strtolower((string)$row['sex']) : '';
-                    if ($s == '2' || $s == 'w' || $s == 'female') $gender = 'FEMALE';
                 }
 
                 $missingStudents[] = [
                     'account' => $row['act'],
                     'name'    => $row['firstname'] . ' ' . $row['lastname'],
-                    'dob'     => $row['geburtsdatum'], // NULL bei neuen
+                    'dob'     => $row['geburtsdatum'],
                     'gender'  => $gender
                 ];
             }

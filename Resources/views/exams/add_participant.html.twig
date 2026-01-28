@@ -103,22 +103,31 @@
                                         <td>
                                             <strong>{{ student.name }}</strong>
                                             <input type="hidden" name="account" value="{{ student.account }}">
-                                            <input type="hidden" name="gender" value="{{ student.gender }}">
                                         </td>
-                                        <td><span class="badge bg-secondary">{{ student.account }}</span></td>
                                         <td>
+                                            {# Account Badge #}
+                                            <span class="badge bg-secondary">{{ student.account }}</span>
+                                        </td>
+                                        <td>
+                                            {# Datum #}
                                             {% if student.dob %}
-                                                {# Datum bekannt -> Anzeigen (Readonly Input damit es mitgesendet wird, oder Hidden) #}
                                                 {{ student.dob|date('d.m.Y') }}
                                                 <input type="hidden" name="dob" value="{{ student.dob }}">
                                             {% else %}
-                                                {# Datum unbekannt -> Eingabe #}
                                                 <input type="date" name="dob" required class="form-control form-control-sm">
                                             {% endif %}
                                         </td>
+                                        <td>
+                                            {# Geschlecht Auswahl #}
+                                            <select name="gender" class="form-select form-select-sm" style="width: 70px;">
+                                                <option value="MALE" {% if student.gender == 'MALE' %}selected{% endif %}>M</option>
+                                                <option value="FEMALE" {% if student.gender == 'FEMALE' %}selected{% endif %}>W</option>
+                                                <option value="DIVERSE" {% if student.gender == 'DIVERSE' %}selected{% endif %}>D</option>
+                                            </select>
+                                        </td>
                                         <td class="text-end">
-                                            <button type="submit" class="btn btn-sm btn-success" title="Zur Prüfung hinzufügen">
-                                                {{ icon('plus') }} {{ 'Add'|trans }}
+                                            <button type="submit" class="btn btn-sm btn-success">
+                                                {{ icon('plus') }}
                                             </button>
                                         </td>
                                     </form>
