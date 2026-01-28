@@ -4,7 +4,7 @@
 
 {% block page_content %}
     {# Zurück Button: Name der Route evtl. anpassen (show oder index) #}
-    <a href="{{ path('sportabzeichen_exams_show', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
+    <a href="{{ path('sportabzeichen_exams_dashboard', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
         {{ icon('arrow-left') }} {{ 'Zurück zur Prüfung'|trans }}
     </a>
 
