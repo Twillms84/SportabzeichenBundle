@@ -1,62 +1,70 @@
-{% extends "@IServCrud/page.html.twig" %}
+{% extends "@IServCore/page.html.twig" %}
 
-{% block title %}{{ 'Teilnehmer hinzufügen'|trans }}{% endblock %}
+{% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }}{% endblock %}
 
-{% block body %}
-    <h1>{{ 'Teilnehmer zu Prüfung hinzufügen'|trans }}</h1>
-    <p class="text-muted">
-        Prüfung: <strong>{{ exam.exam_name|default('Unbenannt') }} ({{ exam.exam_year }})</strong>
-    </p>
+{# WICHTIG: Hier muss 'page_content' stehen, nicht 'body'! #}
+{% block page_content %}
+    
+    <div class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>{{ 'Teilnehmer manuell hinzufügen'|trans }}</h2>
+            <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+                {{ icon('arrow-left') }} {{ 'Zurück'|trans }}
+            </a>
+        </div>
 
-    <div class="card">
-        <div class="card-body">
-            <form method="post">
-                
-                {# 1. IServ Account Name (statt Dropdown) #}
-                <div class="mb-3">
-                    <label class="form-label" for="account">{{ 'IServ-Account'|trans }}</label>
-                    <div class="input-group">
-                        <span class="input-group-text">{{ icon('user') }}</span>
-                        {# Das data-autocomplete Attribut sorgt für die IServ-Vorschlagsliste #}
-                        <input type="text" 
-                               name="account" 
-                               id="account" 
-                               class="form-control" 
-                               placeholder="z.B. vorname.nachname" 
-                               required 
-                               autocomplete="off"
-                               data-autocomplete-url="{{ path('iserv_core_autocomplete_user_lookup') }}">
-                    </div>
-                    <div class="form-text">{{ 'Gib den Accountnamen des Schülers ein (z.B. max.mustermann).'|trans }}</div>
-                </div>
-
-                <div class="row">
-                    {# 2. Geschlecht (Wichtig für Auswertung) #}
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label" for="gender">{{ 'Geschlecht'|trans }}</label>
-                        <select name="gender" id="gender" class="form-select" required>
-                            <option value="" disabled selected>{{ 'Bitte wählen...'|trans }}</option>
-                            <option value="MALE">{{ 'Männlich'|trans }}</option>
-                            <option value="FEMALE">{{ 'Weiblich'|trans }}</option>
-                        </select>
+        <div class="card">
+            <div class="card-header">
+                Prüfung: <strong>{{ exam.exam_name|default('Unbenannt') }} ({{ exam.exam_year }})</strong>
+            </div>
+            
+            <div class="card-body">
+                <form method="post">
+                    
+                    {# 1. IServ Account Name #}
+                    <div class="mb-3">
+                        <label class="form-label" for="account">{{ 'IServ-Account'|trans }}</label>
+                        <div class="input-group">
+                            <span class="input-group-text">{{ icon('user') }}</span>
+                            {# data-autocomplete-url sorgt für die Namensvorschläge #}
+                            <input type="text" 
+                                   name="account" 
+                                   id="account" 
+                                   class="form-control" 
+                                   placeholder="z.B. vorname.nachname" 
+                                   required 
+                                   autocomplete="off"
+                                   data-autocomplete-url="{{ path('iserv_core_autocomplete_user_lookup') }}">
+                        </div>
+                        <div class="form-text">{{ 'Gib den Accountnamen des Schülers ein.'|trans }}</div>
                     </div>
 
-                    {# 3. Geburtsdatum (Wichtig für Altersklasse) #}
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label" for="dob">{{ 'Geburtsdatum'|trans }}</label>
-                        <input type="date" name="dob" id="dob" class="form-control" required>
-                    </div>
-                </div>
+                    <div class="row">
+                        {# 2. Geschlecht #}
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="gender">{{ 'Geschlecht'|trans }}</label>
+                            <select name="gender" id="gender" class="form-select" required>
+                                <option value="" disabled selected>{{ 'Bitte wählen...'|trans }}</option>
+                                <option value="MALE">{{ 'Männlich'|trans }}</option>
+                                <option value="FEMALE">{{ 'Weiblich'|trans }}</option>
+                            </select>
+                        </div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
-                        {{ icon('arrow-left') }} {{ 'Abbrechen'|trans }}
-                    </a>
-                    <button type="submit" class="btn btn-success">
-                        {{ icon('plus') }} {{ 'Hinzufügen'|trans }}
-                    </button>
-                </div>
-            </form>
+                        {# 3. Geburtsdatum #}
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="dob">{{ 'Geburtsdatum'|trans }}</label>
+                            <input type="date" name="dob" id="dob" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-end">
+                        <button type="submit" class="btn btn-success">
+                            {{ icon('plus') }} {{ 'Hinzufügen'|trans }}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
+
 {% endblock %}
