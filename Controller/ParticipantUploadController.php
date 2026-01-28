@@ -10,7 +10,10 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-#[Route('/upload', name: 'upload_participants')]
+#[Route('/sportabzeichen/admin', name: 'sportabzeichen_admin_')]
+final class ParticipantUploadController extends AbstractPageController
+{
+    #[Route('/upload', name: 'upload_participants')]
     public function uploadParticipants(Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
@@ -148,3 +151,16 @@ use Symfony\Component\Routing\Annotation\Route;
             return null;
         }
     }
+
+    private static function parseDate(?string $input): ?string
+    {
+        if (!$input) return null;
+
+        foreach (['d.m.Y', 'Y-m-d', 'd-m-Y', 'd/m/Y'] as $fmt) {
+            $dt = \DateTime::createFromFormat($fmt, $input);
+            if ($dt !== false) return $dt->format('Y-m-d');
+        }
+
+        return null;
+    }
+}
