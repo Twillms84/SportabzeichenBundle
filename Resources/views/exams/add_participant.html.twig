@@ -1,6 +1,6 @@
 {% extends "@IServCore/page.html.twig" %}
 
-{% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.name }}{% endblock %}
+{% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.exam_name }}{% endblock %}
 
 {% block page_content %}
     <a href="{{ path('sportabzeichen_exams_show', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
