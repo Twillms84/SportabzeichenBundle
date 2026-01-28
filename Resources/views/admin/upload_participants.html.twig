@@ -1,75 +1,80 @@
 {% extends "@IServCore/page.html.twig" %}
 
 {% block page_title %}
-    {{ 'Sportabzeichen – Teilnehmerdaten importieren'|trans }}
+    {{ 'Sportabzeichen – Teilnehmerdaten hochladen'|trans }}
 {% endblock %}
 
 {% block page_content %}
 <div class="content">
     {% include '@PulsRSportabzeichen/admin/_tabs.html.twig' with {'activeTab': 'import'} %}
 
+    {# Erfolgsmeldung #}
     {% if message %}
         <div class="alert alert-success">
-            <h4>Erfolg</h4>
-            {{ message }}
+            <strong>Erfolg!</strong> {{ message }}<br>
+            <span class="badge bg-success">{{ imported }} importiert</span>
+            {% if skipped > 0 %}
+                <span class="badge bg-warning text-dark">{{ skipped }} übersprungen</span>
+            {% endif %}
         </div>
     {% endif %}
 
+    {# Fehlermeldung Allgemein #}
     {% if error %}
-        <div class="alert alert-danger">
-            <h4>Fehler</h4>
-            {{ error }}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    {# NEU: Detailliertes Fehlerprotokoll #}
+    {% if detailedErrors is defined and detailedErrors is not empty %}
+        <div class="alert alert-warning">
+            <h4 class="alert-heading">Probleme beim Import ({{ skipped }} Zeilen übersprungen):</h4>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <ul class="mb-0">
+                    {% for err in detailedErrors %}
+                        <li>{{ err }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     {% endif %}
 
-    <div class="card">
+    <div class="card mt-4">
         <div class="card-header">CSV-Upload</div>
         <div class="card-body">
             <form method="post" enctype="multipart/form-data">
                 
                 <div class="mb-4">
-                    <label class="form-label fw-bold">Import-Strategie wählen:</label>
+                    <label class="form-label fw-bold">Import-Strategie:</label>
+                    
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="strategy" id="strat_import" value="import_id" checked>
                         <label class="form-check-label" for="strat_import">
-                            Identifikation über <strong>Import-ID</strong> (Verwaltungssoftware)
+                            Identifikation über <strong>Import-ID</strong>
                         </label>
-                        <div class="form-text text-muted ms-3">
-                            CSV-Format: <code>ImportID;Geschlecht(m/w/d);Geburtsdatum</code>
+                        <div class="form-text text-muted ms-3 mb-2">
+                            Software-ID; Geschlecht; Geburtsdatum
                         </div>
                     </div>
-                    <div class="form-check mt-2">
+
+                    <div class="form-check">
                         <input class="form-check-input" type="radio" name="strategy" id="strat_act" value="act">
                         <label class="form-check-label" for="strat_act">
-                            Identifikation über <strong>IServ-Account</strong> (Benutzername)
+                            Identifikation über <strong>IServ-Account</strong>
                         </label>
                         <div class="form-text text-muted ms-3">
-                            CSV-Format: <code>iserv.account;Geschlecht(m/w/d);Geburtsdatum</code><br>
-                            <small>Beispiel: <code>max.mustermann;m;15.04.2010</code></small>
+                            max.mustermann; Geschlecht; Geburtsdatum
                         </div>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label for="csvFile" class="form-label fw-bold">CSV-Datei auswählen</label>
-                    <input type="file" name="csvFile" id="csvFile" class="form-control" accept=".csv, .txt" required>
+                    <label for="csvFile" class="form-label">CSV-Datei</label>
+                    <input type="file" name="csvFile" id="csvFile" class="form-control" accept=".csv" required>
                 </div>
 
-                <button type="submit" class="btn btn-primary">
-                    <span class="icon icon-upload"></span> Hochladen & Import starten
-                </button>
+                <button type="submit" class="btn btn-primary">Hochladen</button>
             </form>
         </div>
-    </div>
-
-    <div class="mt-4">
-        <h5>Hinweise zur CSV-Datei:</h5>
-        <ul>
-            <li>Trennzeichen: Semikolon (;) wird empfohlen, Komma (,) wird ebenfalls versucht.</li>
-            <li>Datum: Formate wie <code>DD.MM.YYYY</code> (deutsch) oder <code>YYYY-MM-DD</code> (ISO) werden erkannt.</li>
-            <li>Geschlecht: Erlaubt sind 'm', 'w', 'd' oder 'männlich', 'weiblich', 'divers'.</li>
-            <li>Die erste Spalte muss je nach gewählter Strategie entweder die Import-ID oder der IServ-Benutzername (z.B. <code>vorname.nachname</code>) sein.</li>
-        </ul>
     </div>
 </div>
 {% endblock %}
