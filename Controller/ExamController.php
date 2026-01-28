@@ -258,11 +258,11 @@ final class ExamController extends AbstractPageController
             return; 
         }
 
-        $groupId = $group->getId();      // Integer (z.B. 500)
+        $groupId = $group->getId();        // Integer
         $groupName = $group->getAccount(); // String (z.B. "fachgruppe.sport")
         $examId = $exam->getId();
 
-        // Parameter-Typen definieren, damit PostgreSQL nicht durcheinander kommt
+        // WICHTIG: Wir definieren die Typen, damit Postgres Text und Zahl nicht verwechselt
         $types = [
             'gid'   => \PDO::PARAM_INT,
             'gname' => \PDO::PARAM_STR,
@@ -270,13 +270,15 @@ final class ExamController extends AbstractPageController
         ];
 
         // ----------------------------------------------------------------
-        // SCHRITT 1: Teilnehmer-Pool auffüllen (users -> sportabzeichen_participants)
+        // SCHRITT 1: Teilnehmer-Pool auffüllen
         // ----------------------------------------------------------------
+        // Wir nutzen hier 'u.act', da 'u.username' nicht existierte.
+        // Falls die Spalte bei dir 'account' heißt, ändere 'u.act' zu 'u.account'.
         $sqlEnsureParticipants = "
             INSERT INTO sportabzeichen_participants (user_id)
             SELECT DISTINCT u.id 
             FROM users u
-            LEFT JOIN members m ON u.username = m.actuser
+            LEFT JOIN members m ON u.act = m.actuser
             WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
@@ -296,7 +298,7 @@ final class ExamController extends AbstractPageController
             SELECT DISTINCT :eid, p.id
             FROM users u
             JOIN sportabzeichen_participants p ON u.id = p.user_id
-            LEFT JOIN members m ON u.username = m.actuser
+            LEFT JOIN members m ON u.act = m.actuser
             WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND p.id NOT IN (
