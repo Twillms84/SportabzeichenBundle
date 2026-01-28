@@ -1,24 +1,62 @@
 {% extends "@IServCrud/default.html.twig" %}
 
-{% block title %}Teilnehmer hinzufügen{% endblock %}
+{% block title %}{{ 'Teilnehmer hinzufügen'|trans }}{% endblock %}
 
 {% block body %}
-<h1>Teilnehmer zu Prüfung hinzufügen</h1>
+    <h1>{{ 'Teilnehmer zu Prüfung hinzufügen'|trans }}</h1>
+    <p class="text-muted">
+        Prüfung: <strong>{{ exam.exam_name|default('Unbenannt') }} ({{ exam.exam_year }})</strong>
+    </p>
 
-<form method="post">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                
+                {# 1. IServ Account Name (statt Dropdown) #}
+                <div class="mb-3">
+                    <label class="form-label" for="account">{{ 'IServ-Account'|trans }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ icon('user') }}</span>
+                        {# Das data-autocomplete Attribut sorgt für die IServ-Vorschlagsliste #}
+                        <input type="text" 
+                               name="account" 
+                               id="account" 
+                               class="form-control" 
+                               placeholder="z.B. vorname.nachname" 
+                               required 
+                               autocomplete="off"
+                               data-autocomplete-url="{{ path('iserv_core_autocomplete_user_lookup') }}">
+                    </div>
+                    <div class="form-text">{{ 'Gib den Accountnamen des Schülers ein (z.B. max.mustermann).'|trans }}</div>
+                </div>
 
-    <div class="mb-3">
-        <label class="form-label">Teilnehmer auswählen</label>
-        <select name="participant_id" class="form-select">
-            {% for p in participants %}
-                <option value="{{ p.id }}">
-                    {{ p.vorname }} {{ p.nachname }} ({{ p.geschlecht }})
-                </option>
-            {% endfor %}
-        </select>
+                <div class="row">
+                    {# 2. Geschlecht (Wichtig für Auswertung) #}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label" for="gender">{{ 'Geschlecht'|trans }}</label>
+                        <select name="gender" id="gender" class="form-select" required>
+                            <option value="" disabled selected>{{ 'Bitte wählen...'|trans }}</option>
+                            <option value="MALE">{{ 'Männlich'|trans }}</option>
+                            <option value="FEMALE">{{ 'Weiblich'|trans }}</option>
+                        </select>
+                    </div>
+
+                    {# 3. Geburtsdatum (Wichtig für Altersklasse) #}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label" for="dob">{{ 'Geburtsdatum'|trans }}</label>
+                        <input type="date" name="dob" id="dob" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+                        {{ icon('arrow-left') }} {{ 'Abbrechen'|trans }}
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        {{ icon('plus') }} {{ 'Hinzufügen'|trans }}
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-
-    <button class="btn btn-success">Hinzufügen</button>
-</form>
-
 {% endblock %}

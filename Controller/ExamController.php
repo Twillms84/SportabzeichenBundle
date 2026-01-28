@@ -392,4 +392,84 @@ final class ExamController extends AbstractPageController
             VALUES (?, ?, ?) ON CONFLICT DO NOTHING
         ", [$examId, $pId, $age]);
     }
+    #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
+    public function addParticipant(int $id, Request $request, Connection $conn): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        // Prüfung laden
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
+        if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
+
+        if ($request->isMethod('POST')) {
+            $account = trim($request->request->get('account', ''));
+            $gender  = $request->request->get('gender');
+            $dobStr  = $request->request->get('dob');
+
+            // 1. Validierung
+            if (empty($account) || empty($gender) || empty($dobStr)) {
+                $this->addFlash('error', 'Bitte alle Felder ausfüllen.');
+            } else {
+                // 2. User ID finden
+                $userId = $conn->fetchOne("SELECT id FROM users WHERE act = ? AND deleted IS NULL", [$account]);
+
+                if (!$userId) {
+                    $this->addFlash('error', sprintf('Der Benutzer "%s" wurde nicht gefunden.', $account));
+                } else {
+                    try {
+                        // 3. Teilnehmer-Daten (Geschlecht/Geburtsdatum) speichern/aktualisieren
+                        // Wir erzwingen hier die Eingabe aus dem Formular, auch wenn vorher was anderes drin stand.
+                        $conn->executeStatement(
+                            <<<SQL
+                            INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
+                            VALUES (:uid, :act, :gender, :dob)
+                            ON CONFLICT (user_id) 
+                            DO UPDATE SET 
+                                geschlecht = EXCLUDED.geschlecht,
+                                geburtsdatum = EXCLUDED.geburtsdatum
+                            SQL,
+                            [
+                                'uid'    => $userId,
+                                'act'    => $account,
+                                'gender' => $gender,
+                                'dob'    => $dobStr
+                            ]
+                        );
+
+                        // 4. Zur Prüfung hinzufügen
+                        // Alter berechnen
+                        $examYear = (int)$exam['exam_year']; // Achtung: Spaltenname in DB prüfen, meist exam_year
+                        $birthYear = (int)substr($dobStr, 0, 4);
+                        $age = $examYear - $birthYear;
+
+                        // ID in participants tabelle holen
+                        $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+
+                        $conn->executeStatement(
+                            <<<SQL
+                            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                            VALUES (:eid, :pid, :age)
+                            ON CONFLICT DO NOTHING
+                            SQL,
+                            [
+                                'eid' => $id,
+                                'pid' => $participantId,
+                                'age' => $age
+                            ]
+                        );
+
+                        $this->addFlash('success', 'Teilnehmer erfolgreich hinzugefügt.');
+                        return $this->redirectToRoute('sportabzeichen_results_index', ['id' => $id]);
+
+                    } catch (\Throwable $e) {
+                        $this->addFlash('error', 'Fehler beim Speichern: ' . $e->getMessage());
+                    }
+                }
+            }
+        }
+
+        return $this->render('@PulsRSportabzeichen/exams/add_participant.html.twig', [
+            'exam' => $exam
+        ]);
+    }
 }
