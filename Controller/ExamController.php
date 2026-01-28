@@ -393,7 +393,7 @@ final class ExamController extends AbstractPageController
         ", [$examId, $pId, $age]);
     }
     #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
-    public function addParticipant(int $id, Request $request, EntityManagerInterface $em, Connection $conn): Response
+    public function addParticipant(int $id, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
@@ -401,27 +401,27 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // 2. Klassenliste laden (Dropdown)
-        // Wir nehmen natives SQL, da 'auxinfo' in der Entity oft nicht verfügbar ist
+        // 2. Alle Klassen für das Dropdown laden (aus users.auxinfo)
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
-            WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
+            WHERE auxinfo IS NOT NULL AND auxinfo <> '' AND deleted IS NULL
             ORDER BY auxinfo
         ");
 
-        // --- POST: SPEICHERN ---
+        // --- POST: TEILNEHMER HINZUFÜGEN ---
         if ($request->isMethod('POST')) {
             $account = trim($request->request->get('account', ''));
             $gender  = $request->request->get('gender');
-            $dobStr  = $request->request->get('dob');
+            $dobStr  = $request->request->get('dob'); // Das Datum aus dem Formular
 
             if (!empty($account) && !empty($gender) && !empty($dobStr)) {
+                // User-ID anhand des Accounts holen
                 $userId = $conn->fetchOne("SELECT id FROM users WHERE act = ? AND deleted IS NULL", [$account]);
                 
                 if ($userId) {
                     try {
                         // A. User im "Pool" (sportabzeichen_participants) anlegen oder updaten
-                        // ON CONFLICT sorgt dafür, dass wir das Datum aktualisieren, falls der User schon existiert
+                        // Wir aktualisieren das Datum, falls es sich geändert hat oder neu ist.
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
                              VALUES (:uid, :act, :gender, :dob)
@@ -431,12 +431,12 @@ final class ExamController extends AbstractPageController
                             ['uid' => $userId, 'act' => $account, 'gender' => $gender, 'dob' => $dobStr]
                         );
 
-                        // B. Zur aktuellen Prüfung hinzufügen
+                        // B. Zur aktuellen Prüfung verknüpfen
                         $examYear  = (int)$exam['exam_year'];
                         $birthYear = (int)substr($dobStr, 0, 4);
                         $age       = $examYear - $birthYear;
 
-                        // Participant-ID holen (die wir gerade angelegt/aktualisiert haben)
+                        // ID des Teilnehmers holen (gerade angelegt/aktualisiert)
                         $pId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
                         
                         $conn->executeStatement(
@@ -445,27 +445,29 @@ final class ExamController extends AbstractPageController
                             ['eid' => $id, 'pid' => $pId, 'age' => $age]
                         );
 
-                        $this->addFlash('success', $account . ' hinzugefügt.');
+                        $this->addFlash('success', $account . ' wurde hinzugefügt.');
                     } catch (\Throwable $e) {
-                        $this->addFlash('error', 'Fehler: ' . $e->getMessage());
+                        $this->addFlash('error', 'Fehler beim Speichern: ' . $e->getMessage());
                     }
                 }
             }
-            // Redirect behält den Klassen-Filter bei
-            $currentFilter = $request->query->get('filter_class');
-            return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id, 'filter_class' => $currentFilter]);
+            
+            // Redirect auf die gleiche Seite (Klasse behalten)
+            return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
+                'id' => $id, 
+                'filter_class' => $request->query->get('filter_class')
+            ]);
         }
 
-        // --- GET: TEILNEHMERLISTE LADEN ---
+        // --- GET: LISTE DER FEHLENDEN SCHÜLER LADEN ---
         $missingStudents = [];
         $selectedClass = $request->query->get('filter_class');
 
         if ($selectedClass) {
-            // Wir nutzen SQL statt QueryBuilder, um Probleme mit 'auxinfo' und 'User'-Entity zu vermeiden.
-            // Logik: 
-            // 1. Hole alle User aus der Klasse (u.auxinfo).
-            // 2. JOIN auf den Pool (sp), um evtl. vorhandenes Geburtsdatum zu holen.
-            // 3. Filtere User raus, die schon in DIESER Prüfung (sep) sind.
+            // SQL-Abfrage:
+            // 1. Hole alle User der Klasse (u)
+            // 2. Hole Infos aus dem Pool (sp), falls vorhanden (LEFT JOIN)
+            // 3. Schließe alle aus, die schon in DIESER Prüfung sind (NOT IN)
             
             $sql = "
                 SELECT 
@@ -473,7 +475,8 @@ final class ExamController extends AbstractPageController
                     u.firstname, 
                     u.lastname, 
                     u.sex, 
-                    sp.geburtsdatum
+                    sp.geburtsdatum,
+                    sp.geschlecht as sp_gender
                 FROM users u
                 LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
                 WHERE u.auxinfo = :class
@@ -493,19 +496,22 @@ final class ExamController extends AbstractPageController
             ]);
 
             foreach ($rows as $row) {
-                // Geschlecht normalisieren (In der DB steht meist 1/2 oder m/w)
+                // Geschlecht bestimmen:
+                // Priorität 1: Aus unserer Tabelle (sp_gender)
+                // Priorität 2: Aus IServ (sex) -> normalisieren
                 $gender = 'MALE';
-                $sexDb = isset($row['sex']) ? strtolower((string)$row['sex']) : '';
                 
-                // 2 = weiblich, w = weiblich, female
-                if ($sexDb == '2' || $sexDb == 'w' || $sexDb == 'female') {
-                    $gender = 'FEMALE';
+                if (!empty($row['sp_gender'])) {
+                    $gender = $row['sp_gender'];
+                } else {
+                    $s = isset($row['sex']) ? strtolower((string)$row['sex']) : '';
+                    if ($s == '2' || $s == 'w' || $s == 'female') $gender = 'FEMALE';
                 }
 
                 $missingStudents[] = [
                     'account' => $row['act'],
                     'name'    => $row['firstname'] . ' ' . $row['lastname'],
-                    'dob'     => $row['geburtsdatum'], // Ist NULL, wenn User noch nie erfasst wurde
+                    'dob'     => $row['geburtsdatum'], // NULL bei neuen Schülern
                     'gender'  => $gender
                 ];
             }
