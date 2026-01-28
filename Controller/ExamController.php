@@ -258,11 +258,14 @@ final class ExamController extends AbstractPageController
             return; 
         }
 
-        $groupId = $group->getId();        // Integer
-        $groupName = $group->getAccount(); // String (z.B. "fachgruppe.sport")
+        // Wir brauchen zwei Werte für den Vergleich:
+        // 1. Die ID für den Vergleich mit users.gid (Integer)
+        // 2. Den Account-Namen für den Vergleich mit members.actgrp (String)
+        $groupId = $group->getId();      
+        $groupName = $group->getAccount(); 
         $examId = $exam->getId();
 
-        // WICHTIG: Wir definieren die Typen, damit Postgres Text und Zahl nicht verwechselt
+        // Typen definieren, um Syntax-Fehler zu verhindern
         $types = [
             'gid'   => \PDO::PARAM_INT,
             'gname' => \PDO::PARAM_STR,
@@ -270,10 +273,9 @@ final class ExamController extends AbstractPageController
         ];
 
         // ----------------------------------------------------------------
-        // SCHRITT 1: Teilnehmer-Pool auffüllen
+        // SCHRITT 1: Teilnehmer-Pool auffüllen (users -> sportabzeichen_participants)
         // ----------------------------------------------------------------
-        // Wir nutzen hier 'u.act', da 'u.username' nicht existierte.
-        // Falls die Spalte bei dir 'account' heißt, ändere 'u.act' zu 'u.account'.
+        // KORREKTUR: u.act statt u.username
         $sqlEnsureParticipants = "
             INSERT INTO sportabzeichen_participants (user_id)
             SELECT DISTINCT u.id 
@@ -293,6 +295,7 @@ final class ExamController extends AbstractPageController
         // ----------------------------------------------------------------
         // SCHRITT 2: Verknüpfung zur Prüfung herstellen
         // ----------------------------------------------------------------
+        // KORREKTUR: u.act statt u.username
         $sqlLinkExam = "
             INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id)
             SELECT DISTINCT :eid, p.id
