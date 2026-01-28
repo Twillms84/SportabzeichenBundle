@@ -221,6 +221,34 @@ final class ExamController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
+    private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
+    {
+        // KORREKTUR: 'import_id' statt 'importid' (IServ Standard)
+        // Wir fangen auch Fehler ab, falls die Spalte doch anders heißt
+        try {
+            $importIds = $conn->fetchFirstColumn("
+                SELECT import_id FROM users 
+                WHERE auxinfo = ? AND import_id IS NOT NULL AND import_id <> ''
+            ", [$class]);
+        } catch (\Throwable $e) {
+            // Fallback: Versuch es mit 'importid' (ohne Unterstrich), falls die DB alt ist
+            try {
+                 $importIds = $conn->fetchFirstColumn("
+                    SELECT importid FROM users 
+                    WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
+                ", [$class]);
+            } catch (\Throwable $e2) {
+                return; // Aufgeben, wenn beide Spaltennamen nicht existieren
+            }
+        }
+
+        foreach ($importIds as $importId) {
+            if (empty($importId)) continue;
+
+            $this->insertParticipantByImportId($conn, $examId, $examYear, $importId);
+        }
+    }
+
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
         $examId = (int) $exam->getId();
@@ -315,63 +343,6 @@ final class ExamController extends AbstractPageController
                 ON CONFLICT DO NOTHING
             ", [$examId, $participantId, $age]);
         }
-    }
-
-    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
-    {
-        $examId = (int) $exam->getId(); // Sicherstellen, dass es in PHP ein Int ist
-
-        // ----------------------------------------------------------------
-        // SCHRITT 1: Teilnehmer-Pool füllen (Subselect-Trick gegen den Gruppen-Crash)
-        // ----------------------------------------------------------------
-        $sqlEnsure = "
-            INSERT INTO sportabzeichen_participants (user_id)
-            SELECT DISTINCT u.id 
-            FROM users u
-            LEFT JOIN members m ON u.act = m.actuser
-            WHERE (
-                u.gid = (SELECT id FROM groups WHERE act = :gname LIMIT 1) 
-                OR 
-                m.actgrp = :gname
-            )
-            AND u.deleted IS NULL
-            AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
-        ";
-        
-        $conn->executeStatement(
-            $sqlEnsure, 
-            ['gname' => $groupAccount], 
-            ['gname' => \PDO::PARAM_STR]
-        );
-
-        // ----------------------------------------------------------------
-        // SCHRITT 2: Verknüpfung zur Prüfung (Mit CAST Fix für exam_id)
-        // ----------------------------------------------------------------
-        // HIER WAR DER FEHLER: Postgres dachte, :eid sei Text.
-        // FIX: Wir nutzen 'CAST(:eid AS INTEGER)', um Postgres zu zwingen, es als Zahl zu sehen.
-        
-        $sqlLink = "
-            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id)
-            SELECT DISTINCT CAST(:eid AS INTEGER), p.id
-            FROM users u
-            JOIN sportabzeichen_participants p ON u.id = p.user_id
-            LEFT JOIN members m ON u.act = m.actuser
-            WHERE (
-                u.gid = (SELECT id FROM groups WHERE act = :gname LIMIT 1) 
-                OR 
-                m.actgrp = :gname
-            )
-            AND u.deleted IS NULL
-            AND p.id NOT IN (
-                SELECT participant_id FROM sportabzeichen_exam_participants WHERE exam_id = :eid
-            )
-        ";
-        
-        $conn->executeStatement(
-            $sqlLink, 
-            ['eid' => $examId, 'gname' => $groupAccount],
-            ['eid' => \PDO::PARAM_INT, 'gname' => \PDO::PARAM_STR]
-        );
     }
 
     /**
