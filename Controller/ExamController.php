@@ -401,27 +401,35 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // 2. Alle Klassen für das Dropdown laden (aus users.auxinfo)
+        // 2. Modus bestimmen (Standard: Klasse)
+        $mode = $request->query->get('mode', 'class'); 
+        $filterValue = $request->query->get('filter_value');
+
+        // 3. Listen für Dropdowns laden
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' AND deleted IS NULL
             ORDER BY auxinfo
         ");
 
+        $groups = $conn->fetchAllAssociative("
+            SELECT act, name FROM groups 
+            WHERE deleted IS NULL 
+            ORDER BY act ASC
+        ");
+
         // --- POST: TEILNEHMER HINZUFÜGEN ---
         if ($request->isMethod('POST')) {
             $account = trim($request->request->get('account', ''));
             $gender  = $request->request->get('gender');
-            $dobStr  = $request->request->get('dob'); // Das Datum aus dem Formular
+            $dobStr  = $request->request->get('dob');
 
             if (!empty($account) && !empty($gender) && !empty($dobStr)) {
-                // User-ID anhand des Accounts holen
                 $userId = $conn->fetchOne("SELECT id FROM users WHERE act = ? AND deleted IS NULL", [$account]);
                 
                 if ($userId) {
                     try {
-                        // A. User im "Pool" (sportabzeichen_participants) anlegen oder updaten
-                        // Wir aktualisieren das Datum, falls es sich geändert hat oder neu ist.
+                        // A. Globalen Teilnehmer anlegen/aktualisieren (Upsert)
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
                              VALUES (:uid, :act, :gender, :dob)
@@ -436,7 +444,6 @@ final class ExamController extends AbstractPageController
                         $birthYear = (int)substr($dobStr, 0, 4);
                         $age       = $examYear - $birthYear;
 
-                        // ID des Teilnehmers holen (gerade angelegt/aktualisiert)
                         $pId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
                         
                         $conn->executeStatement(
@@ -447,39 +454,49 @@ final class ExamController extends AbstractPageController
 
                         $this->addFlash('success', $account . ' wurde hinzugefügt.');
                     } catch (\Throwable $e) {
-                        $this->addFlash('error', 'Fehler beim Speichern: ' . $e->getMessage());
+                        $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                     }
                 }
             }
             
-            // Redirect auf die gleiche Seite (Klasse behalten)
+            // Redirect auf die gleiche Seite (Filter behalten)
             return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
                 'id' => $id, 
-                'filter_class' => $request->query->get('filter_class')
+                'mode' => $mode,
+                'filter_value' => $filterValue
             ]);
         }
 
         // --- GET: LISTE DER FEHLENDEN SCHÜLER LADEN ---
         $missingStudents = [];
-        $selectedClass = $request->query->get('filter_class');
 
-        if ($selectedClass) {
-            // SQL-Abfrage:
-            // 1. Hole alle User der Klasse (u)
-            // 2. Hole Infos aus dem Pool (sp), falls vorhanden (LEFT JOIN)
-            // 3. Schließe alle aus, die schon in DIESER Prüfung sind (NOT IN)
-            
-            $sql = "
+        if ($filterValue) {
+            // Basis SQL Select
+            $selectSql = "
                 SELECT 
-                    u.act, 
-                    u.firstname, 
-                    u.lastname, 
-                    u.sex, 
-                    sp.geburtsdatum,
-                    sp.geschlecht as sp_gender
+                    u.act, u.firstname, u.lastname, u.sex, 
+                    sp.geburtsdatum, sp.geschlecht as sp_gender
                 FROM users u
-                LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
-                WHERE u.auxinfo = :class
+            ";
+
+            // Join Logik je nach Modus
+            if ($mode === 'group') {
+                $joinSql = "
+                    INNER JOIN users_groups ug ON u.id = ug.user_id
+                    INNER JOIN groups g ON ug.group_id = g.id
+                    LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
+                    WHERE g.act = :val
+                ";
+            } else {
+                // Default: Class
+                $joinSql = "
+                    LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
+                    WHERE u.auxinfo = :val
+                ";
+            }
+
+            // Ausschluss-Logik: Wer schon in DIESER Prüfung ist, wird nicht angezeigt
+            $excludeSql = "
                 AND u.deleted IS NULL
                 AND u.id NOT IN (
                     SELECT sp_inner.user_id 
@@ -490,17 +507,14 @@ final class ExamController extends AbstractPageController
                 ORDER BY u.lastname, u.firstname
             ";
 
-            $rows = $conn->fetchAllAssociative($sql, [
-                'class' => $selectedClass,
+            $rows = $conn->fetchAllAssociative($selectSql . $joinSql . $excludeSql, [
+                'val' => $filterValue,
                 'examId' => $id
             ]);
 
             foreach ($rows as $row) {
-                // Geschlecht bestimmen:
-                // Priorität 1: Aus unserer Tabelle (sp_gender)
-                // Priorität 2: Aus IServ (sex) -> normalisieren
+                // Geschlecht normalisieren
                 $gender = 'MALE';
-                
                 if (!empty($row['sp_gender'])) {
                     $gender = $row['sp_gender'];
                 } else {
@@ -511,7 +525,7 @@ final class ExamController extends AbstractPageController
                 $missingStudents[] = [
                     'account' => $row['act'],
                     'name'    => $row['firstname'] . ' ' . $row['lastname'],
-                    'dob'     => $row['geburtsdatum'], // NULL bei neuen Schülern
+                    'dob'     => $row['geburtsdatum'], // NULL bei neuen
                     'gender'  => $gender
                 ];
             }
@@ -520,7 +534,9 @@ final class ExamController extends AbstractPageController
         return $this->render('@PulsRSportabzeichen/exams/add_participant.html.twig', [
             'exam' => $exam,
             'classes' => $classes,
-            'selected_class' => $selectedClass,
+            'groups' => $groups,
+            'mode' => $mode,
+            'filter_value' => $filterValue,
             'missing_students' => $missingStudents
         ]);
     }

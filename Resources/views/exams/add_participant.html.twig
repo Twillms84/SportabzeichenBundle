@@ -3,38 +3,76 @@
 {% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.exam_name }}{% endblock %}
 
 {% block page_content %}
+    {# Zurück Button: Name der Route evtl. anpassen (show oder index) #}
     <a href="{{ path('sportabzeichen_exams_show', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
         {{ icon('arrow-left') }} {{ 'Zurück zur Prüfung'|trans }}
     </a>
 
     <div class="card mb-4">
-        <div class="card-header">{{ 'Klasse auswählen'|trans }}</div>
+        <div class="card-header">{{ 'Quelle auswählen'|trans }}</div>
         <div class="card-body">
+            
+            {# --- Tabs zur Auswahl --- #}
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <a class="nav-link {% if mode == 'class' %}active{% endif %}" 
+                       href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id, 'mode': 'class'}) }}">
+                       {{ icon('list') }} {{ 'Nach Klasse'|trans }}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if mode == 'group' %}active{% endif %}" 
+                       href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id, 'mode': 'group'}) }}">
+                       {{ icon('group') }} {{ 'Nach Gruppe'|trans }}
+                    </a>
+                </li>
+            </ul>
+
+            {# --- Das Auswahl-Formular --- #}
             <form method="get" class="row g-3 align-items-center">
+                {# Wichtig: Modus als Hidden Field behalten #}
+                <input type="hidden" name="mode" value="{{ mode }}">
+
                 <div class="col-auto">
-                    <label for="filter_class" class="col-form-label">{{ 'Klasse:'|trans }}</label>
+                    <label for="filter_value" class="col-form-label">
+                        {% if mode == 'group' %}
+                            {{ 'Gruppe wählen:'|trans }}
+                        {% else %}
+                            {{ 'Klasse wählen:'|trans }}
+                        {% endif %}
+                    </label>
                 </div>
                 <div class="col-auto">
-                    <select name="filter_class" id="filter_class" class="form-select" onchange="this.form.submit()">
+                    <select name="filter_value" id="filter_value" class="form-select" onchange="this.form.submit()">
                         <option value="">-- {{ 'Bitte wählen'|trans }} --</option>
-                        {% for class in classes %}
-                            <option value="{{ class }}" {% if selected_class == class %}selected{% endif %}>{{ class }}</option>
-                        {% endfor %}
+                        {% if mode == 'group' %}
+                            {% for group in groups %}
+                                <option value="{{ group.act }}" {% if filter_value == group.act %}selected{% endif %}>
+                                    {{ group.name }} ({{ group.act }})
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            {% for class in classes %}
+                                <option value="{{ class }}" {% if filter_value == class %}selected{% endif %}>
+                                    {{ class }}
+                                </option>
+                            {% endfor %}
+                        {% endif %}
                     </select>
                 </div>
             </form>
         </div>
     </div>
 
-    {% if selected_class %}
+    {% if filter_value %}
         <div class="card">
             <div class="card-header bg-light">
-                {{ 'Noch nicht erfasste Schüler in Klasse'|trans }} <strong>{{ selected_class }}</strong>
+                {{ 'Verfügbare Benutzer aus'|trans }} <strong>{{ filter_value }}</strong>
             </div>
             
             {% if missing_students is empty %}
                 <div class="card-body text-center text-success">
-                    {{ icon('ok') }} {{ 'Alle Schüler dieser Klasse sind bereits in dieser Prüfung!'|trans }}
+                    {{ icon('ok') }} {{ 'Alle Personen dieser Liste sind bereits in dieser Prüfung!'|trans }}
                 </div>
             {% else %}
                 <div class="table-responsive">
@@ -60,7 +98,7 @@
                                         <td><span class="badge bg-secondary">{{ student.account }}</span></td>
                                         <td>
                                             {% if student.dob %}
-                                                {# Datum bekannt -> Anzeigen #}
+                                                {# Datum bekannt -> Anzeigen (Readonly Input damit es mitgesendet wird, oder Hidden) #}
                                                 {{ student.dob|date('d.m.Y') }}
                                                 <input type="hidden" name="dob" value="{{ student.dob }}">
                                             {% else %}
@@ -69,7 +107,7 @@
                                             {% endif %}
                                         </td>
                                         <td class="text-end">
-                                            <button type="submit" class="btn btn-sm btn-success" title="Hinzufügen">
+                                            <button type="submit" class="btn btn-sm btn-success" title="Zur Prüfung hinzufügen">
                                                 {{ icon('plus') }} {{ 'Add'|trans }}
                                             </button>
                                         </td>
