@@ -1,118 +1,85 @@
 {% extends "@IServCore/page.html.twig" %}
 
-{% block page_title %}{{ 'Teilnehmer nachnominieren'|trans }}{% endblock %}
+{% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.name }}{% endblock %}
 
 {% block page_content %}
-    <div class="content">
-        
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>{{ 'Teilnehmer hinzufügen'|trans }}</h3>
-            <a href="{{ path('sportabzeichen_results_index', {id: exam.id}) }}" class="btn btn-secondary">
-                {{ icon('arrow-left') }} {{ 'Zurück zur Liste'|trans }}
-            </a>
-        </div>
+    <a href="{{ path('sportabzeichen_exams_show', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
+        {{ icon('arrow-left') }} {{ 'Zurück zur Prüfung'|trans }}
+    </a>
 
-        {# 1. FILTER BEREICH #}
-        <div class="card mb-4 border-primary">
-            <div class="card-header bg-primary text-white">
-                {{ icon('filter') }} {{ 'Klasse auswählen um fehlende Schüler zu finden'|trans }}
-            </div>
-            <div class="card-body">
-                <form method="get" class="row g-3 align-items-center">
-                    <div class="col-auto">
-                        <label class="col-form-label">Klasse anzeigen:</label>
-                    </div>
-                    <div class="col-auto">
-                        <select name="filter_class" class="form-select" onchange="this.form.submit()">
-                            <option value="">-- Bitte wählen --</option>
-                            {% for c in classes %}
-                                <option value="{{ c }}" {% if c == selected_class %}selected{% endif %}>{{ c }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-auto">
-                        <button type="submit" class="btn btn-primary">{{ 'Anzeigen'|trans }}</button>
-                    </div>
-                </form>
-            </div>
+    <div class="card mb-4">
+        <div class="card-header">{{ 'Klasse auswählen'|trans }}</div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <label for="filter_class" class="col-form-label">{{ 'Klasse:'|trans }}</label>
+                </div>
+                <div class="col-auto">
+                    <select name="filter_class" id="filter_class" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- {{ 'Bitte wählen'|trans }} --</option>
+                        {% for class in classes %}
+                            <option value="{{ class }}" {% if selected_class == class %}selected{% endif %}>{{ class }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
         </div>
+    </div>
 
-        {# 2. LISTE DER FEHLENDEN (Nur sichtbar, wenn Klasse gewählt) #}
-        {% if selected_class %}
-            <h4>{{ 'Fehlende Schüler in Klasse'|trans }} {{ selected_class }}</h4>
+    {% if selected_class %}
+        <div class="card">
+            <div class="card-header bg-light">
+                {{ 'Noch nicht erfasste Schüler in Klasse'|trans }} <strong>{{ selected_class }}</strong>
+            </div>
             
             {% if missing_students is empty %}
-                <div class="alert alert-success">
-                    {{ icon('ok') }} {{ 'Alle Schüler dieser Klasse sind bereits in der Prüfung!'|trans }}
+                <div class="card-body text-center text-success">
+                    {{ icon('ok') }} {{ 'Alle Schüler dieser Klasse sind bereits in dieser Prüfung!'|trans }}
                 </div>
             {% else %}
-                <div class="table-responsive mb-4">
-                    <table class="table table-striped table-hover align-middle">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
                         <thead>
                             <tr>
                                 <th>Name</th>
                                 <th>Account</th>
-                                <th>Geburtsdatum</th>
-                                <th>Aktion</th>
+                                <th style="width: 160px;">Geburtsdatum</th>
+                                <th style="width: 100px;"></th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for student in missing_students %}
                                 <tr>
-                                    <td><strong>{{ student.name }}</strong></td>
-                                    <td><code>{{ student.account }}</code></td>
-                                    <td>{{ student.dob|default('??') }}</td>
-                                    <td>
-                                        {# Kleines Formular pro Zeile #}
-                                        <form method="post" style="margin:0;">
+                                    {# Pro Zeile ein Formular #}
+                                    <form method="post">
+                                        <td>
+                                            <strong>{{ student.name }}</strong>
                                             <input type="hidden" name="account" value="{{ student.account }}">
-                                            <input type="hidden" name="dob" value="{{ student.dob }}">
                                             <input type="hidden" name="gender" value="{{ student.gender }}">
-                                            
+                                        </td>
+                                        <td><span class="badge bg-secondary">{{ student.account }}</span></td>
+                                        <td>
+                                            {% if student.dob %}
+                                                {# Datum bekannt -> Anzeigen #}
+                                                {{ student.dob|date('d.m.Y') }}
+                                                <input type="hidden" name="dob" value="{{ student.dob }}">
+                                            {% else %}
+                                                {# Datum unbekannt -> Eingabe #}
+                                                <input type="date" name="dob" required class="form-control form-control-sm">
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
                                             <button type="submit" class="btn btn-sm btn-success" title="Hinzufügen">
-                                                {{ icon('plus') }} {{ 'Hinzufügen'|trans }}
+                                                {{ icon('plus') }} {{ 'Add'|trans }}
                                             </button>
-                                        </form>
-                                    </td>
+                                        </td>
+                                    </form>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             {% endif %}
-            <hr>
-        {% endif %}
-
-        {# 3. MANUELLE EINGABE (Fallback) #}
-        <div class="card">
-            <div class="card-header">
-                {{ 'Manuelle Einzeleingabe (z.B. für Lehrer)'|trans }}
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">IServ-Account</label>
-                            <input type="text" name="account" class="form-control" placeholder="vorname.nachname" required>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Geschlecht</label>
-                            <select name="gender" class="form-select" required>
-                                <option value="MALE">Männlich</option>
-                                <option value="FEMALE">Weiblich</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Geburtsdatum</label>
-                            <input type="date" name="dob" class="form-control" required>
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="submit" class="btn btn-success w-100">{{ icon('plus') }}</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
         </div>
-
-    </div>
+    {% endif %}
 {% endblock %}
