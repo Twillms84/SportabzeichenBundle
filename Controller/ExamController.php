@@ -251,54 +251,60 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. Gruppe finden
+        // 1. Gruppe finden (für die ID der Primärgruppe)
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         
         if (!$group) {
             return; 
         }
 
-        $groupId = $group->getId();
+        $groupId = $group->getId();     // Z.B. 123 (Integer)
+        $groupName = $group->getAccount(); // Z.B. "fachgruppe.sport" (String)
         $examId = $exam->getId();
 
         // ----------------------------------------------------------------
         // SCHRITT 1: Teilnehmer-Pool auffüllen (User anlegen, falls neu)
         // ----------------------------------------------------------------
-        // Wir suchen alle User, die entweder die Gruppe als Hauptgruppe haben (u.gid)
-        // ODER in der Mitgliederliste stehen (group_members).
-        // Wenn sie noch nicht in 'sportabzeichen_participants' sind -> rein damit!
+        // Wir verknüpfen users.act (String) mit members.actuser (String)
+        // Und prüfen users.gid (Int) ODER members.actgrp (String)
         $sqlEnsureParticipants = "
             INSERT INTO sportabzeichen_participants (user_id)
             SELECT DISTINCT u.id 
             FROM users u
-            LEFT JOIN group_members gm ON u.id = gm.user_id
-            WHERE (u.gid = :gid OR gm.group_id = :gid)
+            LEFT JOIN members m ON u.act = m.actuser
+            WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
         ";
-        // Hinweis: Falls deine Tabelle 'groups_members' heißt (mit s), pass das oben an!
-        // IServ Standard ist oft 'group_members'.
         
-        $conn->executeStatement($sqlEnsureParticipants, ['gid' => $groupId]);
+        // Sollte 'u.act' Fehler werfen ("Column not found"), ändere es oben zu 'u.username'
+        
+        $conn->executeStatement($sqlEnsureParticipants, [
+            'gid' => $groupId, 
+            'gname' => $groupName
+        ]);
 
         // ----------------------------------------------------------------
         // SCHRITT 2: Verknüpfung zur Prüfung herstellen
         // ----------------------------------------------------------------
-        // Jetzt holen wir die IDs aus sportabzeichen_participants (auch die gerade erstellten)
-        // und verknüpfen sie mit dem Exam, falls noch nicht geschehen.
         $sqlLinkExam = "
             INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id)
             SELECT DISTINCT :eid, p.id
             FROM users u
             JOIN sportabzeichen_participants p ON u.id = p.user_id
-            LEFT JOIN group_members gm ON u.id = gm.user_id
-            WHERE (u.gid = :gid OR gm.group_id = :gid)
+            LEFT JOIN members m ON u.act = m.actuser
+            WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND p.id NOT IN (
                   SELECT participant_id FROM sportabzeichen_exam_participants WHERE exam_id = :eid
               )
         ";
-        $conn->executeStatement($sqlLinkExam, ['eid' => $examId, 'gid' => $groupId]);
+        
+        $conn->executeStatement($sqlLinkExam, [
+            'eid' => $examId, 
+            'gid' => $groupId,
+            'gname' => $groupName
+        ]);
     }
 
     /**
