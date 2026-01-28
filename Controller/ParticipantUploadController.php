@@ -33,33 +33,37 @@ final class ParticipantUploadController extends AbstractPageController
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
                 
-                // Header überspringen
+                // Header lesen und ignorieren
                 fgetcsv($handle); 
                 $lineNumber = 1;
 
                 // ---------------------------------------------------------
                 // 1. Spaltenname in der 'users' Tabelle ermitteln
                 // ---------------------------------------------------------
-                $userImportCol = 'import_id'; // Standard bei neuen Systemen
-                if ($strategy === 'import_id') {
-                    try {
-                        // Wir testen kurz, ob import_id existiert
-                        $conn->executeQuery("SELECT import_id FROM users LIMIT 1");
-                    } catch (\Throwable $e) {
-                        // Wenn es kracht, nehmen wir die alte Schreibweise
-                        $userImportCol = 'importid';
-                    }
+                // Wir prüfen, ob 'import_id' existiert, sonst nehmen wir 'importid'
+                $userImportCol = 'import_id'; 
+                try {
+                    $conn->executeQuery("SELECT import_id FROM users LIMIT 1");
+                } catch (\Throwable $e) {
+                    $userImportCol = 'importid';
                 }
 
                 // ---------------------------------------------------------
-                // 2. Prepared Statements erstellen
+                // 2. Prepared Statements vorbereiten
                 // ---------------------------------------------------------
+                
+                // Suche nach User ID und dessen Import-ID (falls wir sie brauchen)
                 if ($strategy === 'act') {
-                    $stmtLookup = $conn->prepare('SELECT id FROM users WHERE LOWER(act) = LOWER(:val) AND deleted IS NULL LIMIT 1');
+                    // Suche via Accountname
+                    $sqlLookup = "SELECT id, $userImportCol AS imp_id FROM users WHERE LOWER(act) = LOWER(:val) AND deleted IS NULL LIMIT 1";
                 } else {
-                    // Hier nutzen wir jetzt die dynamisch ermittelte Spalte
-                    $stmtLookup = $conn->prepare("SELECT id FROM users WHERE $userImportCol = :val AND deleted IS NULL LIMIT 1");
+                    // Suche via Import-ID
+                    $sqlLookup = "SELECT id, $userImportCol AS imp_id FROM users WHERE $userImportCol = :val AND deleted IS NULL LIMIT 1";
                 }
+                $stmtLookup = $conn->prepare($sqlLookup);
+
+                // Prüfen, ob Teilnehmer existiert (via user_id)
+                $stmtCheckExist = $conn->prepare('SELECT id FROM sportabzeichen_participants WHERE user_id = :uid');
 
                 while (($row = fgetcsv($handle, 1000, ';')) !== false) {
                     $lineNumber++;
@@ -72,7 +76,7 @@ final class ParticipantUploadController extends AbstractPageController
                     try {
                         if (count($row) < 3) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Zu wenige Spalten (" . count($row) . " gefunden, 3 erwartet).";
+                            $detailedErrors[] = "Zeile $lineNumber: Zu wenige Spalten.";
                             continue;
                         }
 
@@ -80,23 +84,30 @@ final class ParticipantUploadController extends AbstractPageController
 
                         if ($identifier === '') {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Identifikator leer.";
+                            $detailedErrors[] = "Zeile $lineNumber: ID/Name ist leer.";
                             continue;
                         }
 
-                        // A. User suchen
-                        $userId = $stmtLookup->executeQuery(['val' => $identifier])->fetchOne();
+                        // A. User in IServ DB suchen
+                        $userData = $stmtLookup->executeQuery(['val' => $identifier])->fetchAssociative();
 
-                        if (!$userId) {
+                        if (!$userData) {
                             $skipped++;
-                            $msg = ($strategy === 'act') 
-                                ? "Nutzer '$identifier' nicht gefunden." 
-                                : "Import-ID '$identifier' ($userImportCol) unbekannt.";
-                            $detailedErrors[] = "Zeile $lineNumber: $msg";
+                            $detailedErrors[] = "Zeile $lineNumber: User '$identifier' nicht im System gefunden.";
                             continue;
                         }
 
-                        // B. Daten prüfen
+                        $userId = $userData['id'];
+                        // Fallback für Import-ID: Entweder die aus der DB, oder der Suchbegriff (wenn Strategie ImportID war), oder manuell generiert
+                        $userImportId = $userData['imp_id']; 
+                        if (!$userImportId && $strategy === 'import_id') {
+                            $userImportId = $identifier;
+                        }
+                        if (!$userImportId) {
+                            $userImportId = 'MANUAL_' . $userId; // Notlösung falls gar nichts da ist
+                        }
+
+                        // B. Daten validieren
                         $geschlecht = match (strtolower($geschlechtRaw)) {
                             'm', 'male', 'männlich', 'maennlich' => 'MALE',
                             'w', 'female', 'weiblich' => 'FEMALE',
@@ -118,47 +129,46 @@ final class ParticipantUploadController extends AbstractPageController
                             continue;
                         }
 
-                        // Import-ID merken (nur wenn wir Strategie Import-ID nutzen)
-                        $importIdToSave = ($strategy === 'import_id') ? $identifier : null;
+                        // C. UPDATE oder INSERT (Manuell statt ON CONFLICT)
+                        
+                        // Gibt es den Teilnehmer schon?
+                        $existingPartId = $stmtCheckExist->executeQuery(['uid' => $userId])->fetchOne();
 
-                        // C. Speichern in UNSERE Tabelle
-                        // HINWEIS: In deiner Tabelle 'sportabzeichen_participants' heißt die Spalte hoffentlich 'import_id' (mit Unterstrich).
-                        // Falls du die Tabelle manuell anders angelegt hast, musst du das hier auch ändern.
-                        // Ich gehe davon aus, dass unsere Migrations 'import_id' genutzt haben.
-                        $conn->executeStatement(
-                            <<<SQL
-                            INSERT INTO sportabzeichen_participants
-                            (user_id, import_id, geschlecht, geburtsdatum)
-                            VALUES
-                            (:uid, :import_id, :geschlecht, :geburtsdatum)
-                            ON CONFLICT (user_id)
-                            DO UPDATE SET
-                                geschlecht = EXCLUDED.geschlecht,
-                                geburtsdatum = EXCLUDED.geburtsdatum,
-                                import_id = COALESCE(EXCLUDED.import_id, sportabzeichen_participants.import_id)
-                            SQL,
-                            [
-                                'uid'          => $userId,
-                                'import_id'    => $importIdToSave,
-                                'geschlecht'   => $geschlecht,
+                        if ($existingPartId) {
+                            // UPDATE
+                            $conn->update('sportabzeichen_participants', [
+                                'geschlecht' => $geschlecht,
                                 'geburtsdatum' => $geburtsdatum,
-                            ]
-                        );
+                                // Import-ID aktualisieren wir nur, wenn sie vorher leer war oder sich geändert hat? 
+                                // Besser: Wir lassen sie beim Update in Ruhe oder nutzen COALESCE Logik. 
+                                // Hier einfach Update der Kerndaten:
+                                'updated_at' => (new \DateTime())->format('Y-m-d H:i:s')
+                            ], ['id' => $existingPartId]);
+                        } else {
+                            // INSERT
+                            $conn->insert('sportabzeichen_participants', [
+                                'user_id' => $userId,
+                                'import_id' => $userImportId,
+                                'geschlecht' => $geschlecht,
+                                'geburtsdatum' => $geburtsdatum
+                            ]);
+                        }
 
                         $imported++;
 
                     } catch (\Throwable $e) {
                         $skipped++;
-                        $detailedErrors[] = "Zeile $lineNumber: Datenbankfehler - " . $e->getMessage();
+                        // Detaillierte Fehlermeldung hilft beim Debuggen
+                        $detailedErrors[] = "Zeile $lineNumber: DB-Fehler - " . $e->getMessage();
                     }
                 }
 
                 fclose($handle);
                 
                 if ($imported > 0) {
-                    $message = "Import abgeschlossen.";
+                    $message = "Import erfolgreich abgeschlossen.";
                 } elseif ($skipped > 0) {
-                    $error = "Keine Daten importiert.";
+                    $error = "Es konnten keine Daten importiert werden.";
                 }
             }
         }
