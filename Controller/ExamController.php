@@ -401,8 +401,8 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // 2. Alle verfügbaren Klassen für das Dropdown laden
-        // Hier ist raw SQL okay und performant für die Liste
+        // 2. Klassenliste laden (Dropdown)
+        // Wir nehmen natives SQL, da 'auxinfo' in der Entity oft nicht verfügbar ist
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
@@ -411,16 +411,17 @@ final class ExamController extends AbstractPageController
 
         // --- POST: SPEICHERN ---
         if ($request->isMethod('POST')) {
-            // ... (Dieser Teil bleibt gleich wie vorher, da er gut funktioniert hat) ...
             $account = trim($request->request->get('account', ''));
-            $gender  = $request->request->get('gender'); // MALE / FEMALE
+            $gender  = $request->request->get('gender');
             $dobStr  = $request->request->get('dob');
 
             if (!empty($account) && !empty($gender) && !empty($dobStr)) {
                 $userId = $conn->fetchOne("SELECT id FROM users WHERE act = ? AND deleted IS NULL", [$account]);
+                
                 if ($userId) {
                     try {
-                        // A. Im Pool speichern/updaten (Verbindung User -> Sportabzeichen)
+                        // A. User im "Pool" (sportabzeichen_participants) anlegen oder updaten
+                        // ON CONFLICT sorgt dafür, dass wir das Datum aktualisieren, falls der User schon existiert
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
                              VALUES (:uid, :act, :gender, :dob)
@@ -430,11 +431,12 @@ final class ExamController extends AbstractPageController
                             ['uid' => $userId, 'act' => $account, 'gender' => $gender, 'dob' => $dobStr]
                         );
 
-                        // B. Zur Prüfung hinzufügen
-                        $examYear = (int)$exam['exam_year'];
+                        // B. Zur aktuellen Prüfung hinzufügen
+                        $examYear  = (int)$exam['exam_year'];
                         $birthYear = (int)substr($dobStr, 0, 4);
-                        $age = $examYear - $birthYear;
+                        $age       = $examYear - $birthYear;
 
+                        // Participant-ID holen (die wir gerade angelegt/aktualisiert haben)
                         $pId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
                         
                         $conn->executeStatement(
@@ -449,61 +451,61 @@ final class ExamController extends AbstractPageController
                     }
                 }
             }
-            // Redirect auf die gleiche Seite, Filter behalten
+            // Redirect behält den Klassen-Filter bei
             $currentFilter = $request->query->get('filter_class');
             return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id, 'filter_class' => $currentFilter]);
         }
 
-        // --- GET: LISTE LADEN ---
+        // --- GET: TEILNEHMERLISTE LADEN ---
         $missingStudents = [];
         $selectedClass = $request->query->get('filter_class');
 
         if ($selectedClass) {
-            // A. IDs der User holen, die schon in DIESER Prüfung sind (um sie auszuschließen)
-            $existingUserIds = $conn->fetchFirstColumn("
-                SELECT sp.user_id 
-                FROM sportabzeichen_exam_participants sep
-                JOIN sportabzeichen_participants sp ON sep.participant_id = sp.id
-                WHERE sep.exam_id = ?
-            ", [$id]);
+            // Wir nutzen SQL statt QueryBuilder, um Probleme mit 'auxinfo' und 'User'-Entity zu vermeiden.
+            // Logik: 
+            // 1. Hole alle User aus der Klasse (u.auxinfo).
+            // 2. JOIN auf den Pool (sp), um evtl. vorhandenes Geburtsdatum zu holen.
+            // 3. Filtere User raus, die schon in DIESER Prüfung (sep) sind.
+            
+            $sql = "
+                SELECT 
+                    u.act, 
+                    u.firstname, 
+                    u.lastname, 
+                    u.sex, 
+                    sp.geburtsdatum
+                FROM users u
+                LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
+                WHERE u.auxinfo = :class
+                AND u.deleted IS NULL
+                AND u.id NOT IN (
+                    SELECT sp_inner.user_id 
+                    FROM sportabzeichen_exam_participants sep
+                    JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
+                    WHERE sep.exam_id = :examId
+                )
+                ORDER BY u.lastname, u.firstname
+            ";
 
-            // B. QueryBuilder nutzen (wie im AdminController!) -> Keine SQL-Fehler mit 'vorname'
-            $userRepo = $em->getRepository(User::class);
-            $qb = $userRepo->createQueryBuilder('u')
-                ->where('u.auxinfo = :class')
-                ->andWhere('u.deleted IS NULL')
-                ->setParameter('class', $selectedClass)
-                ->orderBy('u.lastname', 'ASC')
-                ->addOrderBy('u.firstname', 'ASC');
+            $rows = $conn->fetchAllAssociative($sql, [
+                'class' => $selectedClass,
+                'examId' => $id
+            ]);
 
-            // Ausschluss der bereits vorhandenen
-            if (!empty($existingUserIds)) {
-                $qb->andWhere($qb->expr()->notIn('u.id', $existingUserIds));
-            }
-
-            $users = $qb->getQuery()->getResult();
-
-            // C. Daten für das Template aufbereiten
-            foreach ($users as $user) {
-                // Checken, ob wir den Schüler schon im "Pool" haben (wegen Geburtsdatum)
-                $poolData = $conn->fetchAssociative(
-                    "SELECT geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", 
-                    [$user->getId()]
-                );
-
-                // Geschlecht normalisieren (IServ User Entity hat oft getSex())
-                // Falls getSex() nicht existiert, schauen wir in die DB-Daten, aber meistens geht das Objekt.
-                // Wir nehmen hier eine sichere Fallback-Logik:
+            foreach ($rows as $row) {
+                // Geschlecht normalisieren (In der DB steht meist 1/2 oder m/w)
                 $gender = 'MALE';
-                if (method_exists($user, 'getSex')) {
-                    $s = strtolower((string)$user->getSex()); 
-                    if ($s == '2' || $s == 'w' || $s == 'female') $gender = 'FEMALE';
+                $sexDb = isset($row['sex']) ? strtolower((string)$row['sex']) : '';
+                
+                // 2 = weiblich, w = weiblich, female
+                if ($sexDb == '2' || $sexDb == 'w' || $sexDb == 'female') {
+                    $gender = 'FEMALE';
                 }
 
                 $missingStudents[] = [
-                    'account' => $user->getUsername(), // oder getAct() je nach IServ Version
-                    'name'    => $user->getFirstname() . ' ' . $user->getLastname(),
-                    'dob'     => $poolData ? $poolData['geburtsdatum'] : null, // NULL = Eingabefeld anzeigen
+                    'account' => $row['act'],
+                    'name'    => $row['firstname'] . ' ' . $row['lastname'],
+                    'dob'     => $row['geburtsdatum'], // Ist NULL, wenn User noch nie erfasst wurde
                     'gender'  => $gender
                 ];
             }
