@@ -254,11 +254,15 @@ final class ExamController extends AbstractPageController
         $examId = $exam->getId();
 
         // ----------------------------------------------------------------
-        // TRICK: Wir übergeben NUR den Namen (:gname) als String.
-        // Die ID holt sich SQL selbst intern: (SELECT id FROM groups WHERE act = :gname).
-        // Das verhindert zu 100%, dass PostgreSQL versucht, den Namen "fachgruppe.sport" 
-        // in die Integer-Spalte 'u.gid' zu zwängen.
+        // DER FIX: "Subselect-Strategie"
         // ----------------------------------------------------------------
+        // Wir übergeben nur noch den Gruppennamen (:gname) als String.
+        // Die ID holen wir uns direkt im SQL via (SELECT id FROM groups WHERE act = :gname).
+        // 
+        // Vorteil:
+        // PHP sendet nur Strings. PostgreSQL vergleicht den String nur mit Text-Spalten.
+        // Der Vergleich mit u.gid (Integer) findet erst statt, nachdem das Subselect
+        // die ID gefunden hat. -> Kein Typ-Fehler mehr möglich.
 
         // 1. Teilnehmer-Pool füllen
         $sqlEnsure = "
@@ -275,6 +279,7 @@ final class ExamController extends AbstractPageController
             AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
         ";
         
+        // WICHTIG: Wir übergeben NUR 'gname'. Keine 'gid' mehr!
         $conn->executeStatement(
             $sqlEnsure, 
             ['gname' => $groupAccount], 
