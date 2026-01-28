@@ -251,20 +251,11 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        $examId = $exam->getId();
+        $examId = (int) $exam->getId(); // Sicherstellen, dass es in PHP ein Int ist
 
         // ----------------------------------------------------------------
-        // DER FIX: "Subselect-Strategie"
+        // SCHRITT 1: Teilnehmer-Pool füllen (Subselect-Trick gegen den Gruppen-Crash)
         // ----------------------------------------------------------------
-        // Wir übergeben nur noch den Gruppennamen (:gname) als String.
-        // Die ID holen wir uns direkt im SQL via (SELECT id FROM groups WHERE act = :gname).
-        // 
-        // Vorteil:
-        // PHP sendet nur Strings. PostgreSQL vergleicht den String nur mit Text-Spalten.
-        // Der Vergleich mit u.gid (Integer) findet erst statt, nachdem das Subselect
-        // die ID gefunden hat. -> Kein Typ-Fehler mehr möglich.
-
-        // 1. Teilnehmer-Pool füllen
         $sqlEnsure = "
             INSERT INTO sportabzeichen_participants (user_id)
             SELECT DISTINCT u.id 
@@ -279,17 +270,21 @@ final class ExamController extends AbstractPageController
             AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
         ";
         
-        // WICHTIG: Wir übergeben NUR 'gname'. Keine 'gid' mehr!
         $conn->executeStatement(
             $sqlEnsure, 
             ['gname' => $groupAccount], 
             ['gname' => \PDO::PARAM_STR]
         );
 
-        // 2. Verknüpfung zur Prüfung herstellen
+        // ----------------------------------------------------------------
+        // SCHRITT 2: Verknüpfung zur Prüfung (Mit CAST Fix für exam_id)
+        // ----------------------------------------------------------------
+        // HIER WAR DER FEHLER: Postgres dachte, :eid sei Text.
+        // FIX: Wir nutzen 'CAST(:eid AS INTEGER)', um Postgres zu zwingen, es als Zahl zu sehen.
+        
         $sqlLink = "
             INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id)
-            SELECT DISTINCT :eid, p.id
+            SELECT DISTINCT CAST(:eid AS INTEGER), p.id
             FROM users u
             JOIN sportabzeichen_participants p ON u.id = p.user_id
             LEFT JOIN members m ON u.act = m.actuser
