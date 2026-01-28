@@ -221,31 +221,99 @@ final class ExamController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    private function importParticipantsFromClass(Connection $conn, int $examId, int $examYear, string $class): void
+    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // KORREKTUR: 'import_id' statt 'importid' (IServ Standard)
-        // Wir fangen auch Fehler ab, falls die Spalte doch anders heißt
-        try {
-            $importIds = $conn->fetchFirstColumn("
-                SELECT import_id FROM users 
-                WHERE auxinfo = ? AND import_id IS NOT NULL AND import_id <> ''
-            ", [$class]);
-        } catch (\Throwable $e) {
-            // Fallback: Versuch es mit 'importid' (ohne Unterstrich), falls die DB alt ist
+        $examId = (int) $exam->getId();
+        $examYear = (int) $exam->getYear();
+
+        // 1. Wir holen uns die echten User-IDs (Integer) aller Gruppenmitglieder.
+        // Das funktioniert für ALLE (Lehrer, Schüler, Admin), egal ob sie eine import_id haben oder nicht.
+        // Wir nutzen wieder den Subselect-Trick, damit es beim Abruf nicht crasht.
+        
+        $sqlFetchIds = "
+            SELECT DISTINCT u.id 
+            FROM users u
+            LEFT JOIN members m ON u.act = m.actuser
+            WHERE (
+                u.gid = (SELECT id FROM groups WHERE act = :gname LIMIT 1) 
+                OR 
+                m.actgrp = :gname
+            )
+            AND u.deleted IS NULL
+        ";
+
+        $userIds = $conn->fetchFirstColumn(
+            $sqlFetchIds, 
+            ['gname' => $groupAccount], 
+            ['gname' => \PDO::PARAM_STR]
+        );
+
+        // 2. Jetzt gehen wir jeden User einzeln durch
+        foreach ($userIds as $userId) {
+            if (!$userId) continue;
+
+            // Neue Hilfsmethode aufrufen, die mit der User-ID arbeitet
+            $this->processParticipantByUserId($conn, $examId, $examYear, (int)$userId);
+        }
+    }
+
+    /**
+     * Diese Methode kümmert sich um einen einzelnen User anhand seiner ID.
+     * Sie holt das Geburtsdatum direkt aus der IServ-Tabelle, falls es im Pool noch fehlt.
+     */
+    private function processParticipantByUserId(Connection $conn, int $examId, int $examYear, int $userId): void
+    {
+        // A. Geburtsdatum ermitteln
+        // Wir schauen erst im Sportabzeichen-Pool, dann in der IServ-System-Tabelle
+        $dob = null;
+
+        // 1. Check im Pool
+        $poolData = $conn->fetchAssociative("SELECT geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+        if ($poolData && !empty($poolData['geburtsdatum'])) {
+            $dob = $poolData['geburtsdatum'];
+        } 
+        else {
+            // 2. Check in der System-Tabelle (users.birthday), falls im Pool nichts steht
+            // Hinweis: 'birthday' ist Standard in IServ, kann aber je nach Version variieren.
             try {
-                 $importIds = $conn->fetchFirstColumn("
-                    SELECT importid FROM users 
-                    WHERE auxinfo = ? AND importid IS NOT NULL AND importid <> ''
-                ", [$class]);
-            } catch (\Throwable $e2) {
-                return; // Aufgeben, wenn beide Spaltennamen nicht existieren
+                $sysData = $conn->fetchAssociative("SELECT birthday FROM users WHERE id = ?", [$userId]);
+                if ($sysData && !empty($sysData['birthday'])) {
+                    $dob = $sysData['birthday'];
+                    
+                    // Wir aktualisieren den Pool sofort, damit wir es beim nächsten Mal haben
+                    // Wir nutzen INSERT ... ON CONFLICT (oder simplen Insert Ignore Logik)
+                    
+                    // Erstmal sicherstellen, dass der Eintrag existiert
+                    $conn->executeStatement("
+                        INSERT INTO sportabzeichen_participants (user_id, geburtsdatum)
+                        VALUES (?, ?)
+                        ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum
+                    ", [$userId, $dob]);
+                }
+            } catch (\Throwable $e) {
+                // Falls die Spalte 'birthday' nicht existiert oder Zugriff verweigert wird -> Pech
             }
         }
 
-        foreach ($importIds as $importId) {
-            if (empty($importId)) continue;
+        // B. Wenn wir kein Geburtsdatum haben, können wir nichts tun -> Abbruch für diesen User
+        if (empty($dob)) {
+            return; 
+        }
 
-            $this->insertParticipantByImportId($conn, $examId, $examYear, $importId);
+        // C. Alter berechnen
+        // $dob ist meist ein String "YYYY-MM-DD"
+        $birthYear = (int)substr((string)$dob, 0, 4);
+        $age = $examYear - $birthYear;
+
+        // D. In Prüfung eintragen
+        $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+        
+        if ($participantId) {
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                VALUES (?, ?, ?)
+                ON CONFLICT DO NOTHING
+            ", [$examId, $participantId, $age]);
         }
     }
 
