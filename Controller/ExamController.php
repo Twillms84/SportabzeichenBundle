@@ -251,38 +251,42 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. Gruppe finden (für die ID der Primärgruppe)
+        // 1. Gruppe finden
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         
         if (!$group) {
             return; 
         }
 
-        $groupId = $group->getId();     // Z.B. 123 (Integer)
-        $groupName = $group->getAccount(); // Z.B. "fachgruppe.sport" (String)
+        $groupId = $group->getId();      // Integer (z.B. 500)
+        $groupName = $group->getAccount(); // String (z.B. "fachgruppe.sport")
         $examId = $exam->getId();
 
+        // Parameter-Typen definieren, damit PostgreSQL nicht durcheinander kommt
+        $types = [
+            'gid'   => \PDO::PARAM_INT,
+            'gname' => \PDO::PARAM_STR,
+            'eid'   => \PDO::PARAM_INT
+        ];
+
         // ----------------------------------------------------------------
-        // SCHRITT 1: Teilnehmer-Pool auffüllen (User anlegen, falls neu)
+        // SCHRITT 1: Teilnehmer-Pool auffüllen (users -> sportabzeichen_participants)
         // ----------------------------------------------------------------
-        // Wir verknüpfen users.act (String) mit members.actuser (String)
-        // Und prüfen users.gid (Int) ODER members.actgrp (String)
         $sqlEnsureParticipants = "
             INSERT INTO sportabzeichen_participants (user_id)
             SELECT DISTINCT u.id 
             FROM users u
-            LEFT JOIN members m ON u.act = m.actuser
+            LEFT JOIN members m ON u.username = m.actuser
             WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND u.id NOT IN (SELECT user_id FROM sportabzeichen_participants)
         ";
         
-        // Sollte 'u.act' Fehler werfen ("Column not found"), ändere es oben zu 'u.username'
-        
-        $conn->executeStatement($sqlEnsureParticipants, [
-            'gid' => $groupId, 
-            'gname' => $groupName
-        ]);
+        $conn->executeStatement(
+            $sqlEnsureParticipants, 
+            ['gid' => $groupId, 'gname' => $groupName], 
+            ['gid' => \PDO::PARAM_INT, 'gname' => \PDO::PARAM_STR]
+        );
 
         // ----------------------------------------------------------------
         // SCHRITT 2: Verknüpfung zur Prüfung herstellen
@@ -292,7 +296,7 @@ final class ExamController extends AbstractPageController
             SELECT DISTINCT :eid, p.id
             FROM users u
             JOIN sportabzeichen_participants p ON u.id = p.user_id
-            LEFT JOIN members m ON u.act = m.actuser
+            LEFT JOIN members m ON u.username = m.actuser
             WHERE (u.gid = :gid OR m.actgrp = :gname)
               AND u.deleted IS NULL
               AND p.id NOT IN (
@@ -300,11 +304,11 @@ final class ExamController extends AbstractPageController
               )
         ";
         
-        $conn->executeStatement($sqlLinkExam, [
-            'eid' => $examId, 
-            'gid' => $groupId,
-            'gname' => $groupName
-        ]);
+        $conn->executeStatement(
+            $sqlLinkExam, 
+            ['eid' => $examId, 'gid' => $groupId, 'gname' => $groupName],
+            $types
+        );
     }
 
     /**
