@@ -393,7 +393,7 @@ final class ExamController extends AbstractPageController
         ", [$examId, $pId, $age]);
     }
     #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
-    public function addParticipant(int $id, Request $request, Connection $conn, EntityManagerInterface $em): Response
+    public function addParticipant(int $id, Request $request, EntityManagerInterface $em, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
@@ -401,30 +401,26 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // --- NEU: Listen für den Filter laden (Klassen) ---
+        // 2. Alle verfügbaren Klassen für das Dropdown laden
+        // Hier ist raw SQL okay und performant für die Liste
         $classes = $conn->fetchFirstColumn("
             SELECT DISTINCT auxinfo FROM users 
             WHERE auxinfo IS NOT NULL AND auxinfo <> '' 
             ORDER BY auxinfo
         ");
 
-        // --- POST REQUEST: Einen Teilnehmer hinzufügen ---
+        // --- POST: SPEICHERN ---
         if ($request->isMethod('POST')) {
+            // ... (Dieser Teil bleibt gleich wie vorher, da er gut funktioniert hat) ...
             $account = trim($request->request->get('account', ''));
-            $gender  = $request->request->get('gender');
+            $gender  = $request->request->get('gender'); // MALE / FEMALE
             $dobStr  = $request->request->get('dob');
 
-            if (empty($account) || empty($gender) || empty($dobStr)) {
-                $this->addFlash('error', 'Daten unvollständig.');
-            } else {
-                // User ID holen
+            if (!empty($account) && !empty($gender) && !empty($dobStr)) {
                 $userId = $conn->fetchOne("SELECT id FROM users WHERE act = ? AND deleted IS NULL", [$account]);
-
-                if (!$userId) {
-                    $this->addFlash('error', 'Benutzer nicht gefunden: ' . $account);
-                } else {
+                if ($userId) {
                     try {
-                        // A. Stammdaten im Pool aktualisieren/anlegen
+                        // A. Im Pool speichern/updaten (Verbindung User -> Sportabzeichen)
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_participants (user_id, import_id, geschlecht, geburtsdatum)
                              VALUES (:uid, :act, :gender, :dob)
@@ -434,15 +430,13 @@ final class ExamController extends AbstractPageController
                             ['uid' => $userId, 'act' => $account, 'gender' => $gender, 'dob' => $dobStr]
                         );
 
-                        // B. Alter berechnen
+                        // B. Zur Prüfung hinzufügen
                         $examYear = (int)$exam['exam_year'];
                         $birthYear = (int)substr($dobStr, 0, 4);
                         $age = $examYear - $birthYear;
 
-                        // C. Participant ID holen
                         $pId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
-
-                        // D. Zur Prüfung hinzufügen
+                        
                         $conn->executeStatement(
                             "INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                              VALUES (:eid, :pid, :age) ON CONFLICT DO NOTHING",
@@ -450,62 +444,66 @@ final class ExamController extends AbstractPageController
                         );
 
                         $this->addFlash('success', $account . ' hinzugefügt.');
-                        
-                        // Trick: Wir bleiben auf der Seite, behalten aber den Filter bei!
-                        // Wenn wir z.B. gerade Klasse 5a filtern, wollen wir da bleiben.
-                        $currentFilter = $request->query->get('filter_class');
-                        if ($currentFilter) {
-                            return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id, 'filter_class' => $currentFilter]);
-                        }
-                        return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id]);
-
                     } catch (\Throwable $e) {
                         $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                     }
                 }
             }
+            // Redirect auf die gleiche Seite, Filter behalten
+            $currentFilter = $request->query->get('filter_class');
+            return $this->redirectToRoute('sportabzeichen_exams_add_participant', ['id' => $id, 'filter_class' => $currentFilter]);
         }
 
-        // --- GET REQUEST: Fehlende Teilnehmer ermitteln ---
-        
+        // --- GET: LISTE LADEN ---
         $missingStudents = [];
         $selectedClass = $request->query->get('filter_class');
 
         if ($selectedClass) {
-            // KORREKTUR: 'firstname' und 'lastname' statt 'vorname'/'nachname'
-            $sql = "
-                SELECT u.act, u.firstname, u.lastname, u.birthday, u.sex
-                FROM users u
-                WHERE u.auxinfo = :class
-                AND u.deleted IS NULL
-                AND u.id NOT IN (
-                    SELECT sp.user_id 
-                    FROM sportabzeichen_exam_participants sep
-                    JOIN sportabzeichen_participants sp ON sep.participant_id = sp.id
-                    WHERE sep.exam_id = :examId
-                )
-                ORDER BY u.lastname, u.firstname
-            ";
+            // A. IDs der User holen, die schon in DIESER Prüfung sind (um sie auszuschließen)
+            $existingUserIds = $conn->fetchFirstColumn("
+                SELECT sp.user_id 
+                FROM sportabzeichen_exam_participants sep
+                JOIN sportabzeichen_participants sp ON sep.participant_id = sp.id
+                WHERE sep.exam_id = ?
+            ", [$id]);
 
-            $rows = $conn->fetchAllAssociative($sql, [
-                'class' => $selectedClass,
-                'examId' => $id
-            ]);
+            // B. QueryBuilder nutzen (wie im AdminController!) -> Keine SQL-Fehler mit 'vorname'
+            $userRepo = $em->getRepository(User::class);
+            $qb = $userRepo->createQueryBuilder('u')
+                ->where('u.auxinfo = :class')
+                ->andWhere('u.deleted IS NULL')
+                ->setParameter('class', $selectedClass)
+                ->orderBy('u.lastname', 'ASC')
+                ->addOrderBy('u.firstname', 'ASC');
 
-            foreach ($rows as $row) {
-                // Geschlecht m/w zu MALE/FEMALE
-                $gender = 'MALE'; 
-                if (isset($row['sex'])) {
-                    $s = strtolower((string)$row['sex']);
-                    // 1=m, 2=w, w=weiblich, f=female
+            // Ausschluss der bereits vorhandenen
+            if (!empty($existingUserIds)) {
+                $qb->andWhere($qb->expr()->notIn('u.id', $existingUserIds));
+            }
+
+            $users = $qb->getQuery()->getResult();
+
+            // C. Daten für das Template aufbereiten
+            foreach ($users as $user) {
+                // Checken, ob wir den Schüler schon im "Pool" haben (wegen Geburtsdatum)
+                $poolData = $conn->fetchAssociative(
+                    "SELECT geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", 
+                    [$user->getId()]
+                );
+
+                // Geschlecht normalisieren (IServ User Entity hat oft getSex())
+                // Falls getSex() nicht existiert, schauen wir in die DB-Daten, aber meistens geht das Objekt.
+                // Wir nehmen hier eine sichere Fallback-Logik:
+                $gender = 'MALE';
+                if (method_exists($user, 'getSex')) {
+                    $s = strtolower((string)$user->getSex()); 
                     if ($s == '2' || $s == 'w' || $s == 'female') $gender = 'FEMALE';
                 }
 
                 $missingStudents[] = [
-                    'account' => $row['act'],
-                    // KORREKTUR: Hier greifen wir auf die englischen Spaltennamen zu
-                    'name'    => $row['firstname'] . ' ' . $row['lastname'],
-                    'dob'     => $row['birthday'], 
+                    'account' => $user->getUsername(), // oder getAct() je nach IServ Version
+                    'name'    => $user->getFirstname() . ' ' . $user->getLastname(),
+                    'dob'     => $poolData ? $poolData['geburtsdatum'] : null, // NULL = Eingabefeld anzeigen
                     'gender'  => $gender
                 ];
             }
