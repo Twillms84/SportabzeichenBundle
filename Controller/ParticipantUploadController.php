@@ -22,7 +22,7 @@ final class ParticipantUploadController extends AbstractPageController
         $skipped  = 0;
         $error    = null;
         $message  = null;
-        $detailedErrors = []; // Hier sammeln wir die Gründe
+        $detailedErrors = [];
         
         if ($request->isMethod('POST')) {
             $file = $request->files->get('csvFile');
@@ -33,16 +33,32 @@ final class ParticipantUploadController extends AbstractPageController
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
                 
-                // Header lesen
+                // Header überspringen
                 fgetcsv($handle); 
-                $lineNumber = 1; // Wir starten bei 1 (Header war Zeile 1)
+                $lineNumber = 1;
 
-                // SQL Vorbereiten
+                // ---------------------------------------------------------
+                // 1. Spaltenname in der 'users' Tabelle ermitteln
+                // ---------------------------------------------------------
+                $userImportCol = 'import_id'; // Standard bei neuen Systemen
+                if ($strategy === 'import_id') {
+                    try {
+                        // Wir testen kurz, ob import_id existiert
+                        $conn->executeQuery("SELECT import_id FROM users LIMIT 1");
+                    } catch (\Throwable $e) {
+                        // Wenn es kracht, nehmen wir die alte Schreibweise
+                        $userImportCol = 'importid';
+                    }
+                }
+
+                // ---------------------------------------------------------
+                // 2. Prepared Statements erstellen
+                // ---------------------------------------------------------
                 if ($strategy === 'act') {
-                    // WICHTIG: LOWER() verwenden, um Groß-/Kleinschreibungsprobleme bei Usernamen zu vermeiden
                     $stmtLookup = $conn->prepare('SELECT id FROM users WHERE LOWER(act) = LOWER(:val) AND deleted IS NULL LIMIT 1');
                 } else {
-                    $stmtLookup = $conn->prepare('SELECT id FROM users WHERE import_id = :val AND deleted IS NULL LIMIT 1');
+                    // Hier nutzen wir jetzt die dynamisch ermittelte Spalte
+                    $stmtLookup = $conn->prepare("SELECT id FROM users WHERE $userImportCol = :val AND deleted IS NULL LIMIT 1");
                 }
 
                 while (($row = fgetcsv($handle, 1000, ';')) !== false) {
@@ -54,7 +70,6 @@ final class ParticipantUploadController extends AbstractPageController
                     }
 
                     try {
-                        // Check: Spaltenanzahl
                         if (count($row) < 3) {
                             $skipped++;
                             $detailedErrors[] = "Zeile $lineNumber: Zu wenige Spalten (" . count($row) . " gefunden, 3 erwartet).";
@@ -63,27 +78,25 @@ final class ParticipantUploadController extends AbstractPageController
 
                         [$identifier, $geschlechtRaw, $geburtsdatumRaw] = array_map('trim', $row);
 
-                        // Check: Identifier leer?
                         if ($identifier === '') {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Identifikator (User/ID) ist leer.";
+                            $detailedErrors[] = "Zeile $lineNumber: Identifikator leer.";
                             continue;
                         }
 
-                        // 1. User ID suchen
+                        // A. User suchen
                         $userId = $stmtLookup->executeQuery(['val' => $identifier])->fetchOne();
 
                         if (!$userId) {
                             $skipped++;
-                            // Klare Fehlermeldung je nach Strategie
                             $msg = ($strategy === 'act') 
-                                ? "Nutzer '$identifier' nicht gefunden (oder gelöscht)." 
-                                : "Import-ID '$identifier' keinem Nutzer zugeordnet.";
+                                ? "Nutzer '$identifier' nicht gefunden." 
+                                : "Import-ID '$identifier' ($userImportCol) unbekannt.";
                             $detailedErrors[] = "Zeile $lineNumber: $msg";
                             continue;
                         }
 
-                        // 2. Daten prüfen
+                        // B. Daten prüfen
                         $geschlecht = match (strtolower($geschlechtRaw)) {
                             'm', 'male', 'männlich', 'maennlich' => 'MALE',
                             'w', 'female', 'weiblich' => 'FEMALE',
@@ -93,7 +106,7 @@ final class ParticipantUploadController extends AbstractPageController
 
                         if (!$geschlecht) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Unbekanntes Geschlecht '$geschlechtRaw' bei User '$identifier'.";
+                            $detailedErrors[] = "Zeile $lineNumber: Unbekanntes Geschlecht '$geschlechtRaw'.";
                             continue;
                         }
 
@@ -101,14 +114,17 @@ final class ParticipantUploadController extends AbstractPageController
 
                         if (!$geburtsdatum) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Ungültiges Datum '$geburtsdatumRaw' bei User '$identifier'.";
+                            $detailedErrors[] = "Zeile $lineNumber: Ungültiges Datum '$geburtsdatumRaw'.";
                             continue;
                         }
 
-                        // Import-ID Logik
+                        // Import-ID merken (nur wenn wir Strategie Import-ID nutzen)
                         $importIdToSave = ($strategy === 'import_id') ? $identifier : null;
 
-                        // 3. Speichern
+                        // C. Speichern in UNSERE Tabelle
+                        // HINWEIS: In deiner Tabelle 'sportabzeichen_participants' heißt die Spalte hoffentlich 'import_id' (mit Unterstrich).
+                        // Falls du die Tabelle manuell anders angelegt hast, musst du das hier auch ändern.
+                        // Ich gehe davon aus, dass unsere Migrations 'import_id' genutzt haben.
                         $conn->executeStatement(
                             <<<SQL
                             INSERT INTO sportabzeichen_participants
@@ -133,7 +149,7 @@ final class ParticipantUploadController extends AbstractPageController
 
                     } catch (\Throwable $e) {
                         $skipped++;
-                        $detailedErrors[] = "Zeile $lineNumber: SQL Fehler - " . $e->getMessage();
+                        $detailedErrors[] = "Zeile $lineNumber: Datenbankfehler - " . $e->getMessage();
                     }
                 }
 
@@ -142,18 +158,18 @@ final class ParticipantUploadController extends AbstractPageController
                 if ($imported > 0) {
                     $message = "Import abgeschlossen.";
                 } elseif ($skipped > 0) {
-                    $error = "Es wurden keine Datensätze importiert. Bitte prüfe das Protokoll unten.";
+                    $error = "Keine Daten importiert.";
                 }
             }
         }
 
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
-            'activeTab' => 'participants_upload', // Achtung: Name muss mit deinem Tab-System übereinstimmen
+            'activeTab' => 'participants_upload',
             'imported'  => $imported,
             'skipped'   => $skipped,
             'error'     => $error,
             'message'   => $message,
-            'detailedErrors' => $detailedErrors, // Neu: Liste an die View übergeben
+            'detailedErrors' => $detailedErrors,
         ]);
     }
 
@@ -161,12 +177,10 @@ final class ParticipantUploadController extends AbstractPageController
     {
         if (!$input) return null;
         
-        // Verschiedene Formate probieren
         $formats = ['d.m.Y', 'Y-m-d', 'd-m-Y', 'd/m/Y', 'j.n.Y'];
         
         foreach ($formats as $fmt) {
             $dt = \DateTime::createFromFormat($fmt, $input);
-            // Prüfung: Das Datum muss logisch korrekt sein und das Format exakt matchen (um 01.01.2023 vs 2023-01-01 zu unterscheiden)
             if ($dt !== false) {
                  return $dt->format('Y-m-d');
             }
