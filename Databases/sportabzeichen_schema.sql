@@ -1,21 +1,38 @@
 --
 -- Sportabzeichen Modul – Datenbankschema
--- Version 2.4.0 (DOSB)
+-- Version 2.4.1 (DOSB + Exam Groups)
 --
 
 ------------------------------------------------------------
 -- 1. Stammdaten & Teilnehmer
 ------------------------------------------------------------
+
+-- 1.1 Prüfungen (Exams)
 CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
-    id          SERIAL PRIMARY KEY,
-    exam_name   TEXT,
-    exam_date   DATE,
-    exam_year   INT NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW(),
-    creator_id  TEXT
+    id              SERIAL PRIMARY KEY,
+    exam_name       TEXT,
+    exam_date       DATE,
+    exam_year       INT NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    creator_id      TEXT
 );
 
+-- 1.2 Zuordnung Gruppen zu Prüfungen (NEU)
+-- Speichert, welche Gruppen/Accounts zu einer Prüfung gehören
+CREATE TABLE IF NOT EXISTS sportabzeichen_exam_groups (
+    exam_id         INT NOT NULL,
+    act             VARCHAR(255) NOT NULL, -- Gruppen-Account/ID
+    PRIMARY KEY (exam_id, act),
+    CONSTRAINT fk_exam_groups_exam_id 
+        FOREIGN KEY (exam_id) 
+        REFERENCES sportabzeichen_exams (id) 
+        ON DELETE CASCADE
+);
+-- Optional: Index für schnelle Suche nach "Welche Prüfungen hat Gruppe X?"
+CREATE INDEX IF NOT EXISTS idx_exam_groups_act ON sportabzeichen_exam_groups (act);
+
+-- 1.3 Teilnehmer (Participants)
 CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     id              SERIAL PRIMARY KEY,
     import_id       TEXT NOT NULL UNIQUE,
@@ -25,7 +42,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     user_id         INT REFERENCES users(id) ON DELETE SET NULL,
     username        VARCHAR(255)
 );
--- Index für Performance (aus Live-DB)
+-- Index für Performance
 CREATE INDEX IF NOT EXISTS idx_sportabzeichen_user ON sportabzeichen_participants(user_id);
 
 
@@ -43,7 +60,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_swimming_proofs (
     exam_year           INT,
     CONSTRAINT unique_participant_proof_year UNIQUE (participant_id, exam_year)
 );
--- Indexe aus Live-DB
+-- Indexe
 CREATE INDEX IF NOT EXISTS idx_swimming_proofs_exam_year ON sportabzeichen_swimming_proofs(exam_year);
 CREATE INDEX IF NOT EXISTS idx_swimming_validity ON sportabzeichen_swimming_proofs(participant_id, valid_until);
 
@@ -82,7 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_req_lookup ON sportabzeichen_requirements(jahr, g
 
 
 ------------------------------------------------------------
--- 4. Prüfungs-Teilnehmer
+-- 4. Prüfungs-Teilnehmer (Verknüpfung Exam <-> Participant)
 ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_participants (
     id              SERIAL PRIMARY KEY,
@@ -94,8 +111,9 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exam_participants (
     UNIQUE (exam_id, participant_id)
 );
 
+
 ------------------------------------------------------------
--- 5. Ergebnisse
+-- 5. Ergebnisse (Results)
 ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_results (
     id              SERIAL PRIMARY KEY,
@@ -108,6 +126,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exam_results (
     CONSTRAINT uniq_exam_result UNIQUE (ep_id, discipline_id)
 );
 CREATE INDEX IF NOT EXISTS idx_results_ep ON sportabzeichen_exam_results(ep_id);
+
 
 ------------------------------------------------------------
 -- 6. Rechte
