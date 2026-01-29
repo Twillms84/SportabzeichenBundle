@@ -99,12 +99,7 @@ final class ExamController extends AbstractPageController
             'groups'  => $groupsForDropdown
         ]);
     }
-
-        return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
-            'groups'  => $groupsForDropdown
-        ]);
-    }
-
+    
     #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request, Connection $conn): Response
     {
