@@ -197,6 +197,7 @@ final class ExamController extends AbstractPageController
                         } catch (\Throwable $e) {
                             $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                         }
+                    }
                 }
                 // Redirect um Formular-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
