@@ -4,29 +4,150 @@
 
 {% block page_content %}
     <div class="content">
-        <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-default mb-3">
-            {{ icon('arrow-left') }} {{ 'Zurück'|trans }}
-        </a>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+                {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
+            </a>
+        </div>
 
-        <h2>{{ 'Prüfung bearbeiten'|trans }}</h2>
+        <h2>{{ 'Prüfung bearbeiten'|trans }}: {{ exam.exam_name }}</h2>
 
-        <form method="post">
-            <div class="mb-3">
-                <label class="form-label">{{ 'Bezeichnung (optional)'|trans }}</label>
-                <input type="text" name="exam_name" class="form-control" value="{{ exam.exam_name }}">
+        {# --- Flash Messages --- #}
+        {% for label, messages in app.flashes %}
+            {% for message in messages %}
+                <div class="alert alert-{{ label == 'error' ? 'danger' : label }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endfor %}
+
+        {# --- TEIL 1: Stammdaten bearbeiten --- #}
+        <div class="card mb-5">
+            <div class="card-header bg-primary text-white">
+                {{ icon('pencil') }} {{ 'Stammdaten'|trans }}
             </div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ 'Bezeichnung (optional)'|trans }}</label>
+                            <input type="text" name="exam_name" class="form-control" value="{{ exam.exam_name }}" placeholder="z.B. Sportfest">
+                        </div>
 
-            <div class="mb-3">
-                <label class="form-label">{{ 'Jahr'|trans }} *</label>
-                <input type="number" name="exam_year" class="form-control" required value="{{ exam.exam_year }}">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ 'Jahr'|trans }} *</label>
+                            <input type="number" name="exam_year" class="form-control" required value="{{ exam.exam_year }}">
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ 'Datum'|trans }}</label>
+                            <input type="date" name="exam_date" class="form-control" value="{{ exam.exam_date }}">
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">{{ icon('floppy-disk') }} {{ 'Stammdaten speichern'|trans }}</button>
+                    </div>
+                </form>
             </div>
+        </div>
 
-            <div class="mb-3">
-                <label class="form-label">{{ 'Datum'|trans }}</label>
-                <input type="date" name="exam_date" class="form-control" value="{{ exam.exam_date }}">
+        <hr class="my-4">
+
+        {# --- TEIL 2: Fehlende Teilnehmer hinzufügen --- #}
+        <h3>{{ 'Teilnehmer nachnominieren'|trans }}</h3>
+        <p class="text-muted mb-3">
+            {{ 'Hier werden Mitglieder der zugeordneten Gruppen angezeigt, die noch nicht an der Prüfung teilnehmen.'|trans }}
+        </p>
+
+        {# Suchleiste #}
+        <div class="card mb-3 bg-light border-0">
+            <div class="card-body py-2">
+                <form method="get" class="row g-2 align-items-center">
+                    <div class="col-auto flex-grow-1">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">{{ icon('search') }}</span>
+                            <input type="text" name="q" class="form-control border-start-0" 
+                                   placeholder="{{ 'Name suchen...'|trans }}" 
+                                   value="{{ search_term }}">
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-secondary">{{ 'Suchen'|trans }}</button>
+                        {% if search_term %}
+                            <a href="{{ path('sportabzeichen_exams_edit', {'id': exam.id}) }}" class="btn btn-outline-secondary" title="{{ 'Suche zurücksetzen'|trans }}">
+                                {{ icon('remove') }}
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
             </div>
+        </div>
 
-            <button type="submit" class="btn btn-primary">{{ 'Speichern'|trans }}</button>
-        </form>
+        {# Tabelle #}
+        <div class="card">
+            <div class="card-header">
+                {{ 'Verfügbare Teilnehmer'|trans }} 
+                <span class="badge bg-secondary ms-2">{{ missing_students|length }}</span>
+            </div>
+            
+            {% if missing_students is empty %}
+                <div class="card-body text-center text-muted py-5">
+                    {{ icon('ok') }} {{ 'Alle Gruppenmitglieder sind bereits in der Prüfung (oder keine Treffer bei der Suche).'|trans }}
+                </div>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>{{ 'Name'|trans }}</th>
+                                <th style="width: 170px;">{{ 'Geburtsdatum'|trans }}</th>
+                                <th style="width: 90px;">{{ 'Geschlecht'|trans }}</th>
+                                <th style="width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in missing_students %}
+                                {% set formId = 'add_user_' ~ student.account %}
+                                
+                                <tr {% if not student.dob %}class="table-warning"{% endif %}>
+                                    <td>
+                                        <strong>{{ student.name }}</strong>
+                                        {% if not student.dob %}
+                                            <div class="small text-danger">{{ icon('warning-sign') }} {{ 'Geburtsdatum fehlt'|trans }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if student.dob %}
+                                            {{ student.dob|date('d.m.Y') }}
+                                            {# Verstecktes Feld, damit es beim POST mitgesendet wird #}
+                                            <input type="hidden" name="dob" value="{{ student.dob }}" form="{{ formId }}">
+                                        {% else %}
+                                            <input type="date" name="dob" required 
+                                                   class="form-control form-control-sm border-danger" 
+                                                   form="{{ formId }}">
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <select name="gender" class="form-select form-select-sm" form="{{ formId }}">
+                                            <option value="MALE" {% if student.gender == 'MALE' %}selected{% endif %}>M</option>
+                                            <option value="FEMALE" {% if student.gender == 'FEMALE' %}selected{% endif %}>W</option>
+                                        </select>
+                                    </td>
+                                    <td class="text-end">
+                                        <form method="post" id="{{ formId }}">
+                                            <input type="hidden" name="account" value="{{ student.account }}">
+                                            {# Wir müssen die Exam-Daten hier NICHT senden, da wir prüfen, ob 'account' gesetzt ist #}
+                                            <button type="submit" class="btn btn-sm btn-success" title="{{ 'Hinzufügen'|trans }}">
+                                                {{ icon('plus') }}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
     </div>
 {% endblock %}

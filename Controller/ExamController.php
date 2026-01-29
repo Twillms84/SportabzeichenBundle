@@ -114,27 +114,111 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = ?", [$id]);
-        if (!$exam) throw $this->createNotFoundException();
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
+        if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
+        // --- POST HANDLING ---
         if ($request->isMethod('POST')) {
-            $name = trim($request->request->get('exam_name'));
-            $year = (int)$request->request->get('exam_year');
-            if ($year < 100) $year += 2000;
-            $date = $request->request->get('exam_date') ?: null;
+            
+            // Fall A: Prüfung bearbeiten (Erkennbar am Feld 'exam_year')
+            if ($request->request->has('exam_year')) {
+                $name = trim($request->request->get('exam_name'));
+                $year = (int)$request->request->get('exam_year');
+                if ($year < 100) $year += 2000;
+                $date = $request->request->get('exam_date') ?: null;
 
-            $conn->update('sportabzeichen_exams', [
-                'exam_name' => $name,
-                'exam_year' => $year,
-                'exam_date' => $date
-            ], ['id' => $id]);
+                $conn->update('sportabzeichen_exams', [
+                    'exam_name' => $name,
+                    'exam_year' => $year,
+                    'exam_date' => $date
+                ], ['id' => $id]);
 
-            $this->addFlash('success', 'Änderungen gespeichert.');
-            return $this->redirectToRoute('sportabzeichen_exams_dashboard');
+                $this->addFlash('success', 'Stammdaten gespeichert.');
+                
+                // Redirect auf sich selbst, um POST-Resubmission zu verhindern
+                return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
+            }
+
+            // Fall B: Teilnehmer hinzufügen (Erkennbar am Feld 'account')
+            if ($request->request->has('account')) {
+                $account = trim($request->request->get('account', ''));
+                $gender  = $request->request->get('gender');
+                $dobStr  = $request->request->get('dob');
+
+                if ($account && $gender && $dobStr) {
+                    $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
+                    if ($userId) {
+                        try {
+                            // 1. Ggf. Pool-Daten updaten (falls manuell Datum eingegeben wurde)
+                            $conn->executeStatement("
+                                INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
+                                VALUES (?, ?, ?)
+                                ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum, geschlecht = EXCLUDED.geschlecht
+                            ", [$userId, $dobStr, $gender]);
+
+                            // 2. In Prüfung einfügen
+                            $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
+                            
+                            $this->addFlash('success', "Teilnehmer hinzugefügt.");
+                        } catch (\Throwable $e) {
+                            $this->addFlash('error', 'Fehler: ' . $e->getMessage());
+                        }
+                    }
+                }
+                // Redirect auf sich selbst mit Suchparameter
+                return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
+            }
+        }
+
+        // --- GET: Liste der fehlenden Schüler laden ---
+        
+        $searchTerm = trim($request->query->get('q', ''));
+        $missingStudents = [];
+
+        // Die gleiche SQL-Logik wie zuvor, ohne 'auxinfo'
+        $sql = "
+            SELECT DISTINCT
+                u.id, u.act, u.firstname, u.lastname,
+                sp.geburtsdatum, sp.geschlecht as sp_gender
+            FROM users u
+            INNER JOIN members m ON u.act = m.user
+            INNER JOIN sportabzeichen_exam_groups seg ON m.group = seg.act 
+            LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
+            
+            WHERE u.deleted IS NULL
+            AND seg.exam_id = :examId
+            
+            AND NOT EXISTS (
+                SELECT 1 FROM sportabzeichen_exam_participants sep
+                JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
+                WHERE sp_inner.user_id = u.id AND sep.exam_id = :examId
+            )
+        ";
+
+        $params = ['examId' => $id];
+
+        if (!empty($searchTerm)) {
+            $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search) ";
+            $params['search'] = '%' . $searchTerm . '%';
+        }
+
+        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC LIMIT 500";
+
+        $rows = $conn->fetchAllAssociative($sql, $params);
+
+        foreach ($rows as $row) {
+            $missingStudents[] = [
+                'account'   => $row['act'],
+                'name'      => $row['firstname'] . ' ' . $row['lastname'],
+                'dob'       => $row['geburtsdatum'],
+                'gender'    => $row['sp_gender'] ?? 'MALE'
+            ];
         }
 
         return $this->render('@PulsRSportabzeichen/exams/edit.html.twig', [
-            'exam' => $exam
+            'exam' => $exam,
+            'missing_students' => $missingStudents,
+            'search_term' => $searchTerm
         ]);
     }
 
