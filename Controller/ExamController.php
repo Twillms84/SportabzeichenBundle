@@ -393,25 +393,29 @@ final class ExamController extends AbstractPageController
         ", [$examId, $pId, $age]);
     }
     #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
-    public function addParticipant(int $id, Request $request): Response
+    public function addParticipant(int $id, Request $request, Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        $exam = $this->conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
+        // $conn wird nun direkt verwendet (statt $this->conn)
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // --- POST: User hinzufügen (Bleibt gleich) ---
+        // --- POST: User hinzufügen ---
         if ($request->isMethod('POST')) {
             $account = trim($request->request->get('account', ''));
             $gender  = $request->request->get('gender');
             $dobStr  = $request->request->get('dob');
 
             if ($account && $gender && $dobStr) {
-                $userId = $this->conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
+                // Auch hier $conn verwenden
+                $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
                 
                 if ($userId) {
                     try {
-                        // Hilfsmethode aufrufen (Logik bleibt erhalten)
+                        // Hinweis: Falls diese Hilfsmethode auch DB-Zugriff braucht und vorher $this->conn nutzte,
+                        // müssen Sie ggf. $conn als Parameter an diese übergeben.
+                        // Ich lasse es hier erstmal so, wie es war, gehe aber davon aus, dass sie existiert.
                         $this->processParticipantByUserId((int)$id, (int)$exam['exam_year'], (int)$userId, $dobStr, $gender);
                         $this->addFlash('success', "$account hinzugefügt.");
                     } catch (\Throwable $e) {
@@ -419,20 +423,19 @@ final class ExamController extends AbstractPageController
                     }
                 }
             }
-            // Redirect, um Formular-Resubmit zu verhindern (Behält Suchparameter bei)
+            // Redirect verhindert Formular-Resubmit
             return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
                 'id' => $id, 
                 'q' => $request->query->get('q')
             ]);
         }
 
-        // --- GET: Liste aller potenziellen Teilnehmer laden ---
+        // --- GET: Liste laden ---
         
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
         // SQL: Alle User, die NICHT in dieser Prüfung sind
-        // Sortierung: Zuerst die ohne Geburtsdatum (NULL), dann Alphabetisch
         $sql = "
             SELECT 
                 u.id, u.act, u.firstname, u.lastname, u.auxinfo as class_name,
@@ -440,7 +443,6 @@ final class ExamController extends AbstractPageController
             FROM users u
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             WHERE u.deleted IS NULL
-            -- Ausschluss: Bereits in der Prüfung
             AND NOT EXISTS (
                 SELECT 1 FROM sportabzeichen_exam_participants sep
                 JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
@@ -450,22 +452,21 @@ final class ExamController extends AbstractPageController
 
         $params = ['examId' => $id];
 
-        // Suchfilter (optional, aber empfohlen bei vielen Usern)
         if (!empty($searchTerm)) {
             $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search OR u.act ILIKE :search OR u.auxinfo ILIKE :search) ";
             $params['search'] = '%' . $searchTerm . '%';
         }
 
-        // Sortierung: Leere Geburtsdaten nach oben, dann Klasse, dann Nachname
         $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.auxinfo ASC, u.lastname ASC, u.firstname ASC LIMIT 500";
 
-        $rows = $this->conn->fetchAllAssociative($sql, $params);
+        // $conn verwenden
+        $rows = $conn->fetchAllAssociative($sql, $params);
 
         foreach ($rows as $row) {
             $missingStudents[] = [
                 'account'   => $row['act'],
                 'name'      => $row['firstname'] . ' ' . $row['lastname'],
-                'class'     => $row['class_name'], // Neu: Klasse anzeigen zur Orientierung
+                'class'     => $row['class_name'],
                 'dob'       => $row['geburtsdatum'],
                 'gender'    => $row['sp_gender'] ?? 'MALE'
             ];
