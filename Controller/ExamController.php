@@ -101,17 +101,21 @@ final class ExamController extends AbstractPageController
     }
 
     #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
-    public function edit(int $id, Request $request, Connection $conn): Response
+    public function edit(int $id, Request $request, Connection $conn, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
+        // Wir brauchen das Entity für die Helper-Methode importParticipantsFromGroup
+        $examEntity = $em->getRepository(Exam::class)->find($id);
+        if (!$examEntity) throw $this->createNotFoundException('Prüfung nicht gefunden');
+        
+        // Array-Daten für DBAL-Operationen (Legacy-Support für deinen Code)
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
-        if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
         // --- POST HANDLING ---
         if ($request->isMethod('POST')) {
             
-            // Fall A: Prüfung bearbeiten (Erkennbar am Feld 'exam_year')
+            // 1. STAMMDATEN BEARBEITEN
             if ($request->request->has('exam_year')) {
                 $name = trim($request->request->get('exam_name'));
                 $year = (int)$request->request->get('exam_year');
@@ -125,12 +129,35 @@ final class ExamController extends AbstractPageController
                 ], ['id' => $id]);
 
                 $this->addFlash('success', 'Stammdaten gespeichert.');
-                
-                // Redirect auf sich selbst, um POST-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
             }
 
-            // Fall B: Teilnehmer hinzufügen (Erkennbar am Feld 'account')
+            // 2. GRUPPE HINZUFÜGEN
+            if ($request->request->has('add_group')) {
+                $groupAct = $request->request->get('group_act');
+                if ($groupAct) {
+                    try {
+                        $this->importParticipantsFromGroup($em, $conn, $examEntity, $groupAct);
+                        $this->addFlash('success', 'Gruppe hinzugefügt und Mitglieder importiert.');
+                    } catch (\Throwable $e) {
+                        $this->addFlash('error', 'Fehler beim Import: ' . $e->getMessage());
+                    }
+                }
+                return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id]);
+            }
+
+            // 3. GRUPPE ENTFERNEN
+            if ($request->request->has('remove_group')) {
+                $groupAct = $request->request->get('remove_group');
+                $conn->executeStatement(
+                    "DELETE FROM sportabzeichen_exam_groups WHERE exam_id = ? AND act = ?", 
+                    [$id, $groupAct]
+                );
+                $this->addFlash('success', 'Gruppe aus der Prüfung entfernt (bereits importierte Teilnehmer bleiben erhalten).');
+                return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id]);
+            }
+
+            // 4. EINZELNEN TEILNEHMER HINZUFÜGEN (aus der "Fehlende"-Liste)
             if ($request->request->has('account')) {
                 $account = trim($request->request->get('account', ''));
                 $gender  = $request->request->get('gender');
@@ -140,14 +167,14 @@ final class ExamController extends AbstractPageController
                     $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
                     if ($userId) {
                         try {
-                            // 1. Ggf. Pool-Daten updaten (falls manuell Datum eingegeben wurde)
+                            // A) Pool-Daten updaten/anlegen
                             $conn->executeStatement("
                                 INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
                                 VALUES (?, ?, ?)
                                 ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum, geschlecht = EXCLUDED.geschlecht
                             ", [$userId, $dobStr, $gender]);
 
-                            // 2. In Prüfung einfügen
+                            // B) In Prüfung einfügen
                             $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
                             
                             $this->addFlash('success', "Teilnehmer hinzugefügt.");
@@ -156,24 +183,46 @@ final class ExamController extends AbstractPageController
                         }
                     }
                 }
-                // Redirect auf sich selbst mit Suchparameter
+                // Redirect um Formular-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
             }
         }
 
-        // --- GET: Liste der fehlenden Schüler laden ---
+        // --- GET DATEN LADEN ---
+
+        // A) Zugeordnete Gruppen laden
+        $assignedGroups = $conn->fetchAllAssociative("
+            SELECT seg.act, g.name 
+            FROM sportabzeichen_exam_groups seg
+            LEFT JOIN groups g ON seg.act = g.act
+            WHERE seg.exam_id = ?
+            ORDER BY g.name ASC
+        ", [$id]);
         
+        $assignedActs = array_column($assignedGroups, 'act');
+
+        // B) Alle Gruppen für Dropdown laden (die noch nicht zugeordnet sind)
+        $allGroupsObj = $em->getRepository(Group::class)->findBy([], ['name' => 'ASC']);
+        $availableGroups = [];
+        foreach ($allGroupsObj as $g) {
+            if ($g->getAccount() && !in_array($g->getAccount(), $assignedActs)) {
+                $availableGroups[$g->getAccount()] = $g->getName();
+            }
+        }
+
+        // C) Liste der fehlenden Schüler laden
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
-        // Die gleiche SQL-Logik wie zuvor, ohne 'auxinfo'
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
-                sp.geburtsdatum, sp.geschlecht as sp_gender
+                sp.geburtsdatum, sp.geschlecht as sp_gender,
+                g.name as group_name
             FROM users u
             INNER JOIN members m ON u.act = m.user
             INNER JOIN sportabzeichen_exam_groups seg ON m.group = seg.act 
+            LEFT JOIN groups g ON seg.act = g.act
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             
             WHERE u.deleted IS NULL
@@ -193,7 +242,8 @@ final class ExamController extends AbstractPageController
             $params['search'] = '%' . $searchTerm . '%';
         }
 
-        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC LIMIT 500";
+        // Sortierung: Wer kein Geburtsdatum hat nach oben, dann Name
+        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC LIMIT 300";
 
         $rows = $conn->fetchAllAssociative($sql, $params);
 
@@ -202,12 +252,15 @@ final class ExamController extends AbstractPageController
                 'account'   => $row['act'],
                 'name'      => $row['firstname'] . ' ' . $row['lastname'],
                 'dob'       => $row['geburtsdatum'],
-                'gender'    => $row['sp_gender'] ?? 'MALE'
+                'gender'    => $row['sp_gender'] ?? 'MALE',
+                'group'     => $row['group_name'] // Damit man sieht, warum der hier auftaucht
             ];
         }
 
         return $this->render('@PulsRSportabzeichen/exams/edit.html.twig', [
             'exam' => $exam,
+            'assigned_groups' => $assignedGroups,
+            'available_groups' => $availableGroups,
             'missing_students' => $missingStudents,
             'search_term' => $searchTerm
         ]);

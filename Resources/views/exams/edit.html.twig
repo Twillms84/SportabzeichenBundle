@@ -8,6 +8,11 @@
             <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
                 {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
             </a>
+            
+            {# Optional: Direkt zum Ergebnis #}
+            <a href="{{ path('sportabzeichen_results_exam_index', {'id': exam.id}) }}" class="btn btn-primary">
+                {{ icon('list') }} {{ 'Ergebnisse erfassen'|trans }}
+            </a>
         </div>
 
         <h2>{{ 'Prüfung bearbeiten'|trans }}: {{ exam.exam_name }}</h2>
@@ -21,42 +26,101 @@
             {% endfor %}
         {% endfor %}
 
-        {# --- TEIL 1: Stammdaten bearbeiten --- #}
-        <div class="card mb-5">
-            <div class="card-header bg-primary text-white">
-                {{ icon('pencil') }} {{ 'Stammdaten'|trans }}
+        <div class="row">
+            {# --- TEIL 1: Stammdaten --- #}
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        {{ icon('pencil') }} {{ 'Stammdaten'|trans }}
+                    </div>
+                    <div class="card-body">
+                        <form method="post">
+                            <div class="mb-3">
+                                <label class="form-label">{{ 'Bezeichnung (optional)'|trans }}</label>
+                                <input type="text" name="exam_name" class="form-control" value="{{ exam.exam_name }}" placeholder="z.B. Sportfest">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">{{ 'Jahr'|trans }} *</label>
+                                    <input type="number" name="exam_year" class="form-control" required value="{{ exam.exam_year }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">{{ 'Datum'|trans }}</label>
+                                    <input type="date" name="exam_date" class="form-control" value="{{ exam.exam_date }}">
+                                </div>
+                            </div>
+                            <div class="text-end mt-auto">
+                                <button type="submit" class="btn btn-primary">{{ icon('floppy-disk') }} {{ 'Speichern'|trans }}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <form method="post">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">{{ 'Bezeichnung (optional)'|trans }}</label>
-                            <input type="text" name="exam_name" class="form-control" value="{{ exam.exam_name }}" placeholder="z.B. Sportfest">
-                        </div>
 
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">{{ 'Jahr'|trans }} *</label>
-                            <input type="number" name="exam_year" class="form-control" required value="{{ exam.exam_year }}">
-                        </div>
+            {# --- TEIL 2: Gruppen verwalten --- #}
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-info text-white">
+                        {{ icon('group') }} {{ 'Teilnehmende Gruppen'|trans }}
+                    </div>
+                    <div class="card-body">
+                        {# Liste der aktuellen Gruppen #}
+                        {% if assigned_groups is not empty %}
+                            <div class="mb-3">
+                                <ul class="list-group">
+                                    {% for grp in assigned_groups %}
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>
+                                                {{ icon('group') }} <strong>{{ grp.name }}</strong>
+                                                <small class="text-muted ms-2">({{ grp.act }})</small>
+                                            </span>
+                                            <form method="post" onsubmit="return confirm('{{ 'Gruppe wirklich entfernen? Die Schüler bleiben in der Prüfung erhalten, aber neue Schüler dieser Gruppe erscheinen nicht mehr automatisch.'|trans }}');">
+                                                <input type="hidden" name="remove_group" value="{{ grp.act }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ 'Gruppe entfernen'|trans }}">
+                                                    {{ icon('trash') }}
+                                                </button>
+                                            </form>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                {{ 'Noch keine Gruppen zugeordnet.'|trans }}
+                            </div>
+                        {% endif %}
 
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">{{ 'Datum'|trans }}</label>
-                            <input type="date" name="exam_date" class="form-control" value="{{ exam.exam_date }}">
+                        <hr>
+                        
+                        {# Gruppe hinzufügen #}
+                        <label class="form-label">{{ 'Weitere Gruppe hinzufügen'|trans }}</label>
+                        <form method="post" class="d-flex gap-2">
+                            <select name="group_act" class="form-select select2-enable">
+                                <option value="">{{ 'Bitte wählen...'|trans }}</option>
+                                {% for act, name in available_groups %}
+                                    <option value="{{ act }}">{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="add_group" value="1">
+                            <button type="submit" class="btn btn-success text-nowrap">
+                                {{ icon('plus') }} {{ 'Hinzufügen'|trans }}
+                            </button>
+                        </form>
+                        <div class="form-text text-muted">
+                            {{ 'Fügt die Gruppe hinzu und importiert sofort alle enthaltenen Benutzer.'|trans }}
                         </div>
                     </div>
-                    <div class="text-end">
-                        <button type="submit" class="btn btn-primary">{{ icon('floppy-disk') }} {{ 'Stammdaten speichern'|trans }}</button>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
 
         <hr class="my-4">
 
-        {# --- TEIL 2: Fehlende Teilnehmer hinzufügen --- #}
-        <h3>{{ 'Teilnehmer nachnominieren'|trans }}</h3>
+        {# --- TEIL 3: Fehlende Teilnehmer --- #}
+        <h3>{{ 'Einzelne Teilnehmer nachnominieren'|trans }}</h3>
         <p class="text-muted mb-3">
-            {{ 'Hier werden Mitglieder der zugeordneten Gruppen angezeigt, die noch nicht an der Prüfung teilnehmen.'|trans }}
+            {{ 'Hier werden Schüler der oben zugeordneten Gruppen angezeigt, die noch <u>nicht</u> an der Prüfung teilnehmen.'|trans }}<br>
+            {{ 'Um jemanden hinzuzufügen, kontrollieren Sie das Geburtsdatum und klicken auf das Plus.'|trans }}
         </p>
 
         {# Suchleiste #}
@@ -92,7 +156,11 @@
             
             {% if missing_students is empty %}
                 <div class="card-body text-center text-muted py-5">
-                    {{ icon('ok') }} {{ 'Alle Gruppenmitglieder sind bereits in der Prüfung (oder keine Treffer bei der Suche).'|trans }}
+                    {% if assigned_groups is empty %}
+                         {{ icon('info-sign') }} {{ 'Bitte fügen Sie oben erst Gruppen hinzu.'|trans }}
+                    {% else %}
+                        {{ icon('ok') }} {{ 'Alle Gruppenmitglieder sind bereits in der Prüfung (oder keine Treffer bei der Suche).'|trans }}
+                    {% endif %}
                 </div>
             {% else %}
                 <div class="table-responsive">
@@ -100,6 +168,7 @@
                         <thead>
                             <tr>
                                 <th>{{ 'Name'|trans }}</th>
+                                <th>{{ 'Gruppe'|trans }}</th>
                                 <th style="width: 170px;">{{ 'Geburtsdatum'|trans }}</th>
                                 <th style="width: 90px;">{{ 'Geschlecht'|trans }}</th>
                                 <th style="width: 60px;"></th>
@@ -112,14 +181,17 @@
                                 <tr {% if not student.dob %}class="table-warning"{% endif %}>
                                     <td>
                                         <strong>{{ student.name }}</strong>
+                                        <div class="small text-muted">{{ student.account }}</div>
                                         {% if not student.dob %}
-                                            <div class="small text-danger">{{ icon('warning-sign') }} {{ 'Geburtsdatum fehlt'|trans }}</div>
+                                            <div class="small text-danger">{{ icon('warning-sign') }} {{ 'Datum fehlt'|trans }}</div>
                                         {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">{{ student.group }}</span>
                                     </td>
                                     <td>
                                         {% if student.dob %}
                                             {{ student.dob|date('d.m.Y') }}
-                                            {# Verstecktes Feld, damit es beim POST mitgesendet wird #}
                                             <input type="hidden" name="dob" value="{{ student.dob }}" form="{{ formId }}">
                                         {% else %}
                                             <input type="date" name="dob" required 
@@ -136,7 +208,6 @@
                                     <td class="text-end">
                                         <form method="post" id="{{ formId }}">
                                             <input type="hidden" name="account" value="{{ student.account }}">
-                                            {# Wir müssen die Exam-Daten hier NICHT senden, da wir prüfen, ob 'account' gesetzt ist #}
                                             <button type="submit" class="btn btn-sm btn-success" title="{{ 'Hinzufügen'|trans }}">
                                                 {{ icon('plus') }}
                                             </button>
@@ -150,4 +221,16 @@
             {% endif %}
         </div>
     </div>
+    
+    {# Optional: Select2 initialisieren falls vorhanden #}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('.select2-enable').select2({
+                    theme: 'bootstrap-5',
+                    width: '100%'
+                });
+            }
+        });
+    </script>
 {% endblock %}
