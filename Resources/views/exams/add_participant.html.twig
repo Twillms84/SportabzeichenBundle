@@ -3,35 +3,34 @@
 {% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.exam_name }}{% endblock %}
 
 {% block page_content %}
-    {# Zurück Button: Name der Route evtl. anpassen (show oder index) #}
-    <a href="{{ path('sportabzeichen_exams_dashboard', {'id': exam.id}) }}" class="btn btn-secondary mb-3">
-        {{ icon('arrow-left') }} {{ 'Zurück zur Prüfung'|trans }}
+    {# --- Zurück Button --- #}
+    <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary mb-3">
+        {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
     </a>
 
+    {# --- Auswahl-Bereich --- #}
     <div class="card mb-4">
         <div class="card-header">{{ 'Quelle auswählen'|trans }}</div>
         <div class="card-body">
             
-            {# --- Tabs zur Auswahl --- #}
+            {# --- Tabs --- #}
             <ul class="nav nav-tabs mb-3">
                 <li class="nav-item">
                     <a class="nav-link {% if mode == 'class' %}active{% endif %}" 
                        href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id, 'mode': 'class'}) }}">
-                       {{ icon('list') }} {{ 'Nach Klasse'|trans }}
+                        {{ icon('list') }} {{ 'Nach Klasse'|trans }}
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if mode == 'group' %}active{% endif %}" 
                        href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id, 'mode': 'group'}) }}">
-                       {{ icon('group') }} {{ 'Nach Gruppe'|trans }}
+                        {{ icon('group') }} {{ 'Nach Gruppe'|trans }}
                     </a>
                 </li>
             </ul>
 
-            {# --- Das Auswahl-Formular --- #}
-            {# --- Das Auswahl-Formular --- #}
+            {# --- Filter Formular --- #}
             <form method="get" class="row g-3 align-items-center">
-                {# Wichtig: Modus als Hidden Field behalten, damit er beim Suchen nicht verloren geht #}
                 <input type="hidden" name="mode" value="{{ mode }}">
 
                 <div class="col-auto">
@@ -45,7 +44,6 @@
                 </div>
                 
                 <div class="col-auto">
-                    {# onchange drin lassen für die, bei denen es geht, aber Button daneben stellen #}
                     <select name="filter_value" id="filter_value" class="form-select" onchange="this.form.submit()">
                         <option value="">-- {{ 'Bitte wählen'|trans }} --</option>
                         {% if mode == 'group' %}
@@ -64,7 +62,6 @@
                     </select>
                 </div>
 
-                {# Neuer Button hier: #}
                 <div class="col-auto">
                     <button type="submit" class="btn btn-primary">
                         {{ icon('search') }} {{ 'Anzeigen'|trans }}
@@ -74,6 +71,7 @@
         </div>
     </div>
 
+    {# --- Ergebnis-Liste --- #}
     {% if filter_value %}
         <div class="card">
             <div class="card-header bg-light">
@@ -81,56 +79,63 @@
             </div>
             
             {% if missing_students is empty %}
-                <div class="card-body text-center text-success">
-                    {{ icon('ok') }} {{ 'Alle Personen dieser Liste sind bereits in dieser Prüfung!'|trans }}
+                <div class="card-body text-center text-success py-4">
+                    <div class="fs-4 mb-2">{{ icon('ok') }}</div>
+                    <div>{{ 'Alle Personen dieser Liste sind bereits in dieser Prüfung!'|trans }}</div>
                 </div>
             {% else %}
                 <div class="table-responsive">
                     <table class="table table-striped table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Account</th>
-                                <th style="width: 160px;">Geburtsdatum</th>
-                                <th style="width: 100px;"></th>
+                                <th>{{ 'Name'|trans }}</th>
+                                <th>{{ 'Account'|trans }}</th>
+                                <th style="width: 180px;">{{ 'Geburtsdatum'|trans }}</th>
+                                <th style="width: 100px;">{{ 'Geschlecht'|trans }}</th>
+                                <th style="width: 80px;" class="text-end">{{ 'Aktion'|trans }}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for student in missing_students %}
+                                {# Eindeutige ID für das Formular dieser Zeile #}
+                                {% set formId = 'form_user_' ~ student.account %}
+                                
                                 <tr>
-                                    {# Pro Zeile ein Formular #}
-                                    <form method="post">
-                                        <td>
-                                            <strong>{{ student.name }}</strong>
+                                    <td>
+                                        <strong>{{ student.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ student.account }}</span>
+                                    </td>
+                                    <td>
+                                        {# Geburtsdatum Input #}
+                                        {% if student.dob %}
+                                            {# Wenn Datum vorhanden, nur anzeigen und Hidden Field nutzen #}
+                                            {{ student.dob|date('d.m.Y') }}
+                                            <input type="hidden" name="dob" value="{{ student.dob }}" form="{{ formId }}">
+                                        {% else %}
+                                            {# Wenn kein Datum, Input anzeigen. WICHTIG: form-Attribut verknüpft es mit dem Formular #}
+                                            <input type="date" name="dob" required class="form-control form-control-sm" form="{{ formId }}">
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {# Geschlecht Select #}
+                                        <select name="gender" class="form-select form-select-sm" form="{{ formId }}">
+                                            <option value="MALE" {% if student.gender == 'MALE' %}selected{% endif %}>M</option>
+                                            <option value="FEMALE" {% if student.gender == 'FEMALE' %}selected{% endif %}>W</option>
+                                            <option value="DIVERSE" {% if student.gender == 'DIVERSE' %}selected{% endif %}>D</option>
+                                        </select>
+                                    </td>
+                                    <td class="text-end">
+                                        {# Das eigentliche Formular sitzt hier valid in der Zelle #}
+                                        <form method="post" id="{{ formId }}">
                                             <input type="hidden" name="account" value="{{ student.account }}">
-                                        </td>
-                                        <td>
-                                            {# Account Badge #}
-                                            <span class="badge bg-secondary">{{ student.account }}</span>
-                                        </td>
-                                        <td>
-                                            {# Datum #}
-                                            {% if student.dob %}
-                                                {{ student.dob|date('d.m.Y') }}
-                                                <input type="hidden" name="dob" value="{{ student.dob }}">
-                                            {% else %}
-                                                <input type="date" name="dob" required class="form-control form-control-sm">
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {# Geschlecht Auswahl #}
-                                            <select name="gender" class="form-select form-select-sm" style="width: 70px;">
-                                                <option value="MALE" {% if student.gender == 'MALE' %}selected{% endif %}>M</option>
-                                                <option value="FEMALE" {% if student.gender == 'FEMALE' %}selected{% endif %}>W</option>
-                                                <option value="DIVERSE" {% if student.gender == 'DIVERSE' %}selected{% endif %}>D</option>
-                                            </select>
-                                        </td>
-                                        <td class="text-end">
-                                            <button type="submit" class="btn btn-sm btn-success">
+                                            
+                                            <button type="submit" class="btn btn-sm btn-success" title="{{ 'Hinzufügen'|trans }}">
                                                 {{ icon('plus') }}
                                             </button>
-                                        </td>
-                                    </form>
+                                        </form>
+                                    </td>
                                 </tr>
                             {% endfor %}
                         </tbody>
