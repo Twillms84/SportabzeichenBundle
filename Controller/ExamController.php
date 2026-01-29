@@ -220,7 +220,8 @@ final class ExamController extends AbstractPageController
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
                 sp.geburtsdatum, sp.geschlecht as sp_gender,
-                g.name as group_name
+                g.name as group_name,
+                (sp.geburtsdatum IS NULL) as is_missing_dob
             FROM users u
             INNER JOIN members m ON u.act = m.actuser
             INNER JOIN sportabzeichen_exam_groups seg ON m.actgrp = seg.act 
@@ -244,8 +245,8 @@ final class ExamController extends AbstractPageController
             $params['search'] = '%' . $searchTerm . '%';
         }
 
-        // Sortierung
-        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC LIMIT 300";
+        // KORREKTUR: Wir sortieren jetzt nach der oben definierten Hilfsspalte 'is_missing_dob'
+        $sql .= " ORDER BY is_missing_dob DESC, u.lastname ASC, u.firstname ASC LIMIT 300";
 
         $rows = $conn->fetchAllAssociative($sql, $params);
 
