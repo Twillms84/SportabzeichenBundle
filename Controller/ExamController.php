@@ -254,61 +254,59 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. Gruppe verknüpfen
+        // 1. Gruppe für Prüfung registrieren
         $conn->executeStatement("
-            INSERT INTO sportabzeichen_exam_groups (exam_id, act)
-            VALUES (?, ?)
+            INSERT INTO sportabzeichen_exam_groups (exam_id, act) VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
         // 2. Gruppe laden
-        $groupRepo = $em->getRepository(Group::class);
-        $group = $groupRepo->findOneBy(['account' => $groupAccount]);
-        
+        $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
         // 3. User iterieren
         foreach ($group->getUsers() as $user) {
             
-            // SCHRITT A: Die korrekte 'importid' aus der DB holen
-            // Das User-Objekt hat oft keine getImportId(), und getUsername() passt nicht immer.
-            // Daher holen wir sie "roh" über die ID.
-            $userId = $user->getId();
-            
-            $iservUserRow = $conn->fetchAssociative("SELECT importid FROM users WHERE id = ?", [$userId]);
-            
-            // Wenn der User keine importid hat (z.B. manche Admins/Lehrer), überspringen
-            if (!$iservUserRow || empty($iservUserRow['importid'])) {
-                continue; 
+            // Daten aus dem User-Objekt holen
+            $rawImportId = $user->getImportId(); 
+            $username    = $user->getUsername(); // Als Fallback nutzen!
+
+            $participantRow = null;
+
+            // --- STRATEGIE 1: Suche über Import-ID (nur wenn es eine Zahl ist!) ---
+            // Verhindert den Fehler: "invalid input syntax for type integer"
+            if ($rawImportId && is_numeric($rawImportId)) {
+                $participantRow = $conn->fetchAssociative(
+                    "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", 
+                    [$rawImportId]
+                );
             }
-            
-            $realImportId = $iservUserRow['importid'];
 
-            // SCHRITT B: Prüfen, ob dieser User schon als Participant existiert (Deine Logik)
-            $participant = $conn->fetchAssociative("
-                SELECT id, geburtsdatum 
-                FROM sportabzeichen_participants 
-                WHERE import_id = ?
-            ", [$realImportId]);
+            // --- STRATEGIE 2: Suche über Username (wenn ID fehlschlug oder Text war) ---
+            if (!$participantRow && $username) {
+                $participantRow = $conn->fetchAssociative(
+                    "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?", 
+                    [$username]
+                );
+            }
 
-            // Nur weitermachen, wenn Participant existiert UND Geburtsdatum hat
-            if (!$participant || empty($participant['geburtsdatum'])) {
+            // Wenn immer noch nichts gefunden wurde oder kein Geburtsdatum da ist -> Skip
+            if (!$participantRow || empty($participantRow['geburtsdatum'])) {
                 continue;
             }
 
-            // SCHRITT C: Zur Prüfung hinzufügen
-            $birthDateStr = $participant['geburtsdatum']; // Format Y-m-d oder ähnlich
+            // Eintragung in die Prüfung
+            $pId = $participantRow['id'];
+            $birthDateStr = $participantRow['geburtsdatum'];
+            
+            // Alter berechnen (Jahr der Prüfung - Geburtsjahr)
             $age = $exam->getYear() - (int)substr($birthDateStr, 0, 4);
 
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?)
                 ON CONFLICT (exam_id, participant_id) DO NOTHING
-            ", [
-                $exam->getId(), 
-                $participant['id'], 
-                $age
-            ]);
+            ", [$exam->getId(), $pId, $age]);
         }
     }
 
