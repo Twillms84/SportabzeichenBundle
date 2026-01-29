@@ -37,7 +37,7 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Gruppen laden
+        // 1. Gruppen laden (Für Dropdown)
         $groupRepo = $em->getRepository(Group::class);
         $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
         
@@ -82,8 +82,7 @@ final class ExamController extends AbstractPageController
                     foreach ($selectedGroups as $groupAccount) {
                         $groupAccount = (string)$groupAccount;
                         
-                        // KORREKTUR: Reihenfolge beachten ($em, $conn, $exam, $account)
-                        // Die Methode kümmert sich jetzt selbst um den Eintrag in 'sportabzeichen_exam_groups'
+                        // KORREKTUR: Reihenfolge muss ($em, $conn, $exam, $groupAccount) sein!
                         $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
                     }
                 }
@@ -95,6 +94,11 @@ final class ExamController extends AbstractPageController
                 $this->addFlash('error', 'Fehler beim Anlegen: ' . $e->getMessage());
             }
         }
+
+        return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
+            'groups'  => $groupsForDropdown
+        ]);
+    }
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
             'groups'  => $groupsForDropdown
