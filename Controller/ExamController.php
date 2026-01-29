@@ -99,7 +99,7 @@ final class ExamController extends AbstractPageController
             'groups'  => $groupsForDropdown
         ]);
     }
-    
+
     #[Route('/{id}/edit', name: 'edit', methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request, Connection $conn): Response
     {
@@ -254,99 +254,52 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // SCHRITT 1: Die Gruppe der Prüfung zuordnen (WICHTIG für Edit-Ansicht!)
+        // 1. Gruppe der Prüfung zuordnen (damit sie im Frontend als "ausgewählt" erscheint)
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act)
             VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
-        // SCHRITT 2: IServ Gruppe laden
+        // 2. IServ Gruppe laden
         $groupRepo = $em->getRepository(Group::class);
         $group = $groupRepo->findOneBy(['account' => $groupAccount]);
         
         if (!$group) return;
 
-        // SCHRITT 3: Alle User der Gruppe durchgehen
+        // 3. User der Gruppe durchgehen
         foreach ($group->getUsers() as $user) {
             
-            // IServ User Daten
+            // Wir nutzen den Username als Schlüssel zur import_id
+            // (Das ersetzt $user->getImportId(), falls die Methode auch fehlen sollte)
             $importId = $user->getUsername(); 
-            $dob = $user->getBirthday(); // DateTime|null
-            
-            // Geschlecht normalisieren
-            $genderRaw = $user->getGender();
-            $gender = null;
-            if (in_array($genderRaw, ['m', 'MALE', 1])) $gender = 'MALE';
-            if (in_array($genderRaw, ['w', 'f', 'FEMALE', 2])) $gender = 'FEMALE';
 
-            // --- A) Teilnehmer (Participant) finden oder erstellen ---
-            
-            // Prüfen, ob Participant existiert
-            $existingData = $conn->fetchAssociative(
-                "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", 
-                [$importId]
-            );
+            // DEINE LOGIK: Suche existierenden Participant
+            $row = $conn->fetchAssociative("
+                SELECT id, geburtsdatum 
+                FROM sportabzeichen_participants 
+                WHERE import_id = ?
+            ", [$importId]);
 
-            $participantId = null;
-            $participantDob = null;
-
-            if ($existingData) {
-                // UPDATE: Existiert bereits
-                $participantId = $existingData['id'];
-                
-                // Datum aus DB nehmen
-                if ($existingData['geburtsdatum']) {
-                    $participantDob = new \DateTime($existingData['geburtsdatum']);
-                } elseif ($dob) {
-                    // DB war leer, aber User hat jetzt Daten -> Update
-                    $conn->executeStatement(
-                        "UPDATE sportabzeichen_participants SET geburtsdatum = ?, geschlecht = ?, updated_at = NOW() WHERE id = ?",
-                        [$dob->format('Y-m-d'), $gender, $participantId]
-                    );
-                    $participantDob = $dob;
-                }
-            } else {
-                // INSERT: Neu anlegen
-                // Wir nutzen RETURNING id, um direkt die ID zu bekommen
-                $participantId = $conn->fetchOne("
-                    INSERT INTO sportabzeichen_participants (import_id, username, geburtsdatum, geschlecht, user_id)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT (import_id) DO UPDATE SET updated_at = NOW()
-                    RETURNING id
-                ", [
-                    $importId,
-                    $importId, // Username als Fallback Name
-                    $dob ? $dob->format('Y-m-d') : null,
-                    $gender,
-                    $user->getId() // Verknüpfung zur IServ Users Tabelle
-                ]);
-                
-                $participantDob = $dob;
+            // Wenn nicht gefunden oder kein Geburtsdatum -> Überspringen
+            if (!$row || empty($row['geburtsdatum'])) {
+                continue;
             }
 
-            // --- B) Prüfungsteilnahme eintragen ---
+            // Alter berechnen (String-Basis wie in deinem Beispiel)
+            $birthYear = (int)substr($row['geburtsdatum'], 0, 4);
+            $age = $exam->getYear() - $birthYear;
 
-            if ($participantId) {
-                // Alter berechnen
-                $ageYear = 0;
-                if ($participantDob) {
-                    $ageYear = $exam->getYear() - (int)$participantDob->format('Y');
-                } elseif ($dob) {
-                    $ageYear = $exam->getYear() - (int)$dob->format('Y');
-                }
-
-                // Verknüpfung speichern
-                $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT (exam_id, participant_id) DO NOTHING
-                ", [
-                    $exam->getId(),
-                    $participantId,
-                    $ageYear
-                ]);
-            }
+            // In die Prüfung eintragen
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                VALUES (?, ?, ?)
+                ON CONFLICT (exam_id, participant_id) DO NOTHING
+            ", [
+                $exam->getId(), 
+                $row['id'], 
+                $age
+            ]);
         }
     }
 
