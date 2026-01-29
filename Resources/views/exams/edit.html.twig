@@ -5,14 +5,19 @@
 {% block page_content %}
     <div class="content">
         <div class="d-flex justify-content-between align-items-center mb-3">
+            {# Button: Zurück zur Übersicht #}
             <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
                 {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
             </a>
             
-            {# Optional: Direkt zum Ergebnis #}
+            {# 
+               ACHTUNG: Dieser Button wurde vorläufig deaktiviert, da die Route 'sportabzeichen_results_exam_index'
+               noch nicht existiert oder anders heißt. Aktiviere ihn, sobald der ResultsController fertig ist.
+            
             <a href="{{ path('sportabzeichen_results_exam_index', {'id': exam.id}) }}" class="btn btn-primary">
                 {{ icon('list') }} {{ 'Ergebnisse erfassen'|trans }}
             </a>
+            #}
         </div>
 
         <h2>{{ 'Prüfung bearbeiten'|trans }}: {{ exam.exam_name }}</h2>
