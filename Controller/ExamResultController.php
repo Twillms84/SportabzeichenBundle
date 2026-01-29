@@ -48,7 +48,7 @@ final class ExamResultController extends AbstractPageController
         $selectedFilter = $request->query->get('class'); 
 
         // ---------------------------------------------------------
-        // 0. VORAB: PRÜFUNGSGRUPPEN LADEN (NEU)
+        // 0. PRÜFUNGSGRUPPEN LADEN
         // ---------------------------------------------------------
         // Wir holen uns die Acts der Gruppen, die explizit zugeordnet sind.
         $allowedGroupActs = $this->em->getConnection()->fetchFirstColumn(
@@ -57,7 +57,7 @@ final class ExamResultController extends AbstractPageController
         );
 
         // ---------------------------------------------------------
-        // 1. TEILNEHMER DATENBANKABFRAGE
+        // 1. TEILNEHMER DATENBANKABFRAGE (OPTIMIERT)
         // ---------------------------------------------------------
         $qb = $this->em->createQueryBuilder();
         
@@ -72,6 +72,13 @@ final class ExamResultController extends AbstractPageController
             ->where('ep.exam = :exam')
             ->setParameter('exam', $exam);
 
+        // --- NEU: Filter direkt in der Datenbank ---
+        // Nur Teilnehmer laden, die in einer der erlaubten Gruppen sind
+        if (!empty($allowedGroupActs)) {
+            $qb->andWhere('ug.account IN (:allowedGroups)')
+               ->setParameter('allowedGroups', $allowedGroupActs);
+        }
+
         // Sortierung
         $sort = $request->query->get('sort', 'lastname');
         $order = strtoupper($request->query->get('order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
@@ -83,65 +90,47 @@ final class ExamResultController extends AbstractPageController
         }
 
         /** @var ExamParticipant[] $examParticipants */
-        $examParticipants = $qb->getQuery()->getResult();
+        // Wir nutzen hier DISTINCT, falls ein User in zwei erlaubten Gruppen gleichzeitig ist,
+        // damit er nicht doppelt geladen wird.
+        $examParticipants = $qb->distinct()->getQuery()->getResult();
 
         // ---------------------------------------------------------
-        // 2. DATEN AUFBEREITEN & FILTERN (LOGIK ANGEPASST)
+        // 2. DATEN AUFBEREITEN
         // ---------------------------------------------------------
         $participantsData = [];
         $resultsData = [];
         $filterOptions = []; 
         $today = new \DateTime();
 
-        // Liste von Gruppen, die keine Klassen sind (Systemgruppen) - Fallback
-        $ignoredSystemGroups = [
-            'schueler', 'students', 
-            'lehrer', 'teachers', 
-            'admins', 'root', 
-            'internet', 'everyone', 
-            'vorlagen', 'templates',
-            'sportabzeichen', 'user', 'users'
-        ];
-
         foreach ($examParticipants as $ep) {
             $user = $ep->getParticipant()->getUser();
             $userGroups = $user->getGroups();
             
             // --- LOGIK: GRUPPENNAME ERMITTELN ---
-            $categoryName = '';
+            // Da die Datenbank nur noch passende User liefert, müssen wir hier nicht mehr filtern,
+            // sondern nur noch den "schönsten" Gruppennamen für die Anzeige finden.
             
-            // A) PRIORITÄT: Ist der User in einer der zugewiesenen Exam-Gruppen?
+            $categoryName = 'Sonstige';
+            
             if (!empty($allowedGroupActs)) {
                 foreach ($userGroups as $g) {
-                    if (in_array($g->getAct(), $allowedGroupActs)) {
-                        $categoryName = $g->getName(); // Treffer! Nimm diesen Namen (z.B. "Klasse 7b")
+                    // Wir prüfen, welche der Gruppen des Users diejenige ist, die im Exam erlaubt ist
+                    if (in_array($g->getAccount(), $allowedGroupActs)) {
+                        $categoryName = $g->getName(); 
                         break; 
                     }
                 }
-            }
-
-            // B) FALLBACK: Alte Logik (nur wenn oben nichts gefunden wurde)
-            if ($categoryName === '') {
-                foreach ($userGroups as $g) {
-                    $gName = $g->getName();
-                    // Wenn der Gruppenname NICHT in der Ignorier-Liste ist
-                    if (!in_array(strtolower($gName), $ignoredSystemGroups)) {
-                        $categoryName = $gName;
-                        break; 
-                    }
+            } else {
+                // Fallback, falls keine Einschränkungen im Exam definiert sind (sollte eigentlich nicht vorkommen)
+                if (!$userGroups->isEmpty()) {
+                    $categoryName = $userGroups->first()->getName();
                 }
-            }
-
-            // C) LAST RESORT: Wenn gar nichts gefunden wurde
-            if ($categoryName === '') {
-                $categoryName = 'Sonstige';
             }
 
             // Kategorie für das Dropdown-Menü merken
             $filterOptions[] = $categoryName;
 
-            // --- FILTER PRÜFUNG ---
-            // Wenn ein Filter gesetzt ist (z.B. ?class=Klasse 7b) und der User nicht passt -> skip
+            // --- FILTER PRÜFUNG (Frontend Filter via URL) ---
             if ($selectedFilter && $categoryName !== $selectedFilter) {
                 continue;
             }
@@ -177,7 +166,7 @@ final class ExamResultController extends AbstractPageController
                 'ep_id' => $ep->getId(),
                 'vorname' => $user->getFirstname(),
                 'nachname' => $user->getLastname(),
-                'klasse' => $categoryName, // Hier steht jetzt priorisiert die Exam-Gruppe
+                'klasse' => $categoryName, 
                 'group'  => $categoryName, 
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(),
@@ -235,7 +224,7 @@ final class ExamResultController extends AbstractPageController
             'participants' => $participantsData,
             'disciplines' => $disciplines,
             'results' => $resultsData,
-            'classes' => $filterOptions, // Enthält jetzt sauber nur die relevanten Gruppen (z.B. Klasse 7b)
+            'classes' => $filterOptions, 
             'selectedClass' => $selectedFilter,
             'swimming_disciplines' => $swimmingDisciplines,
         ]);
