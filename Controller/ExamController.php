@@ -37,7 +37,7 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Nur noch Gruppen laden (keine Klassen mehr)
+        // 1. Gruppen laden
         $groupRepo = $em->getRepository(Group::class);
         $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
         
@@ -59,7 +59,6 @@ final class ExamController extends AbstractPageController
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
                 $postData = $request->request->all();
-                // Wir schauen nur noch auf 'groups'
                 $selectedGroups  = $postData['groups'] ?? [];
 
                 $exam = new Exam();
@@ -78,20 +77,14 @@ final class ExamController extends AbstractPageController
                     throw new \Exception("Prüfung konnte nicht gespeichert werden (keine ID).");
                 }
 
-                // Gruppen importieren und Zuordnung speichern
+                // Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $groupAccount = (string)$groupAccount;
                         
-                        // 1. Zuordnung in DB speichern (WICHTIG für addParticipant Filter!)
-                        // Wir nutzen Insert Ignore / On Conflict Do Nothing
-                        $conn->executeStatement("
-                            INSERT INTO sportabzeichen_exam_groups (exam_id, act) 
-                            VALUES (?, ?) ON CONFLICT DO NOTHING
-                        ", [$examId, $groupAccount]);
-
-                        // 2. Teilnehmer importieren
-                        $this->importParticipantsFromGroup($conn, $exam, $groupAccount);
+                        // KORREKTUR: Reihenfolge beachten ($em, $conn, $exam, $account)
+                        // Die Methode kümmert sich jetzt selbst um den Eintrag in 'sportabzeichen_exam_groups'
+                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
                     }
                 }
 
@@ -105,7 +98,6 @@ final class ExamController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/exams/new.html.twig', [
             'groups'  => $groupsForDropdown
-            // 'classes' wurde entfernt
         ]);
     }
 
@@ -263,8 +255,7 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // SCHRITT 1: Die Gruppe der Prüfung zuordnen (WICHTIG für die Edit-Ansicht!)
-        // Damit später die Abfrage "Wer fehlt noch aus dieser Gruppe?" funktioniert.
+        // SCHRITT 1: Die Gruppe der Prüfung zuordnen (WICHTIG für Edit-Ansicht!)
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act)
             VALUES (?, ?)
@@ -280,15 +271,13 @@ final class ExamController extends AbstractPageController
         // SCHRITT 3: Alle User der Gruppe durchgehen
         foreach ($group->getUsers() as $user) {
             
-            // IServ User Daten holen
-            // 'act' ist im IServ-Kontext meist der eindeutige Identifier (ImportID)
+            // IServ User Daten
             $importId = $user->getUsername(); 
             $dob = $user->getBirthday(); // DateTime|null
             
-            // Geschlecht normalisieren (IServ speichert oft m/w/f oder 1/2/null)
+            // Geschlecht normalisieren
             $genderRaw = $user->getGender();
             $gender = null;
-            // Einfache Mapping-Logik (anpassen je nach IServ Version)
             if (in_array($genderRaw, ['m', 'MALE', 1])) $gender = 'MALE';
             if (in_array($genderRaw, ['w', 'f', 'FEMALE', 2])) $gender = 'FEMALE';
 
@@ -310,24 +299,21 @@ final class ExamController extends AbstractPageController
                 // Datum aus DB nehmen
                 if ($existingData['geburtsdatum']) {
                     $participantDob = new \DateTime($existingData['geburtsdatum']);
-                }
-                
-                // OPTIONAL: Wenn DB leer, aber User hat jetzt Daten -> Updaten
-                if (!$participantDob && $dob) {
+                } elseif ($dob) {
+                    // DB war leer, aber User hat jetzt Daten -> Update
                     $conn->executeStatement(
                         "UPDATE sportabzeichen_participants SET geburtsdatum = ?, geschlecht = ?, updated_at = NOW() WHERE id = ?",
                         [$dob->format('Y-m-d'), $gender, $participantId]
                     );
                     $participantDob = $dob;
                 }
-
             } else {
                 // INSERT: Neu anlegen
-                // Wir nutzen RETURNING id (Postgres Feature), um direkt die ID zu bekommen
+                // Wir nutzen RETURNING id, um direkt die ID zu bekommen
                 $participantId = $conn->fetchOne("
                     INSERT INTO sportabzeichen_participants (import_id, username, geburtsdatum, geschlecht, user_id)
                     VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT (import_id) DO UPDATE SET updated_at = NOW() -- Fallback Race Condition
+                    ON CONFLICT (import_id) DO UPDATE SET updated_at = NOW()
                     RETURNING id
                 ", [
                     $importId,
@@ -340,19 +326,18 @@ final class ExamController extends AbstractPageController
                 $participantDob = $dob;
             }
 
-            // --- B) Prüfungsteilnahme (Exam Participant) eintragen ---
+            // --- B) Prüfungsteilnahme eintragen ---
 
-            // Alter berechnen (Benötigt für Anforderungen)
-            $ageYear = 0;
-            if ($participantDob) {
-                $ageYear = $exam->getYear() - (int)$participantDob->format('Y');
-            } elseif ($dob) {
-                // Fallback, falls gerade frisch importiert
-                $ageYear = $exam->getYear() - (int)$dob->format('Y');
-            }
-
-            // In die Exam-Tabelle eintragen
             if ($participantId) {
+                // Alter berechnen
+                $ageYear = 0;
+                if ($participantDob) {
+                    $ageYear = $exam->getYear() - (int)$participantDob->format('Y');
+                } elseif ($dob) {
+                    $ageYear = $exam->getYear() - (int)$dob->format('Y');
+                }
+
+                // Verknüpfung speichern
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                     VALUES (?, ?, ?)
