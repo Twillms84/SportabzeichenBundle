@@ -214,13 +214,14 @@ final class ExamController extends AbstractPageController
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
+        // KORREKTUR: m.user existiert nicht, es muss m.member heißen
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
                 sp.geburtsdatum, sp.geschlecht as sp_gender,
                 g.name as group_name
             FROM users u
-            INNER JOIN members m ON u.act = m.user
+            INNER JOIN members m ON u.act = m.member 
             INNER JOIN sportabzeichen_exam_groups seg ON m.group = seg.act 
             LEFT JOIN groups g ON seg.act = g.act
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
