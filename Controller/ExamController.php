@@ -254,50 +254,59 @@ final class ExamController extends AbstractPageController
 
     private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        // 1. Gruppe der Prüfung zuordnen (damit sie im Frontend als "ausgewählt" erscheint)
+        // 1. Gruppe verknüpfen
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act)
             VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
-        // 2. IServ Gruppe laden
+        // 2. Gruppe laden
         $groupRepo = $em->getRepository(Group::class);
         $group = $groupRepo->findOneBy(['account' => $groupAccount]);
         
         if (!$group) return;
 
-        // 3. User der Gruppe durchgehen
+        // 3. User iterieren
         foreach ($group->getUsers() as $user) {
             
-            // Wir nutzen den Username als Schlüssel zur import_id
-            // (Das ersetzt $user->getImportId(), falls die Methode auch fehlen sollte)
-            $importId = $user->getUsername(); 
+            // SCHRITT A: Die korrekte 'importid' aus der DB holen
+            // Das User-Objekt hat oft keine getImportId(), und getUsername() passt nicht immer.
+            // Daher holen wir sie "roh" über die ID.
+            $userId = $user->getId();
+            
+            $iservUserRow = $conn->fetchAssociative("SELECT importid FROM users WHERE id = ?", [$userId]);
+            
+            // Wenn der User keine importid hat (z.B. manche Admins/Lehrer), überspringen
+            if (!$iservUserRow || empty($iservUserRow['importid'])) {
+                continue; 
+            }
+            
+            $realImportId = $iservUserRow['importid'];
 
-            // DEINE LOGIK: Suche existierenden Participant
-            $row = $conn->fetchAssociative("
+            // SCHRITT B: Prüfen, ob dieser User schon als Participant existiert (Deine Logik)
+            $participant = $conn->fetchAssociative("
                 SELECT id, geburtsdatum 
                 FROM sportabzeichen_participants 
                 WHERE import_id = ?
-            ", [$importId]);
+            ", [$realImportId]);
 
-            // Wenn nicht gefunden oder kein Geburtsdatum -> Überspringen
-            if (!$row || empty($row['geburtsdatum'])) {
+            // Nur weitermachen, wenn Participant existiert UND Geburtsdatum hat
+            if (!$participant || empty($participant['geburtsdatum'])) {
                 continue;
             }
 
-            // Alter berechnen (String-Basis wie in deinem Beispiel)
-            $birthYear = (int)substr($row['geburtsdatum'], 0, 4);
-            $age = $exam->getYear() - $birthYear;
+            // SCHRITT C: Zur Prüfung hinzufügen
+            $birthDateStr = $participant['geburtsdatum']; // Format Y-m-d oder ähnlich
+            $age = $exam->getYear() - (int)substr($birthDateStr, 0, 4);
 
-            // In die Prüfung eintragen
             $conn->executeStatement("
                 INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
                 VALUES (?, ?, ?)
                 ON CONFLICT (exam_id, participant_id) DO NOTHING
             ", [
                 $exam->getId(), 
-                $row['id'], 
+                $participant['id'], 
                 $age
             ]);
         }
