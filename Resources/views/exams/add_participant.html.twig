@@ -1,35 +1,30 @@
 {% extends "@IServCore/page.html.twig" %}
 
-{% block page_title %}{{ 'Teilnehmer manuell hinzufügen'|trans }} - {{ exam.exam_name }}{% endblock %}
+{% block page_title %}{{ 'Teilnehmer hinzufügen'|trans }} - {{ exam.exam_name }}{% endblock %}
 
 {% block page_content %}
-    {# --- Header & Zurück --- #}
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+        <a href="{{ path('sportabzeichen_exams_dashboard', {'id': exam.id}) }}" class="btn btn-secondary">
             {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
         </a>
     </div>
 
-    <div class="alert alert-info">
-        {{ icon('info-circle') }} {{ 'Hier werden alle Benutzer angezeigt, die noch nicht Teil dieser Prüfung sind. Benutzer ohne hinterlegtes Geburtsdatum erscheinen oben.'|trans }}
-    </div>
-
-    {# --- Suchleiste --- #}
+    {# --- Suchleiste (optional, aber gut bei großen Gruppen) --- #}
     <div class="card mb-4">
-        <div class="card-body">
+        <div class="card-body py-3">
             <form method="get" class="row g-2 align-items-center">
                 <div class="col-auto flex-grow-1">
                     <div class="input-group">
                         <span class="input-group-text">{{ icon('search') }}</span>
                         <input type="text" name="q" class="form-control" 
-                               placeholder="{{ 'Suchen nach Name, Account oder Klasse...'|trans }}" 
+                               placeholder="{{ 'Name oder Klasse suchen...'|trans }}" 
                                value="{{ search_term }}">
                     </div>
                 </div>
                 <div class="col-auto">
                     <button type="submit" class="btn btn-primary">{{ 'Suchen'|trans }}</button>
                     {% if search_term %}
-                        <a href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id}) }}" class="btn btn-outline-secondary" title="{{ 'Filter zurücksetzen'|trans }}">
+                        <a href="{{ path('sportabzeichen_exams_add_participant', {'id': exam.id}) }}" class="btn btn-outline-secondary">
                             {{ icon('remove') }}
                         </a>
                     {% endif %}
@@ -38,16 +33,16 @@
         </div>
     </div>
 
-    {# --- Ergebnis-Tabelle --- #}
+    {# --- Tabelle --- #}
     <div class="card">
-        <div class="card-header">
-            {{ 'Verfügbare Benutzer'|trans }} 
-            <span class="badge bg-secondary ms-2">{{ missing_students|length }}{% if missing_students|length >= 500 %}+{% endif %}</span>
+        <div class="card-header bg-light">
+            {{ 'Fehlende Teilnehmer aus zugeordneten Gruppen'|trans }} 
+            <span class="badge bg-secondary ms-2">{{ missing_students|length }}</span>
         </div>
         
         {% if missing_students is empty %}
             <div class="card-body text-center text-muted py-5">
-                {{ icon('prohibition') }} {{ 'Keine weiteren Benutzer gefunden.'|trans }}
+                {{ icon('ok') }} {{ 'Alle Schüler der zugeordneten Gruppen sind bereits in der Prüfung.'|trans }}
             </div>
         {% else %}
             <div class="table-responsive">
@@ -56,7 +51,6 @@
                         <tr>
                             <th>{{ 'Name'|trans }}</th>
                             <th>{{ 'Klasse'|trans }}</th>
-                            <th>{{ 'Account'|trans }}</th>
                             <th style="width: 170px;">{{ 'Geburtsdatum'|trans }}</th>
                             <th style="width: 90px;">{{ 'Geschlecht'|trans }}</th>
                             <th style="width: 60px;"></th>
@@ -66,7 +60,6 @@
                         {% for student in missing_students %}
                             {% set formId = 'add_user_' ~ student.account %}
                             
-                            {# Zeilen-Hintergrund leicht rötlich, wenn Daten fehlen #}
                             <tr {% if not student.dob %}class="table-warning"{% endif %}>
                                 <td>
                                     <strong>{{ student.name }}</strong>
@@ -75,29 +68,25 @@
                                     <span class="badge bg-light text-dark border">{{ student.class }}</span>
                                 </td>
                                 <td>
-                                    <span class="font-monospace small text-muted">{{ student.account }}</span>
-                                </td>
-                                <td>
-                                    {# Wenn Datum fehlt: Roter Rand am Input #}
                                     {% if student.dob %}
                                         {{ student.dob|date('d.m.Y') }}
                                         <input type="hidden" name="dob" value="{{ student.dob }}" form="{{ formId }}">
                                     {% else %}
                                         <input type="date" name="dob" required 
                                                class="form-control form-control-sm border-danger" 
-                                               title="{{ 'Geburtsdatum fehlt!'|trans }}"
                                                form="{{ formId }}">
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {# Nur M/W zur Auswahl #}
                                     <select name="gender" class="form-select form-select-sm" form="{{ formId }}">
                                         <option value="MALE" {% if student.gender == 'MALE' %}selected{% endif %}>M</option>
                                         <option value="FEMALE" {% if student.gender == 'FEMALE' %}selected{% endif %}>W</option>
-                                        <option value="DIVERSE" {% if student.gender == 'DIVERSE' %}selected{% endif %}>D</option>
                                     </select>
                                 </td>
                                 <td class="text-end">
                                     <form method="post" id="{{ formId }}">
+                                        {# Account wird intern benötigt, aber nicht angezeigt #}
                                         <input type="hidden" name="account" value="{{ student.account }}">
                                         <button type="submit" class="btn btn-sm btn-success" title="{{ 'Hinzufügen'|trans }}">
                                             {{ icon('plus') }}
@@ -109,11 +98,6 @@
                     </tbody>
                 </table>
             </div>
-            {% if missing_students|length >= 500 %}
-                <div class="card-footer text-muted text-center small">
-                    {{ 'Anzeige auf 500 Einträge begrenzt. Bitte Suchfunktion nutzen.'|trans }}
-                </div>
-            {% endif %}
         {% endif %}
     </div>
 {% endblock %}

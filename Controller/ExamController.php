@@ -397,7 +397,6 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
-        // $conn wird nun direkt verwendet (statt $this->conn)
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
@@ -408,22 +407,18 @@ final class ExamController extends AbstractPageController
             $dobStr  = $request->request->get('dob');
 
             if ($account && $gender && $dobStr) {
-                // Auch hier $conn verwenden
                 $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
                 
                 if ($userId) {
                     try {
-                        // Hinweis: Falls diese Hilfsmethode auch DB-Zugriff braucht und vorher $this->conn nutzte,
-                        // müssen Sie ggf. $conn als Parameter an diese übergeben.
-                        // Ich lasse es hier erstmal so, wie es war, gehe aber davon aus, dass sie existiert.
+                        // Verarbeitet den Teilnehmer
                         $this->processParticipantByUserId((int)$id, (int)$exam['exam_year'], (int)$userId, $dobStr, $gender);
-                        $this->addFlash('success', "$account hinzugefügt.");
+                        $this->addFlash('success', "Teilnehmer hinzugefügt.");
                     } catch (\Throwable $e) {
                         $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                     }
                 }
             }
-            // Redirect verhindert Formular-Resubmit
             return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
                 'id' => $id, 
                 'q' => $request->query->get('q')
@@ -435,14 +430,30 @@ final class ExamController extends AbstractPageController
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
-        // SQL: Alle User, die NICHT in dieser Prüfung sind
+        // SQL: Nur User laden, die:
+        // 1. In einer Gruppe sind, die dem Exam zugeordnet ist
+        // 2. Noch NICHT in der Prüfung sind
+        
+        // HINWEIS: Prüfen Sie, ob Ihre Tabelle 'sportabzeichen_exam_groups' heißt
+        // und ob die Spalte für den Gruppennamen 'act' oder 'group_name' heißt.
+        // Hier angenommen: Tabelle 'sportabzeichen_exam_groups' mit Spalte 'act' für den Gruppennamen.
+        
         $sql = "
-            SELECT 
+            SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname, u.auxinfo as class_name,
                 sp.geburtsdatum, sp.geschlecht as sp_gender
             FROM users u
+            -- Verknüpfung: User -> Mitglied in Gruppe -> Gruppe gehört zum Exam
+            INNER JOIN members m ON u.act = m.user
+            INNER JOIN sportabzeichen_exam_groups seg ON m.group = seg.act 
+            
+            -- Verknüpfung zu Stammdaten (falls vorhanden)
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
+            
             WHERE u.deleted IS NULL
+            AND seg.exam_id = :examId
+            
+            -- Ausschluss: Bereits in der Prüfung
             AND NOT EXISTS (
                 SELECT 1 FROM sportabzeichen_exam_participants sep
                 JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
@@ -453,13 +464,13 @@ final class ExamController extends AbstractPageController
         $params = ['examId' => $id];
 
         if (!empty($searchTerm)) {
-            $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search OR u.act ILIKE :search OR u.auxinfo ILIKE :search) ";
+            $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search OR u.auxinfo ILIKE :search) ";
             $params['search'] = '%' . $searchTerm . '%';
         }
 
+        // Sortierung: Ohne Geburtsdatum zuerst, dann Klasse, dann Name
         $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.auxinfo ASC, u.lastname ASC, u.firstname ASC LIMIT 500";
 
-        // $conn verwenden
         $rows = $conn->fetchAllAssociative($sql, $params);
 
         foreach ($rows as $row) {
@@ -468,7 +479,7 @@ final class ExamController extends AbstractPageController
                 'name'      => $row['firstname'] . ' ' . $row['lastname'],
                 'class'     => $row['class_name'],
                 'dob'       => $row['geburtsdatum'],
-                'gender'    => $row['sp_gender'] ?? 'MALE'
+                'gender'    => $row['sp_gender'] ?? 'MALE' // Fallback MALE
             ];
         }
 
