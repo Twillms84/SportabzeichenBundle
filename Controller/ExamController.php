@@ -261,34 +261,108 @@ final class ExamController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    // importParticipantsFromClass wurde hier entfernt
-
-    private function importParticipantsFromGroup(Connection $conn, Exam $exam, string $groupAccount): void
+    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
     {
-        $examId = (int) $exam->getId();
-        $examYear = (int) $exam->getYear();
+        // SCHRITT 1: Die Gruppe der Prüfung zuordnen (WICHTIG für die Edit-Ansicht!)
+        // Damit später die Abfrage "Wer fehlt noch aus dieser Gruppe?" funktioniert.
+        $conn->executeStatement("
+            INSERT INTO sportabzeichen_exam_groups (exam_id, act)
+            VALUES (?, ?)
+            ON CONFLICT (exam_id, act) DO NOTHING
+        ", [$exam->getId(), $groupAccount]);
 
-        $sqlFetchIds = "
-            SELECT DISTINCT u.id 
-            FROM users u
-            LEFT JOIN members m ON u.act = m.actuser
-            WHERE (
-                u.gid = (SELECT id FROM groups WHERE act = :gname LIMIT 1) 
-                OR 
-                m.actgrp = :gname
-            )
-            AND u.deleted IS NULL
-        ";
+        // SCHRITT 2: IServ Gruppe laden
+        $groupRepo = $em->getRepository(Group::class);
+        $group = $groupRepo->findOneBy(['account' => $groupAccount]);
+        
+        if (!$group) return;
 
-        $userIds = $conn->fetchFirstColumn(
-            $sqlFetchIds, 
-            ['gname' => $groupAccount], 
-            ['gname' => \PDO::PARAM_STR]
-        );
+        // SCHRITT 3: Alle User der Gruppe durchgehen
+        foreach ($group->getUsers() as $user) {
+            
+            // IServ User Daten holen
+            // 'act' ist im IServ-Kontext meist der eindeutige Identifier (ImportID)
+            $importId = $user->getUsername(); 
+            $dob = $user->getBirthday(); // DateTime|null
+            
+            // Geschlecht normalisieren (IServ speichert oft m/w/f oder 1/2/null)
+            $genderRaw = $user->getGender();
+            $gender = null;
+            // Einfache Mapping-Logik (anpassen je nach IServ Version)
+            if (in_array($genderRaw, ['m', 'MALE', 1])) $gender = 'MALE';
+            if (in_array($genderRaw, ['w', 'f', 'FEMALE', 2])) $gender = 'FEMALE';
 
-        foreach ($userIds as $userId) {
-            if (!$userId) continue;
-            $this->processParticipantByUserId($conn, $examId, $examYear, (int)$userId);
+            // --- A) Teilnehmer (Participant) finden oder erstellen ---
+            
+            // Prüfen, ob Participant existiert
+            $existingData = $conn->fetchAssociative(
+                "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", 
+                [$importId]
+            );
+
+            $participantId = null;
+            $participantDob = null;
+
+            if ($existingData) {
+                // UPDATE: Existiert bereits
+                $participantId = $existingData['id'];
+                
+                // Datum aus DB nehmen
+                if ($existingData['geburtsdatum']) {
+                    $participantDob = new \DateTime($existingData['geburtsdatum']);
+                }
+                
+                // OPTIONAL: Wenn DB leer, aber User hat jetzt Daten -> Updaten
+                if (!$participantDob && $dob) {
+                    $conn->executeStatement(
+                        "UPDATE sportabzeichen_participants SET geburtsdatum = ?, geschlecht = ?, updated_at = NOW() WHERE id = ?",
+                        [$dob->format('Y-m-d'), $gender, $participantId]
+                    );
+                    $participantDob = $dob;
+                }
+
+            } else {
+                // INSERT: Neu anlegen
+                // Wir nutzen RETURNING id (Postgres Feature), um direkt die ID zu bekommen
+                $participantId = $conn->fetchOne("
+                    INSERT INTO sportabzeichen_participants (import_id, username, geburtsdatum, geschlecht, user_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (import_id) DO UPDATE SET updated_at = NOW() -- Fallback Race Condition
+                    RETURNING id
+                ", [
+                    $importId,
+                    $importId, // Username als Fallback Name
+                    $dob ? $dob->format('Y-m-d') : null,
+                    $gender,
+                    $user->getId() // Verknüpfung zur IServ Users Tabelle
+                ]);
+                
+                $participantDob = $dob;
+            }
+
+            // --- B) Prüfungsteilnahme (Exam Participant) eintragen ---
+
+            // Alter berechnen (Benötigt für Anforderungen)
+            $ageYear = 0;
+            if ($participantDob) {
+                $ageYear = $exam->getYear() - (int)$participantDob->format('Y');
+            } elseif ($dob) {
+                // Fallback, falls gerade frisch importiert
+                $ageYear = $exam->getYear() - (int)$dob->format('Y');
+            }
+
+            // In die Exam-Tabelle eintragen
+            if ($participantId) {
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (exam_id, participant_id) DO NOTHING
+                ", [
+                    $exam->getId(),
+                    $participantId,
+                    $ageYear
+                ]);
+            }
         }
     }
 
