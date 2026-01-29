@@ -167,12 +167,28 @@ final class ExamController extends AbstractPageController
                     $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
                     if ($userId) {
                         try {
-                            // A) Pool-Daten updaten/anlegen
-                            $conn->executeStatement("
-                                INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
-                                VALUES (?, ?, ?)
-                                ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum, geschlecht = EXCLUDED.geschlecht
-                            ", [$userId, $dobStr, $gender]);
+                            // A) Pool-Daten updaten/anlegen (OHNE ON CONFLICT, da kein Unique-Index existiert)
+                            
+                            // 1. Prüfen, ob Eintrag schon existiert
+                            $existingPartId = $conn->fetchOne(
+                                "SELECT id FROM sportabzeichen_participants WHERE user_id = ?", 
+                                [$userId]
+                            );
+
+                            if ($existingPartId) {
+                                // Update existierender Eintrag
+                                $conn->update('sportabzeichen_participants', [
+                                    'geburtsdatum' => $dobStr,
+                                    'geschlecht' => $gender
+                                ], ['id' => $existingPartId]);
+                            } else {
+                                // Neu anlegen
+                                $conn->insert('sportabzeichen_participants', [
+                                    'user_id' => $userId,
+                                    'geburtsdatum' => $dobStr,
+                                    'geschlecht' => $gender
+                                ]);
+                            }
 
                             // B) In Prüfung einfügen
                             $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
@@ -181,7 +197,6 @@ final class ExamController extends AbstractPageController
                         } catch (\Throwable $e) {
                             $this->addFlash('error', 'Fehler: ' . $e->getMessage());
                         }
-                    }
                 }
                 // Redirect um Formular-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
