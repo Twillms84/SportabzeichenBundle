@@ -349,7 +349,13 @@ final class ExamController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount): void
+    private function importParticipantsFromGroup(
+        EntityManagerInterface $em, 
+        Connection $conn, 
+        Exam $exam, 
+        string $groupAccount, 
+        array &$debugLog = [] // Referenz für Logging
+    ): void
     {
         // 1. Gruppe für Prüfung registrieren
         $conn->executeStatement("
@@ -361,16 +367,65 @@ final class ExamController extends AbstractPageController
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // 3. User iterieren und einfach verarbeiten
-        // Die Logik "Suchen & Finden & Anlegen" ist zentral in processParticipantByUserId geregelt.
+        // 3. User iterieren
         foreach ($group->getUsers() as $user) {
-            // FIX: (int) vor $user->getId() setzen!
-            $this->processParticipantByUserId(
-                $conn, 
-                $exam->getId(), 
-                $exam->getYear(), 
-                (int)$user->getId() // <--- HIER WAR DER FEHLER
-            );
+            
+            // WICHTIG: Wir holen die Stammdaten direkt aus dem IServ-User-Objekt
+            $iservUserId = $user->getId();
+            $birthday    = $user->getBirthday(); // DateTime oder null
+            $gender      = $user->getGender();   // oft null, MALE, FEMALE
+            $fullName    = $user->getName();     // Fürs Log
+
+            // Wenn kein Geburtsdatum da ist, können wir das Alter nicht berechnen -> Skip
+            if (!$birthday) {
+                $debugLog['skipped'][] = $fullName;
+                continue;
+            }
+
+            // String-Format für Datenbank (Y-m-d)
+            $dobString = $birthday->format('Y-m-d');
+            
+            // Fallback für Geschlecht
+            $genderString = ($gender === 'FEMALE') ? 'FEMALE' : 'MALE';
+
+            try {
+                // A) POOL SYNCHRONISIEREN (Upsert)
+                // Wir stellen sicher, dass der User im Pool ist und das Datum aktuell ist.
+                // RETURNING id spart uns ein extra SELECT.
+                $participantId = $conn->fetchOne("
+                    INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        geburtsdatum = EXCLUDED.geburtsdatum, 
+                        geschlecht = EXCLUDED.geschlecht
+                    RETURNING id
+                ", [$iservUserId, $dobString, $genderString]);
+
+                if (!$participantId) {
+                    // Fallback, falls RETURNING von der DB-Version nicht unterstützt wird (sollte bei IServ Postgres aber gehen)
+                    $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$iservUserId]);
+                }
+
+                // B) IN PRÜFUNG EINTRAGEN
+                // Alter berechnen: Prüfungsjahr - Geburtsjahr
+                $birthYear = (int)$birthday->format('Y');
+                $age = $exam->getYear() - $birthYear;
+
+                $inserted = $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
+                    VALUES (?, ?, ?, NOW())
+                    ON CONFLICT (exam_id, participant_id) DO NOTHING
+                ", [$exam->getId(), $participantId, $age]);
+
+                if ($inserted > 0) {
+                    $debugLog['added'][] = $fullName;
+                }
+
+            } catch (\Exception $e) {
+                // Log error aber brich nicht den ganzen Loop ab
+                // $debugLog['errors'][] = $fullName . ': ' . $e->getMessage();
+            }
         }
     }
 
