@@ -349,7 +349,7 @@ final class ExamController extends AbstractPageController
         array &$debugLog = []
     ): void
     {
-        // 1. Gruppe registrieren
+        // 1. Gruppe mit Prüfung verknüpfen
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act) VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
@@ -359,29 +359,26 @@ final class ExamController extends AbstractPageController
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // 3. User iterieren
+        // 3. User der Gruppe durchgehen
         foreach ($group->getUsers() as $user) {
             
-            // WICHTIG: Wir verlassen uns auf den Username (Account), z.B. "timo.willms"
-            $username = $user->getUsername(); 
-            // Fallback für den Namen in der Anzeige
-            $displayName = $user->getName() ?: $username;
+            // WICHTIG: Das hier ist der Account-Name (z.B. "max.mustermann"), also ein STRING.
+            $accountName = $user->getUsername(); 
+            $displayName = $user->getName() ?: $accountName;
 
             $dobString = null;
-            $participantId = null;
-            $realUserId = null; // Die echte numerische ID aus der DB
+            $participantId = null; // Die ID in der Tabelle sportabzeichen_participants
+            $realUserId = null;    // Die echte ID in der Tabelle users (Integer)
 
             // --- SCHRITT A: Stammdaten aus der 'users' Tabelle holen ---
-            // Wir suchen über 'act' (String), weil wir den Username haben.
-            // Wir holen 'id' (Integer) und 'birthday' (String/Date).
             try {
-                // HINWEIS: Falls 'birthday' nicht existiert, fangen wir das gleich ab.
-                // Wir holen erst mal die ID, das sollte immer gehen.
-                $userRow = $conn->fetchAssociative("SELECT id, birthday, gender FROM users WHERE act = ?", [$username]);
+                // Wir suchen mit 'act' (String), um 'id' (Integer) und 'birthday' zu bekommen.
+                $userRow = $conn->fetchAssociative("SELECT id, birthday, gender FROM users WHERE act = ?", [$accountName]);
                 
                 if ($userRow) {
-                    $realUserId = $userRow['id']; // Das ist jetzt sicher eine Zahl (z.B. 1054)
+                    $realUserId = $userRow['id']; // Das ist die sichere Zahl (z.B. 1054)
                     
+                    // Geburtsdatum merken, falls vorhanden
                     if (!empty($userRow['birthday'])) {
                         $dobString = $userRow['birthday'];
                     }
@@ -393,8 +390,9 @@ final class ExamController extends AbstractPageController
                         if ($gVal === 'female') $gender = 'FEMALE';
                     }
 
-                    // Wenn wir Geburtstag haben, ab in den Pool damit
+                    // Wenn wir ein Geburtsdatum haben, User direkt in den Pool schreiben/updaten
                     if ($dobString) {
+                         // Versuchen mit RETURNING (Postgres Standard)
                          $participantId = $conn->fetchOne("
                             INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
                             VALUES (?, ?, ?)
@@ -402,23 +400,25 @@ final class ExamController extends AbstractPageController
                             RETURNING id
                         ", [$realUserId, $dobString, $gender]);
 
+                        // Fallback für ältere Postgres Versionen ohne RETURNING bei Update
                         if (!$participantId) {
                             $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
                         }
                     }
                 }
             } catch (\Throwable $e) {
-                // Wenn Spalte "birthday" fehlt, crasht der SELECT oben.
-                // Dann versuchen wir zumindest, nur die ID zu holen, um im Pool nachzusehen.
+                // FALLBACK: Wenn die Spalte "birthday" oder "gender" fehlt, crasht der SELECT oben.
+                // Wir versuchen dann, NUR die ID zu holen (die Spalte 'id' und 'act' gibt es immer).
                 try {
-                     $realUserId = $conn->fetchOne("SELECT id FROM users WHERE act = ?", [$username]);
+                     $realUserId = $conn->fetchOne("SELECT id FROM users WHERE act = ?", [$accountName]);
                 } catch (\Exception $ex) {
-                    // Wenn selbst das fehlschlägt, geben wir auf.
+                    // Wenn nicht mal das geht -> User überspringen
                     continue; 
                 }
             }
 
-            // --- SCHRITT B: Falls wir oben keinen Geburtstag fanden (Spalte fehlt oder leer), im Pool schauen ---
+            // --- SCHRITT B: Wenn wir oben kein Datum fanden, im lokalen Pool suchen ---
+            // Das passiert z.B., wenn die Spalte 'birthday' in IServ fehlt, wir den Schüler aber früher schon mal importiert haben.
             if (!$participantId && $realUserId) {
                 $poolData = $conn->fetchAssociative(
                     "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", 
@@ -430,19 +430,19 @@ final class ExamController extends AbstractPageController
                 }
             }
 
-            // --- ENDE DATENBESCHAFFUNG ---
-
-            // Wenn immer noch kein Geburtsdatum oder ID da ist -> Überspringen
-            if (!$dobString || !$participantId) {
+            // --- SCHRITT C: Validierung ---
+            // Wenn wir immer noch keine Teilnehmer-ID haben (weil kein Datum gefunden wurde), 
+            // können wir ihn nicht für die Prüfung anmelden.
+            if (!$participantId || !$dobString) {
                 $debugLog['skipped'][] = $displayName;
                 continue;
             }
 
+            // --- SCHRITT D: Eintragung in die Prüfung ---
             // Alter berechnen
             $birthYear = (int)substr((string)$dobString, 0, 4);
             $age = $exam->getYear() - $birthYear;
 
-            // In Prüfung eintragen
             try {
                 $inserted = $conn->executeStatement("
                     INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
@@ -454,7 +454,7 @@ final class ExamController extends AbstractPageController
                     $debugLog['added'][] = $displayName;
                 }
             } catch (\Exception $e) {
-                // Ignoriere Duplikate oder DB Fehler beim Insert
+                // Duplikate ignorieren
             }
         }
     }
