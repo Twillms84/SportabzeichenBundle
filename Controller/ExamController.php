@@ -45,6 +45,7 @@ final class ExamController extends AbstractPageController
         foreach ($allGroups as $g) {
             $acc = $g->getAccount();
             if ($acc) {
+                // Key = Account (klasse.5a), Value = Name (Klasse 5a)
                 $groupsForDropdown[$acc] = $g->getName();
             }
         }
@@ -58,8 +59,12 @@ final class ExamController extends AbstractPageController
                 $dateStr = $request->request->get('exam_date');
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
+                // Holen der Gruppen. WICHTIG: Im HTML muss name="groups[]" stehen!
                 $postData = $request->request->all();
                 $selectedGroups  = $postData['groups'] ?? [];
+
+                // --- DEBUG: Falls immer noch nichts passiert, Zeile einkommentieren ---
+                // dd($selectedGroups); 
 
                 $exam = new Exam();
                 $exam->setName($name);
@@ -73,37 +78,46 @@ final class ExamController extends AbstractPageController
                 // --- DEBUGGING LISTE INITIALISIEREN ---
                 $debugLog = [
                     'added' => [], 
-                    'skipped' => []
+                    'skipped' => [],
+                    'errors' => [] // <--- Das hier hat gefehlt!
                 ];
 
                 // Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $groupAccount = (string)$groupAccount;
-                        // Debug-Array mit übergeben (&)
+                        // Ruft die neue SQL-basierte Methode auf
                         $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount, $debugLog);
                     }
                 }
 
                 // --- FEEDBACK MELDUNG BAUEN ---
                 $countAdded = count($debugLog['added']);
-                $countSkipped = count($debugLog['skipped']);
+                $countErrors = count($debugLog['errors']);
                 
-                $msg = "Prüfung angelegt. <strong>$countAdded</strong> Teilnehmer hinzugefügt.";
+                $msg = "Prüfung angelegt. ";
                 
                 if ($countAdded > 0) {
-                    $names = array_slice($debugLog['added'], 0, 5); // Zeige erste 5
-                    $msg .= " (z.B. " . implode(', ', $names) . ")";
+                    $msg .= "<strong>$countAdded</strong> Teilnehmer hinzugefügt. ";
+                    $names = array_slice($debugLog['added'], 0, 5);
+                    $msg .= "(z.B. " . implode(', ', $names) . ")";
+                } else {
+                    $msg .= "<strong>Keine Teilnehmer hinzugefügt.</strong>";
                 }
 
-                if ($countSkipped > 0) {
-                    $msg .= "<br><br><span style='color:red'><strong>$countSkipped übersprungen (kein Geburtsdatum):</strong></span> ";
-                    $skippedNames = array_slice($debugLog['skipped'], 0, 10);
-                    $msg .= implode(', ', $skippedNames) . ($countSkipped > 10 ? '...' : '');
-                    $msg .= "<br><em>Bitte Daten in 'sportabzeichen_participants' prüfen.</em>";
+                // WICHTIG: Fehler anzeigen!
+                if ($countErrors > 0) {
+                    $msg .= "<br><br><span style='color:red'><strong>$countErrors Fehler/Warnungen:</strong></span><br>";
+                    $msg .= implode('<br>', $debugLog['errors']);
                 }
 
-                $this->addFlash('success', $msg);
+                if ($countAdded > 0) {
+                     $this->addFlash('success', $msg);
+                } else {
+                     // Wenn niemand hinzugefügt wurde, eher eine Warnung zeigen
+                     $this->addFlash('warning', $msg);
+                }
+               
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
