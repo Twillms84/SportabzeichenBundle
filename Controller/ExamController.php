@@ -349,63 +349,69 @@ final class ExamController extends AbstractPageController
         array &$debugLog = []
     ): void
     {
-        // 1. Gruppe mit Prüfung verknüpfen
+        // 1. Gruppe merken
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act) VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
-        // 2. Gruppe laden
-        $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
-        
-        if (!$group) {
-            $debugLog['errors'][] = "Gruppe '$groupAccount' nicht gefunden.";
+        // 2. User direkt via SQL holen (Umgehung von Doctrine-Problemen)
+        // WICHTIG: Wir joinen über Strings (act = actuser)!
+        $sql = "
+            SELECT u.id, u.act, u.firstname, u.lastname
+            FROM users u
+            JOIN members m ON u.act = m.actuser
+            WHERE m.actgrp = ?
+        ";
+
+        $users = $conn->fetchAllAssociative($sql, [$groupAccount]);
+
+        if (empty($users)) {
+            $debugLog['errors'][] = "Keine Mitglieder in Gruppe '$groupAccount' gefunden (Tabelle 'members' leer?).";
             return;
         }
 
         // 3. User iterieren
-        foreach ($group->getUsers() as $user) {
-            $accountName = $user->getUsername(); // z.B. "timo.willms"
-            $displayName = $user->getName() ?: $accountName;
+        foreach ($users as $row) {
+            $realUserId = $row['id'];      // z.B. 1050
+            $accountName = $row['act'];    // z.B. "max.mustermann"
+            // Name zusammenbauen für die Anzeige
+            $displayName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: $accountName;
 
-            // --- SCHRITT A: Echte ID aus der DB holen ---
-            // Wir fragen KEIN birthday und KEIN gender ab, da Spalten fehlen.
-            $realUserId = $conn->fetchOne("SELECT id FROM users WHERE act = ?", [$accountName]);
-
-            if (!$realUserId) {
-                $debugLog['skipped'][] = "$displayName (Account in DB nicht gefunden)";
-                continue;
-            }
-
-            // --- SCHRITT B: Teilnehmer im Pool anlegen/updaten ---
-            // Wir setzen 'username' als Referenz. Geburtsdatum bleibt NULL, wenn wir es nicht wissen.
-            // Geschlecht lassen wir NULL (oder setzen Default), da wir es nicht aus IServ holen können.
+            // --- SCHRITT A: Pool-Eintrag prüfen/erstellen ---
             
-            // Zuerst prüfen, ob schon Daten im Pool sind (vielleicht wurde es ja manuell nachgetragen)
+            // Wir prüfen, ob der User schon im Sportabzeichen-Pool ist
             $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
 
-            $dobString = null;
             $participantId = null;
+            $dobString = null;
 
             if ($poolData) {
-                // User existiert schon im Pool
+                // Schon bekannt
                 $participantId = $poolData['id'];
                 $dobString = $poolData['geburtsdatum'];
                 
-                // Wir aktualisieren nur den Username zur Sicherheit
+                // Update Username (falls geändert)
                 $conn->executeStatement("UPDATE sportabzeichen_participants SET username = ? WHERE id = ?", [$accountName, $participantId]);
             } else {
-                // Neuer User: Anlegen (Geburtsdatum ist NULL, Geschlecht NULL)
-                // HINWEIS: Wir setzen Geschlecht auf 'MALE' als Fallback, falls NULL Probleme macht, 
-                // aber laut Schema ist NULL erlaubt. Wir lassen es NULL.
+                // NEU anlegen (Geburtsdatum ist NULL, Geschlecht NULL)
+                // Wir inserten nur ID und Username.
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_participants (user_id, username) VALUES (?, ?)
                 ", [$realUserId, $accountName]);
                 
+                // ID zurückholen
                 $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
             }
 
-            // --- SCHRITT C: In Prüfung eintragen ---
+            if (!$participantId) {
+                $debugLog['errors'][] = "Konnte Pool-ID für $displayName nicht erstellen.";
+                continue;
+            }
+
+            // --- SCHRITT B: In Prüfung eintragen ---
+            
+            // Alter berechnen (nur wenn Datum zufällig schon im Pool war)
             $age = 0;
             if ($dobString) {
                 $birthYear = (int)substr((string)$dobString, 0, 4);
@@ -422,7 +428,7 @@ final class ExamController extends AbstractPageController
                 if ($inserted > 0) {
                     $debugLog['added'][] = $displayName;
                 } else {
-                    // War schon drin
+                    // War schon drin, zählen wir mal nicht als Fehler
                 }
             } catch (\Exception $e) {
                 $debugLog['errors'][] = "Fehler bei $displayName: " . $e->getMessage();
