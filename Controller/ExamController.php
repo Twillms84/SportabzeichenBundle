@@ -186,7 +186,8 @@ final class ExamController extends AbstractPageController
                                 $conn->insert('sportabzeichen_participants', [
                                     'user_id' => $userId,
                                     'geburtsdatum' => $dobStr,
-                                    'geschlecht' => $gender
+                                    'geschlecht' => $gender,
+                                    'username' => $account // <--- DAS HIER EINFÜGEN
                                 ]);
                             }
 
@@ -336,128 +337,68 @@ final class ExamController extends AbstractPageController
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
         if (!$group) return;
 
-        // 3. User iterieren
+        // 3. User iterieren und einfach verarbeiten
+        // Die Logik "Suchen & Finden & Anlegen" ist zentral in processParticipantByUserId geregelt.
         foreach ($group->getUsers() as $user) {
-            
-            // Daten aus dem User-Objekt holen
-            $rawImportId = $user->getImportId(); 
-            $username    = $user->getUsername(); // Als Fallback nutzen!
-
-            $participantRow = null;
-
-            // --- STRATEGIE 1: Suche über Import-ID (nur wenn es eine Zahl ist!) ---
-            // Verhindert den Fehler: "invalid input syntax for type integer"
-            if ($rawImportId && is_numeric($rawImportId)) {
-                $participantRow = $conn->fetchAssociative(
-                    "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", 
-                    [$rawImportId]
-                );
-            }
-
-            // --- STRATEGIE 2: Suche über Username (wenn ID fehlschlug oder Text war) ---
-            if (!$participantRow && $username) {
-                $participantRow = $conn->fetchAssociative(
-                    "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE username = ?", 
-                    [$username]
-                );
-            }
-
-            // Wenn immer noch nichts gefunden wurde oder kein Geburtsdatum da ist -> Skip
-            if (!$participantRow || empty($participantRow['geburtsdatum'])) {
-                continue;
-            }
-
-            // Eintragung in die Prüfung
-            $pId = $participantRow['id'];
-            $birthDateStr = $participantRow['geburtsdatum'];
-            
-            // Alter berechnen (Jahr der Prüfung - Geburtsjahr)
-            $age = $exam->getYear() - (int)substr($birthDateStr, 0, 4);
-
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                VALUES (?, ?, ?)
-                ON CONFLICT (exam_id, participant_id) DO NOTHING
-            ", [$exam->getId(), $pId, $age]);
+            $this->processParticipantByUserId($conn, $exam->getId(), $exam->getYear(), $user->getId());
         }
     }
 
     private function processParticipantByUserId(Connection $conn, int $examId, int $examYear, int $userId): void
     {
-        // 1. Geburtsdatum ermitteln
-        $dob = null;
-        $poolData = $conn->fetchAssociative("SELECT geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+        // 1. Prüfen, ob User schon im Pool ist
+        // Wir holen auch gleich die ID mit, falls vorhanden
+        $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
         
-        if ($poolData && !empty($poolData['geburtsdatum'])) {
+        $dob = null;
+        $participantId = null;
+
+        if ($poolData) {
             $dob = $poolData['geburtsdatum'];
-        } else {
-            // Fallback auf System-Daten
+            $participantId = $poolData['id'];
+        }
+
+        // 2. Wenn kein Geburtsdatum im Pool bekannt ist -> Aus System (users Tabelle) holen und Pool updaten/anlegen
+        if (empty($dob)) {
             try {
-                $sysData = $conn->fetchAssociative("SELECT birthday FROM users WHERE id = ?", [$userId]);
+                // HIER GEÄNDERT: Wir holen auch 'act' (den Username)
+                $sysData = $conn->fetchAssociative("SELECT birthday, act FROM users WHERE id = ?", [$userId]);
+                
                 if ($sysData && !empty($sysData['birthday'])) {
                     $dob = $sysData['birthday'];
+                    $act = $sysData['act']; // Der Username
                     
-                    // Sofort in Pool übernehmen
+                    // Sofort in Pool übernehmen (Insert oder Update)
+                    // HIER GEÄNDERT: Wir schreiben act in die Spalte 'username'
                     $conn->executeStatement("
-                        INSERT INTO sportabzeichen_participants (user_id, geburtsdatum)
-                        VALUES (?, ?)
-                        ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum
-                    ", [$userId, $dob]);
+                        INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, username)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT (user_id) DO UPDATE SET 
+                            geburtsdatum = EXCLUDED.geburtsdatum,
+                            username     = EXCLUDED.username
+                    ", [$userId, $dob, $act]);
+
+                    // ID neu holen, da sie jetzt existiert
+                    $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
                 }
             } catch (\Throwable $e) {
-                // Ignore errors if column doesn't exist
+                // Ignore errors
             }
         }
 
-        if (empty($dob)) return; 
+        if (empty($dob) || empty($participantId)) return; 
 
-        // 2. Alter berechnen
+        // 3. Alter berechnen
         $birthYear = (int)substr((string)$dob, 0, 4);
         $age = $examYear - $birthYear;
 
-        // 3. In Prüfung eintragen
-        $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
-        
-        if ($participantId) {
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                VALUES (?, ?, ?)
-                ON CONFLICT DO NOTHING
-            ", [$examId, $participantId, $age]);
-        }
-    }
-
-    // Hilfsmethode für Import via ID (Legacy Code, falls noch woanders genutzt, sonst könnte man sie auch löschen)
-    private function insertParticipantByImportId(Connection $conn, int $examId, int $examYear, string $importId): bool
-    {
-        $row = $conn->fetchNumeric("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE import_id = ?", [$importId]);
-        if ($this->isValidParticipantRow($row)) {
-            $this->doInsert($conn, $examId, $examYear, $row);
-            return true;
-        }
-        return false;
-    }
-
-    private function isValidParticipantRow($row): bool
-    {
-        if (!is_array($row)) return false;
-        if (!array_key_exists(0, $row) || !array_key_exists(1, $row)) return false;
-        if (empty($row[1])) return false;
-        return true;
-    }
-
-    private function doInsert(Connection $conn, int $examId, int $examYear, array $row): void
-    {
-        $pId = $row[0];
-        $dobYear = (int)substr((string)$row[1], 0, 4);
-        $age = $examYear - $dobYear;
-
+        // 4. In Prüfung eintragen
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-            VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-        ", [$examId, $pId, $age]);
+            VALUES (?, ?, ?)
+            ON CONFLICT (exam_id, participant_id) DO NOTHING
+        ", [$examId, $participantId, $age]);
     }
-
     // --- Add Participant ---
     #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
     public function addParticipant(int $id, Request $request, Connection $conn): Response
@@ -484,10 +425,13 @@ final class ExamController extends AbstractPageController
                         // Wenn der User im Formular ein Datum angibt, wollen wir das ggf. in den Pool schreiben:
                         
                         $conn->executeStatement("
-                            INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
-                            VALUES (?, ?, ?)
-                            ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum, geschlecht = EXCLUDED.geschlecht
-                        ", [$userId, $dobStr, $gender]);
+                            INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht, username)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT (user_id) DO UPDATE SET 
+                                geburtsdatum = EXCLUDED.geburtsdatum, 
+                                geschlecht = EXCLUDED.geschlecht,
+                                username = EXCLUDED.username
+                        ", [$userId, $dobStr, $gender, $account]); // <--- $account am Ende hinzufügen!
 
                         // Nochmal prozessieren, damit er ins Exam kommt
                         $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);

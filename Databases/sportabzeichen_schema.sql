@@ -35,7 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_exam_groups_act ON sportabzeichen_exam_groups (ac
 -- 1.3 Teilnehmer (Participants)
 CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     id              SERIAL PRIMARY KEY,
-    import_id       TEXT NOT NULL UNIQUE,
     geschlecht      TEXT CHECK (geschlecht IN ('MALE','FEMALE')),
     geburtsdatum    DATE,
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
