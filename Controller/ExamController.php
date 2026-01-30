@@ -370,28 +370,35 @@ final class ExamController extends AbstractPageController
         // 3. User iterieren
         foreach ($group->getUsers() as $user) {
             
-            // WICHTIG: Wir holen die Stammdaten direkt aus dem IServ-User-Objekt
             $iservUserId = $user->getId();
-            $birthday    = $user->getBirthday(); // DateTime oder null
-            $gender      = $user->getGender();   // oft null, MALE, FEMALE
-            $fullName    = $user->getName();     // Fürs Log
+            // Name holen (Existiert sicher in der Entity)
+            $fullName = $user->getName() ?? $user->getUsername(); 
 
-            // Wenn kein Geburtsdatum da ist, können wir das Alter nicht berechnen -> Skip
-            if (!$birthday) {
+            // --- KORREKTUR: Geburtsdatum direkt aus der DB holen ---
+            // Wir umgehen die Entity und fragen die Tabelle direkt, da die Spalte 'birthday' dort existiert.
+            $dobString = $conn->fetchOne("SELECT birthday FROM users WHERE id = ?", [$iservUserId]);
+
+            // Wenn kein Geburtsdatum da ist (false oder null) -> Skip
+            if (!$dobString) {
                 $debugLog['skipped'][] = $fullName;
                 continue;
             }
 
-            // String-Format für Datenbank (Y-m-d)
-            $dobString = $birthday->format('Y-m-d');
+            // Geschlecht holen (Entity hat oft getGender(), falls nicht, holen wir es auch per SQL)
+            // Versuch über Entity:
+            $gender = method_exists($user, 'getGender') ? $user->getGender() : null;
             
-            // Fallback für Geschlecht
-            $genderString = ($gender === 'FEMALE') ? 'FEMALE' : 'MALE';
+            // Fallback SQL, falls Entity das nicht hergibt
+            if (!$gender) {
+                $genderVal = $conn->fetchOne("SELECT gender FROM users WHERE id = ?", [$iservUserId]);
+                $gender = $genderVal ?: 'MALE'; // Default
+            }
+
+            // Normalisierung für DB
+            $genderString = ($gender === 'FEMALE' || $gender === 'female') ? 'FEMALE' : 'MALE';
 
             try {
                 // A) POOL SYNCHRONISIEREN (Upsert)
-                // Wir stellen sicher, dass der User im Pool ist und das Datum aktuell ist.
-                // RETURNING id spart uns ein extra SELECT.
                 $participantId = $conn->fetchOne("
                     INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
                     VALUES (?, ?, ?)
@@ -402,14 +409,15 @@ final class ExamController extends AbstractPageController
                     RETURNING id
                 ", [$iservUserId, $dobString, $genderString]);
 
+                // Fallback für alte Postgres-Versionen ohne RETURNING
                 if (!$participantId) {
-                    // Fallback, falls RETURNING von der DB-Version nicht unterstützt wird (sollte bei IServ Postgres aber gehen)
                     $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$iservUserId]);
                 }
 
                 // B) IN PRÜFUNG EINTRAGEN
-                // Alter berechnen: Prüfungsjahr - Geburtsjahr
-                $birthYear = (int)$birthday->format('Y');
+                // Alter berechnen
+                // $dobString ist z.B. "2010-05-15" -> Die ersten 4 Zeichen sind das Jahr
+                $birthYear = (int)substr((string)$dobString, 0, 4);
                 $age = $exam->getYear() - $birthYear;
 
                 $inserted = $conn->executeStatement("
@@ -423,8 +431,7 @@ final class ExamController extends AbstractPageController
                 }
 
             } catch (\Exception $e) {
-                // Log error aber brich nicht den ganzen Loop ab
-                // $debugLog['errors'][] = $fullName . ': ' . $e->getMessage();
+                // Optional: Fehler loggen, aber nicht abbrechen
             }
         }
     }
