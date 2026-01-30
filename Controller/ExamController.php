@@ -363,14 +363,13 @@ final class ExamController extends AbstractPageController
         array &$debugLog = []
     ): void
     {
-        // 1. Gruppe merken
+        // 1. Gruppe mit Prüfung verknüpfen
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act) VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
-        // 2. User direkt via SQL holen (Umgehung von Doctrine-Problemen)
-        // WICHTIG: Wir joinen über Strings (act = actuser)!
+        // 2. User direkt via SQL holen
         $sql = "
             SELECT u.id, u.act, u.firstname, u.lastname
             FROM users u
@@ -381,51 +380,38 @@ final class ExamController extends AbstractPageController
         $users = $conn->fetchAllAssociative($sql, [$groupAccount]);
 
         if (empty($users)) {
-            $debugLog['errors'][] = "Keine Mitglieder in Gruppe '$groupAccount' gefunden (Tabelle 'members' leer?).";
+            $debugLog['errors'][] = "Gruppe '$groupAccount' scheint leer zu sein.";
             return;
         }
 
         // 3. User iterieren
         foreach ($users as $row) {
-            $realUserId = $row['id'];      // z.B. 1050
-            $accountName = $row['act'];    // z.B. "max.mustermann"
-            // Name zusammenbauen für die Anzeige
+            $realUserId = $row['id'];
+            $accountName = $row['act'];
             $displayName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: $accountName;
 
-            // --- SCHRITT A: Pool-Eintrag prüfen/erstellen ---
-            
-            // Wir prüfen, ob der User schon im Sportabzeichen-Pool ist
+            // --- SCHRITT A: Pool-Eintrag prüfen ---
             $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
 
             $participantId = null;
             $dobString = null;
 
             if ($poolData) {
-                // Schon bekannt
                 $participantId = $poolData['id'];
                 $dobString = $poolData['geburtsdatum'];
-                
-                // Update Username (falls geändert)
+                // Update Username zur Sicherheit
                 $conn->executeStatement("UPDATE sportabzeichen_participants SET username = ? WHERE id = ?", [$accountName, $participantId]);
             } else {
-                // NEU anlegen (Geburtsdatum ist NULL, Geschlecht NULL)
-                // Wir inserten nur ID und Username.
+                // NEU anlegen
                 $conn->executeStatement("
                     INSERT INTO sportabzeichen_participants (user_id, username) VALUES (?, ?)
                 ", [$realUserId, $accountName]);
-                
-                // ID zurückholen
                 $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
             }
 
-            if (!$participantId) {
-                $debugLog['errors'][] = "Konnte Pool-ID für $displayName nicht erstellen.";
-                continue;
-            }
+            if (!$participantId) continue;
 
             // --- SCHRITT B: In Prüfung eintragen ---
-            
-            // Alter berechnen (nur wenn Datum zufällig schon im Pool war)
             $age = 0;
             if ($dobString) {
                 $birthYear = (int)substr((string)$dobString, 0, 4);
@@ -433,16 +419,15 @@ final class ExamController extends AbstractPageController
             }
 
             try {
+                // KORREKTUR: 'created_at' und 'NOW()' entfernt!
                 $inserted = $conn->executeStatement("
-                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
-                    VALUES (?, ?, ?, NOW())
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                    VALUES (?, ?, ?)
                     ON CONFLICT (exam_id, participant_id) DO NOTHING
                 ", [$exam->getId(), $participantId, $age]);
 
                 if ($inserted > 0) {
                     $debugLog['added'][] = $displayName;
-                } else {
-                    // War schon drin, zählen wir mal nicht als Fehler
                 }
             } catch (\Exception $e) {
                 $debugLog['errors'][] = "Fehler bei $displayName: " . $e->getMessage();
