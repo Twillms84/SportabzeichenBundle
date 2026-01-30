@@ -75,8 +75,8 @@ final class ExamResultController extends AbstractPageController
         // --- Filter direkt in der Datenbank ---
         // Nur Teilnehmer laden, die in einer der erlaubten Gruppen sind
         if (!empty($allowedGroupActs)) {
-            // HINWEIS: 'ug.act' ist üblicherweise der Feldname für den Accountnamen der Gruppe in IServ-Entities
-            $qb->andWhere('ug.act IN (:allowedGroups)')
+            // FIX: Use 'ug.account' instead of 'ug.act'
+            $qb->andWhere('ug.account IN (:allowedGroups)')
                ->setParameter('allowedGroups', $allowedGroupActs);
         }
 
