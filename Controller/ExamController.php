@@ -340,7 +340,13 @@ final class ExamController extends AbstractPageController
         // 3. User iterieren und einfach verarbeiten
         // Die Logik "Suchen & Finden & Anlegen" ist zentral in processParticipantByUserId geregelt.
         foreach ($group->getUsers() as $user) {
-            $this->processParticipantByUserId($conn, $exam->getId(), $exam->getYear(), $user->getId());
+            // FIX: (int) vor $user->getId() setzen!
+            $this->processParticipantByUserId(
+                $conn, 
+                $exam->getId(), 
+                $exam->getYear(), 
+                (int)$user->getId() // <--- HIER WAR DER FEHLER
+            );
         }
     }
 
