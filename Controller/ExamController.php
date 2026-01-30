@@ -77,17 +77,41 @@ final class ExamController extends AbstractPageController
                     throw new \Exception("Prüfung konnte nicht gespeichert werden (keine ID).");
                 }
 
+                // --- LOGGING VORBEREITEN ---
+                $debugLog = [
+                    'added' => [],
+                    'skipped' => []
+                ];
+
                 // Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $groupAccount = (string)$groupAccount;
                         
-                        // KORREKTUR: Reihenfolge muss ($em, $conn, $exam, $groupAccount) sein!
-                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount);
+                        // Debug-Array per Referenz übergeben (&)
+                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount, $debugLog);
                     }
                 }
 
-                $this->addFlash('success', 'Prüfung erfolgreich angelegt.');
+                // --- ERGEBNIS MELDUNG ZUSAMMENBAUEN ---
+                $countAdded = count($debugLog['added']);
+                $countSkipped = count($debugLog['skipped']);
+                
+                $msg = "Prüfung angelegt. $countAdded Teilnehmer hinzugefügt.";
+                
+                // Details für Debugging anhängen (Namen der ersten 10)
+                if ($countAdded > 0) {
+                    $names = array_slice($debugLog['added'], 0, 10);
+                    $msg .= " (z.B. " . implode(', ', $names) . ($countAdded > 10 ? '...' : '') . ")";
+                }
+
+                if ($countSkipped > 0) {
+                    $msg .= "<br><strong>$countSkipped übersprungen (kein Geburtsdatum):</strong> ";
+                    $skippedNames = array_slice($debugLog['skipped'], 0, 10);
+                    $msg .= implode(', ', $skippedNames) . ($countSkipped > 10 ? '...' : '');
+                }
+
+                $this->addFlash('success', $msg);
                 return $this->redirectToRoute('sportabzeichen_exams_dashboard');
 
             } catch (\Throwable $e) {
