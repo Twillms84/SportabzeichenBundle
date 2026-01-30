@@ -357,91 +357,60 @@ final class ExamController extends AbstractPageController
 
         // 2. Gruppe laden
         $group = $em->getRepository(Group::class)->findOneBy(['account' => $groupAccount]);
-        if (!$group) return;
+        
+        if (!$group) {
+            $debugLog['errors'][] = "Gruppe '$groupAccount' nicht gefunden.";
+            return;
+        }
 
-        // 3. User der Gruppe durchgehen
+        // 3. User iterieren
         foreach ($group->getUsers() as $user) {
-            
-            // WICHTIG: Das hier ist der Account-Name (z.B. "max.mustermann"), also ein STRING.
-            $accountName = $user->getUsername(); 
+            $accountName = $user->getUsername(); // z.B. "timo.willms"
             $displayName = $user->getName() ?: $accountName;
 
-            $dobString = null;
-            $participantId = null; // Die ID in der Tabelle sportabzeichen_participants
-            $realUserId = null;    // Die echte ID in der Tabelle users (Integer)
+            // --- SCHRITT A: Echte ID aus der DB holen ---
+            // Wir fragen KEIN birthday und KEIN gender ab, da Spalten fehlen.
+            $realUserId = $conn->fetchOne("SELECT id FROM users WHERE act = ?", [$accountName]);
 
-            // --- SCHRITT A: Stammdaten aus der 'users' Tabelle holen ---
-            try {
-                // Wir suchen mit 'act' (String), um 'id' (Integer) und 'birthday' zu bekommen.
-                $userRow = $conn->fetchAssociative("SELECT id, birthday, gender FROM users WHERE act = ?", [$accountName]);
-                
-                if ($userRow) {
-                    $realUserId = $userRow['id']; // Das ist die sichere Zahl (z.B. 1054)
-                    
-                    // Geburtsdatum merken, falls vorhanden
-                    if (!empty($userRow['birthday'])) {
-                        $dobString = $userRow['birthday'];
-                    }
-
-                    // Geschlecht normalisieren
-                    $gender = 'MALE';
-                    if (!empty($userRow['gender'])) {
-                        $gVal = strtolower($userRow['gender']);
-                        if ($gVal === 'female') $gender = 'FEMALE';
-                    }
-
-                    // Wenn wir ein Geburtsdatum haben, User direkt in den Pool schreiben/updaten
-                    if ($dobString) {
-                         // Versuchen mit RETURNING (Postgres Standard)
-                         $participantId = $conn->fetchOne("
-                            INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht)
-                            VALUES (?, ?, ?)
-                            ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum
-                            RETURNING id
-                        ", [$realUserId, $dobString, $gender]);
-
-                        // Fallback für ältere Postgres Versionen ohne RETURNING bei Update
-                        if (!$participantId) {
-                            $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                // FALLBACK: Wenn die Spalte "birthday" oder "gender" fehlt, crasht der SELECT oben.
-                // Wir versuchen dann, NUR die ID zu holen (die Spalte 'id' und 'act' gibt es immer).
-                try {
-                     $realUserId = $conn->fetchOne("SELECT id FROM users WHERE act = ?", [$accountName]);
-                } catch (\Exception $ex) {
-                    // Wenn nicht mal das geht -> User überspringen
-                    continue; 
-                }
-            }
-
-            // --- SCHRITT B: Wenn wir oben kein Datum fanden, im lokalen Pool suchen ---
-            // Das passiert z.B., wenn die Spalte 'birthday' in IServ fehlt, wir den Schüler aber früher schon mal importiert haben.
-            if (!$participantId && $realUserId) {
-                $poolData = $conn->fetchAssociative(
-                    "SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", 
-                    [$realUserId]
-                );
-                if ($poolData && !empty($poolData['geburtsdatum'])) {
-                    $dobString = $poolData['geburtsdatum'];
-                    $participantId = $poolData['id'];
-                }
-            }
-
-            // --- SCHRITT C: Validierung ---
-            // Wenn wir immer noch keine Teilnehmer-ID haben (weil kein Datum gefunden wurde), 
-            // können wir ihn nicht für die Prüfung anmelden.
-            if (!$participantId || !$dobString) {
-                $debugLog['skipped'][] = $displayName;
+            if (!$realUserId) {
+                $debugLog['skipped'][] = "$displayName (Account in DB nicht gefunden)";
                 continue;
             }
 
-            // --- SCHRITT D: Eintragung in die Prüfung ---
-            // Alter berechnen
-            $birthYear = (int)substr((string)$dobString, 0, 4);
-            $age = $exam->getYear() - $birthYear;
+            // --- SCHRITT B: Teilnehmer im Pool anlegen/updaten ---
+            // Wir setzen 'username' als Referenz. Geburtsdatum bleibt NULL, wenn wir es nicht wissen.
+            // Geschlecht lassen wir NULL (oder setzen Default), da wir es nicht aus IServ holen können.
+            
+            // Zuerst prüfen, ob schon Daten im Pool sind (vielleicht wurde es ja manuell nachgetragen)
+            $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
+
+            $dobString = null;
+            $participantId = null;
+
+            if ($poolData) {
+                // User existiert schon im Pool
+                $participantId = $poolData['id'];
+                $dobString = $poolData['geburtsdatum'];
+                
+                // Wir aktualisieren nur den Username zur Sicherheit
+                $conn->executeStatement("UPDATE sportabzeichen_participants SET username = ? WHERE id = ?", [$accountName, $participantId]);
+            } else {
+                // Neuer User: Anlegen (Geburtsdatum ist NULL, Geschlecht NULL)
+                // HINWEIS: Wir setzen Geschlecht auf 'MALE' als Fallback, falls NULL Probleme macht, 
+                // aber laut Schema ist NULL erlaubt. Wir lassen es NULL.
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_participants (user_id, username) VALUES (?, ?)
+                ", [$realUserId, $accountName]);
+                
+                $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
+            }
+
+            // --- SCHRITT C: In Prüfung eintragen ---
+            $age = 0;
+            if ($dobString) {
+                $birthYear = (int)substr((string)$dobString, 0, 4);
+                $age = $exam->getYear() - $birthYear;
+            }
 
             try {
                 $inserted = $conn->executeStatement("
@@ -452,54 +421,67 @@ final class ExamController extends AbstractPageController
 
                 if ($inserted > 0) {
                     $debugLog['added'][] = $displayName;
+                } else {
+                    // War schon drin
                 }
             } catch (\Exception $e) {
-                // Duplikate ignorieren
+                $debugLog['errors'][] = "Fehler bei $displayName: " . $e->getMessage();
             }
         }
     }
 
     private function processParticipantByUserId(Connection $conn, int $examId, int $examYear, int $userId): void
     {
-        // 1. Geburtsdatum ermitteln
+        // 1. Prüfen, ob User schon im Pool ist, und Geburtsdatum holen
+        $participantId = null;
         $dob = null;
-        $poolData = $conn->fetchAssociative("SELECT geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+
+        $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
         
-        if ($poolData && !empty($poolData['geburtsdatum'])) {
-            $dob = $poolData['geburtsdatum'];
+        if ($poolData) {
+            $participantId = $poolData['id'];
+            if (!empty($poolData['geburtsdatum'])) {
+                $dob = $poolData['geburtsdatum'];
+            }
         } else {
-            // Fallback auf System-Daten (Abgesichert!)
+            // User ist noch gar nicht im Pool -> Anlegen! (Ohne Datum)
+            $conn->executeStatement("INSERT INTO sportabzeichen_participants (user_id) VALUES (?)", [$userId]);
+            $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+        }
+
+        // 2. Fallback: System-Daten prüfen (Nur wenn wir noch kein Datum haben)
+        if (!$dob) {
             try {
+                // Da deine Tabelle 'users' keine birthday-Spalte hat, wird das hier in den catch laufen
+                // oder null zurückgeben. Wir lassen es drin für die Zukunft/Kompatibilität.
                 $sysData = $conn->fetchAssociative("SELECT birthday FROM users WHERE id = ?", [$userId]);
+                
                 if ($sysData && !empty($sysData['birthday'])) {
                     $dob = $sysData['birthday'];
-                    
-                    // Sofort in Pool übernehmen
-                    $conn->executeStatement("
-                        INSERT INTO sportabzeichen_participants (user_id, geburtsdatum)
-                        VALUES (?, ?)
-                        ON CONFLICT (user_id) DO UPDATE SET geburtsdatum = EXCLUDED.geburtsdatum
-                    ", [$userId, $dob]);
+                    // Gefundenes Datum sofort im Pool speichern
+                    $conn->executeStatement("UPDATE sportabzeichen_participants SET geburtsdatum = ? WHERE id = ?", [$dob, $participantId]);
                 }
             } catch (\Throwable $e) {
-                // Ignore errors if column doesn't exist
+                // Spalte existiert nicht -> Ignorieren.
             }
         }
 
-        if (empty($dob)) return; 
+        // WICHTIG: Hier NICHT abbrechen, auch wenn $dob leer ist!
 
-        // 2. Alter berechnen
-        $birthYear = (int)substr((string)$dob, 0, 4);
-        $age = $examYear - $birthYear;
+        // 3. Alter berechnen (0 falls unbekannt)
+        $age = 0;
+        if ($dob) {
+            $birthYear = (int)substr((string)$dob, 0, 4);
+            $age = $examYear - $birthYear;
+        }
 
-        // 3. In Prüfung eintragen
-        $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
-        
+        // 4. In Prüfung eintragen
+        // Da wir oben sichergestellt haben, dass $participantId existiert, können wir jetzt inserten.
         if ($participantId) {
             $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
-                VALUES (?, ?, ?)
-                ON CONFLICT DO NOTHING
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
+                VALUES (?, ?, ?, NOW())
+                ON CONFLICT (exam_id, participant_id) DO NOTHING
             ", [$examId, $participantId, $age]);
         }
     }
