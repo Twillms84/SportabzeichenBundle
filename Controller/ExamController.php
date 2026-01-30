@@ -37,15 +37,14 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
 
-        // 1. Gruppen laden (Für Dropdown)
+        // Gruppen für Dropdown laden
         $groupRepo = $em->getRepository(Group::class);
         $allGroups = $groupRepo->findBy([], ['name' => 'ASC']);
         
         $groupsForDropdown = [];
         foreach ($allGroups as $g) {
-            $acc = $g->getAccount();
-            if ($acc) {
-                $groupsForDropdown[$acc] = $g->getName();
+            if ($g->getAccount()) {
+                $groupsForDropdown[$g->getAccount()] = $g->getName();
             }
         }
 
@@ -58,57 +57,45 @@ final class ExamController extends AbstractPageController
                 $dateStr = $request->request->get('exam_date');
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
-                $postData = $request->request->all();
-                $selectedGroups  = $postData['groups'] ?? [];
+                $selectedGroups = $request->request->all()['groups'] ?? [];
 
                 $exam = new Exam();
                 $exam->setName($name);
                 $exam->setYear($year);
                 $exam->setDate($date);
-
-                $user = $this->getUser();
-                $exam->setCreator($user ? $user->getUsername() : null);
+                $exam->setCreator($this->getUser() ? $this->getUser()->getUsername() : null);
                 
                 $em->persist($exam);
-                $em->flush(); // Generiert die ID
+                $em->flush();
 
-                $examId = $exam->getId();
-                if (!$examId) {
-                    throw new \Exception("Prüfung konnte nicht gespeichert werden (keine ID).");
-                }
+                // --- DEBUGGING STARTEN ---
+                $debugLog = ['added' => [], 'skipped' => []];
 
-                // --- LOGGING VORBEREITEN ---
-                $debugLog = [
-                    'added' => [],
-                    'skipped' => []
-                ];
-
-                // Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
-                        $groupAccount = (string)$groupAccount;
-                        
-                        // Debug-Array per Referenz übergeben (&)
-                        $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount, $debugLog);
+                        // Übergabe von $debugLog per Referenz (&)
+                        $this->importParticipantsFromGroup($em, $conn, $exam, (string)$groupAccount, $debugLog);
                     }
                 }
 
-                // --- ERGEBNIS MELDUNG ZUSAMMENBAUEN ---
+                // --- MELDUNG ZUSAMMENBAUEN ---
                 $countAdded = count($debugLog['added']);
                 $countSkipped = count($debugLog['skipped']);
                 
-                $msg = "Prüfung angelegt. $countAdded Teilnehmer hinzugefügt.";
+                $msg = "Prüfung angelegt. <strong>$countAdded</strong> Teilnehmer erfolgreich hinzugefügt.";
                 
-                // Details für Debugging anhängen (Namen der ersten 10)
                 if ($countAdded > 0) {
-                    $names = array_slice($debugLog['added'], 0, 10);
-                    $msg .= " (z.B. " . implode(', ', $names) . ($countAdded > 10 ? '...' : '') . ")";
+                    // Die ersten 5 Namen als Beispiel
+                    $names = array_slice($debugLog['added'], 0, 5);
+                    $msg .= " (z.B. " . implode(', ', $names) . ")";
                 }
 
                 if ($countSkipped > 0) {
-                    $msg .= "<br><strong>$countSkipped übersprungen (kein Geburtsdatum):</strong> ";
-                    $skippedNames = array_slice($debugLog['skipped'], 0, 10);
-                    $msg .= implode(', ', $skippedNames) . ($countSkipped > 10 ? '...' : '');
+                    $msg .= "<br><br><span style='color:red'><strong>$countSkipped übersprungen</strong> (kein Geburtsdatum gefunden):</span> ";
+                    // Die ersten 10 fehlenden anzeigen, damit man weiß, wer fehlt
+                    $skippedNames = array_slice($debugLog['skipped'], 0, 15);
+                    $msg .= implode(', ', $skippedNames) . ($countSkipped > 15 ? '...' : '');
+                    $msg .= "<br><em>Bitte Geburtsdaten in 'sportabzeichen_participants' prüfen oder manuell nachtragen.</em>";
                 }
 
                 $this->addFlash('success', $msg);
