@@ -57,7 +57,7 @@ final class ExamResultController extends AbstractPageController
         );
 
         // ---------------------------------------------------------
-        // 1. TEILNEHMER DATENBANKABFRAGE (OPTIMIERT)
+        // 1. TEILNEHMER DATENBANKABFRAGE
         // ---------------------------------------------------------
         $qb = $this->em->createQueryBuilder();
         
@@ -65,17 +65,18 @@ final class ExamResultController extends AbstractPageController
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->join('p.user', 'u')
-            ->leftJoin('u.groups', 'ug') // Gruppen joinen
+            ->leftJoin('u.groups', 'ug') // IServ User -> Groups Relation
             ->leftJoin('p.swimmingProofs', 'sp')
             ->leftJoin('ep.results', 'res')
             ->leftJoin('res.discipline', 'd')
             ->where('ep.exam = :exam')
             ->setParameter('exam', $exam);
 
-        // --- NEU: Filter direkt in der Datenbank ---
+        // --- Filter direkt in der Datenbank ---
         // Nur Teilnehmer laden, die in einer der erlaubten Gruppen sind
         if (!empty($allowedGroupActs)) {
-            $qb->andWhere('ug.account IN (:allowedGroups)')
+            // HINWEIS: 'ug.act' ist üblicherweise der Feldname für den Accountnamen der Gruppe in IServ-Entities
+            $qb->andWhere('ug.act IN (:allowedGroups)')
                ->setParameter('allowedGroups', $allowedGroupActs);
         }
 
@@ -90,8 +91,7 @@ final class ExamResultController extends AbstractPageController
         }
 
         /** @var ExamParticipant[] $examParticipants */
-        // Wir nutzen hier DISTINCT, falls ein User in zwei erlaubten Gruppen gleichzeitig ist,
-        // damit er nicht doppelt geladen wird.
+        // DISTINCT wichtig, da User in mehreren Gruppen sein können und durch den Join sonst vervielfacht werden
         $examParticipants = $qb->distinct()->getQuery()->getResult();
 
         // ---------------------------------------------------------
@@ -107,23 +107,25 @@ final class ExamResultController extends AbstractPageController
             $userGroups = $user->getGroups();
             
             // --- LOGIK: GRUPPENNAME ERMITTELN ---
-            // Da die Datenbank nur noch passende User liefert, müssen wir hier nicht mehr filtern,
-            // sondern nur noch den "schönsten" Gruppennamen für die Anzeige finden.
-            
             $categoryName = 'Sonstige';
             
             if (!empty($allowedGroupActs)) {
                 foreach ($userGroups as $g) {
                     // Wir prüfen, welche der Gruppen des Users diejenige ist, die im Exam erlaubt ist
-                    if (in_array($g->getAccount(), $allowedGroupActs)) {
-                        $categoryName = $g->getName(); 
+                    // Wir nutzen getAct() oder getAccount(), je nach Entity-Version. Meist getAct() oder via __toString()
+                    $gAct = (method_exists($g, 'getAct')) ? $g->getAct() : $g->getAccount();
+                    
+                    if (in_array($gAct, $allowedGroupActs)) {
+                        $categoryName = $g->getName(); // Der Anzeigename (z.B. "Klasse 5a")
                         break; 
                     }
                 }
             } else {
-                // Fallback, falls keine Einschränkungen im Exam definiert sind (sollte eigentlich nicht vorkommen)
+                // Fallback: Erste Gruppe nehmen, idealerweise eine Klasse (startet oft mit Ziffer)
                 if (!$userGroups->isEmpty()) {
+                    // Einfache Heuristik: Nimm die erste Gruppe
                     $categoryName = $userGroups->first()->getName();
+                    // Optional: Man könnte hier durchloopen und bevorzugt Gruppen nehmen, die wie Klassen aussehen
                 }
             }
 
@@ -244,9 +246,7 @@ final class ExamResultController extends AbstractPageController
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        // -----------------------------------------------------------
         // 1. Alte Ergebnisse dieser Kategorie aufräumen
-        // -----------------------------------------------------------
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
@@ -258,9 +258,7 @@ final class ExamResultController extends AbstractPageController
         }
         $this->em->flush(); 
 
-        // -----------------------------------------------------------
         // 2. Berechnung & Logik
-        // -----------------------------------------------------------
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
         $unit = $discipline->getUnit();
         $isVerband = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
@@ -283,9 +281,7 @@ final class ExamResultController extends AbstractPageController
             $stufe = $pData['stufe'];
         }
 
-        // -----------------------------------------------------------
         // 2a. Requirements für das Frontend laden
-        // -----------------------------------------------------------
         $requirementsData = null;
 
         if (!$isVerband) {
@@ -313,9 +309,7 @@ final class ExamResultController extends AbstractPageController
             }
         }
 
-        // -----------------------------------------------------------
         // 3. Ergebnis speichern
-        // -----------------------------------------------------------
         $newResult = new ExamResult();
         $newResult->setExamParticipant($ep);
         $newResult->setDiscipline($discipline);
@@ -330,9 +324,7 @@ final class ExamResultController extends AbstractPageController
         
         $this->em->persist($newResult);
 
-        // -----------------------------------------------------------
         // 4. Schwimm-Proof Update
-        // -----------------------------------------------------------
         if ($discipline->isSwimmingCategory()) {
             $this->service->updateSwimmingProof($ep, $discipline, $points);
         }
@@ -340,9 +332,7 @@ final class ExamResultController extends AbstractPageController
         $this->em->flush();
         $this->em->refresh($ep); 
         
-        // -----------------------------------------------------------
         // 5. Response bauen
-        // -----------------------------------------------------------
         $response = $this->generateSummaryResponse($ep, $points, $stufe);
         $content = json_decode($response->getContent(), true);
         
@@ -456,7 +446,21 @@ final class ExamResultController extends AbstractPageController
         $examYearEnd = $examYear . '-12-31';
 
         // 3. Basis-SQL vorbereiten
-        // Keine Verwendung mehr von auxinfo.
+        // WICHTIG: 'auxinfo' gibt es nicht mehr. Wir holen den Gruppennamen via Subquery oder nehmen den Filterwert.
+        
+        // Subquery Logik für den Gruppennamen:
+        // Wir suchen eine Gruppe des Users. Falls nach einer Klasse gefiltert wird, nehmen wir die.
+        // Andernfalls nehmen wir die erste Gruppe, die mit einer Ziffer beginnt (Klasse), sonst irgendeine.
+        $groupNameSql = "
+            (SELECT g.name FROM members m 
+             JOIN groups g ON m.group = g.act 
+             WHERE m.user = u.act 
+             " . ($selectedClass ? "AND g.name = :selectedClass" : "") . "
+             ORDER BY (CASE WHEN g.name REGEXP '^[0-9]' THEN 0 ELSE 1 END), g.name 
+             LIMIT 1
+            )
+        ";
+
         $sql = "
             SELECT 
                 ep.id as ep_id, 
@@ -464,6 +468,7 @@ final class ExamResultController extends AbstractPageController
                 u.lastname, u.firstname, 
                 p.geburtsdatum, p.geschlecht, 
                 ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
+                $groupNameSql as group_name,
                 (SELECT sp.exam_year 
                  FROM sportabzeichen_swimming_proofs sp 
                  WHERE sp.participant_id = ep.participant_id 
@@ -478,8 +483,12 @@ final class ExamResultController extends AbstractPageController
         ";
         
         $params = ['examId' => $examId, 'year' => $examYear, 'yearEnd' => $examYearEnd];
+        
+        if ($selectedClass) {
+            $params['selectedClass'] = $selectedClass;
+        }
 
-        // --- FILTER LOGIK (NUR GRUPPEN) ---
+        // --- FILTER LOGIK ---
 
         // A) Explizite IDs
         if (!empty($selectedIds)) {
@@ -491,9 +500,7 @@ final class ExamResultController extends AbstractPageController
         else {
             // B) Filterung via Gruppe und/oder Suche
             
-            // 1. Gruppe filtern (Ersetzt auxinfo)
-            // Wir prüfen, ob der User in der Gruppe Mitglied ist.
-            // Tabelle 'members' verknüpft 'user' (act) mit 'group' (act). 'groups' hat 'name'.
+            // 1. Gruppe filtern (via EXISTS Subquery auf members Tabelle)
             if ($selectedClass) {
                 $sql .= " AND EXISTS (
                             SELECT 1 FROM members m 
@@ -537,10 +544,15 @@ final class ExamResultController extends AbstractPageController
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
+            // Falls durch das Subquery kein Gruppenname gefunden wurde (User in keiner Gruppe), Fallback
+            if (empty($p['group_name'])) {
+                $p['group_name'] = '-';
+            }
+
             // Ergebnisse laden
             $resultsRaw = $conn->fetchAllAssociative("
                 SELECT r.auswahlnummer, res.leistung, res.points, res.stufe, 
-                        d.kategorie, d.einheit, d.name as d_name, d.verband
+                       d.kategorie, d.einheit, d.name as d_name, d.verband
                 FROM sportabzeichen_exam_results res
                 JOIN sportabzeichen_disciplines d ON d.id = res.discipline_id
                 LEFT JOIN sportabzeichen_requirements r ON r.discipline_id = d.id 

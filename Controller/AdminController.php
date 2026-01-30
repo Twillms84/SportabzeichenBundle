@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Query\Expr\Join;
 use IServ\CoreBundle\Controller\AbstractPageController;
 use IServ\CoreBundle\Entity\User;
 use PulsR\SportabzeichenBundle\Entity\Participant;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\DateType;
+use Symfony\Component\Form\Extension\Core\Type\SubmitType;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -40,28 +44,22 @@ final class AdminController extends AbstractPageController
         $limit = 50;
         $searchTerm = trim((string)$request->query->get('q'));
 
-        // Basis-QueryBuilder erstellen (wird für Count UND Result genutzt)
         $qb = $repo->createQueryBuilder('p')
-            ->leftJoin('p.user', 'u'); // Join für Namenssuche
+            ->leftJoin('p.user', 'u')
+            ->addSelect('u'); // Eager Loading des Users verhindert N+1 Probleme im Template
 
-        // Suchfilter anwenden, falls vorhanden
-        if ($searchTerm) {
+        if ($searchTerm !== '') {
             $qb->andWhere('LOWER(u.lastname) LIKE :q OR LOWER(u.firstname) LIKE :q OR LOWER(u.username) LIKE :q')
-               ->setParameter('q', '%' . strtolower($searchTerm) . '%');
+               ->setParameter('q', '%' . mb_strtolower($searchTerm) . '%');
         }
 
-        // 1. Zählen (für Pagination) auf Basis des gefilterten QueryBuilders
-        // Wir klonen den QB, damit das Original für die Ergebnissuche erhalten bleibt
+        // Pagination Count
         $countQb = clone $qb;
-        $totalCount = (int) $countQb->select('count(p.id)')
-            ->getQuery()
-            ->getSingleScalarResult();
-
+        $totalCount = (int) $countQb->select('count(p.id)')->getQuery()->getSingleScalarResult();
         $maxPages = max(1, (int) ceil($totalCount / $limit));
 
-        // 2. Ergebnisse laden
-        $participants = $qb->addSelect('u') // User-Objekt mitladen
-            ->orderBy('u.lastname', 'ASC')
+        // Results
+        $participants = $qb->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
             ->setFirstResult(($page - 1) * $limit)
             ->setMaxResults($limit)
@@ -74,61 +72,42 @@ final class AdminController extends AbstractPageController
             'currentPage'  => $page,
             'maxPages'     => $maxPages,
             'totalCount'   => $totalCount,
-            'searchTerm'   => $searchTerm, // Wichtig für das Suchfeld im Template
+            'searchTerm'   => $searchTerm,
         ]);
     }
 
     #[Route('/participants/missing', name: 'participants_missing')]
-    public function participantsMissing(Request $request, EntityManagerInterface $em): Response
+    public function participantsMissing(Request $request): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-        
-        $participantRepo = $em->getRepository(Participant::class);
-        $userRepo = $em->getRepository(User::class);
 
+        $userRepo = $this->em->getRepository(User::class);
         $searchTerm = trim((string)$request->query->get('q'));
-        $missingUsers = [];
-        $limitReached = false;
-
-        // 1. IDs der existierenden Teilnehmer holen
-        $existingIdsResult = $participantRepo->createQueryBuilder('p')
-            ->select('IDENTITY(p.user)')
-            ->where('p.user IS NOT NULL')
-            ->getQuery()
-            ->getScalarResult();
         
-        $excludeIds = array_column($existingIdsResult, 1);
-
-        // 2. QueryBuilder für User
+        // Optimierte Query: Finde User, die NICHT in der Participant-Tabelle sind via LEFT JOIN
         $qb = $userRepo->createQueryBuilder('u')
-            ->select('u')
-            // FIX: Wir prüfen auf "nicht gelöscht" (deleted ist NULL), statt auf "active"
-            ->where('u.deleted IS NULL') 
+            ->leftJoin(Participant::class, 'p', Join::WITH, 'p.user = u')
+            ->where('u.deleted IS NULL')
+            ->andWhere('p.id IS NULL') // Nur User, wo kein Participant-Eintrag existiert
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
-            ->setMaxResults(51);
+            ->setMaxResults(51); // +1 um zu prüfen ob Limit erreicht
 
-        // Bereits vorhandene Teilnehmer ausschließen
-        if (!empty($excludeIds)) {
-            $qb->andWhere($qb->expr()->notIn('u.id', $excludeIds));
-        }
-
-        // Suche: Wir suchen in Name, Vorname, Benutzername (act) ODER Import-ID
-        if (strlen($searchTerm) > 0) {
+        if ($searchTerm !== '') {
             $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s OR u.importId LIKE :s')
                ->setParameter('s', '%' . $searchTerm . '%');
         }
 
         $results = $qb->getQuery()->getResult();
         
+        $limitReached = false;
         if (count($results) > 50) {
             $limitReached = true;
             array_pop($results);
         }
-        $missingUsers = $results;
 
         return $this->render('@PulsRSportabzeichen/admin/participants/missing.html.twig', [
-            'missingUsers' => $missingUsers,
+            'missingUsers' => $results,
             'searchTerm'   => $searchTerm,
             'limitReached' => $limitReached,
             'activeTab'    => 'participants_manage'
@@ -136,72 +115,46 @@ final class AdminController extends AbstractPageController
     }
 
     #[Route('/participants/add/{username}', name: 'participants_add')]
-    public function participantsAdd(Request $request, string $username, EntityManagerInterface $em): Response
+    public function participantsAdd(Request $request, string $username): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-        $conn = $em->getConnection();
 
-        // User-Daten laden
-        $sqlUser = 'SELECT id, firstname, lastname, importid FROM users WHERE act = :name';
-        $userData = $conn->fetchAssociative($sqlUser, ['name' => $username]);
+        // User via Entity laden statt Raw SQL
+        $user = $this->em->getRepository(User::class)->findOneBy(['username' => $username]); // 'act' heißt in der Entity meist 'username'
 
-        if (!$userData) {
+        if (!$user) {
             $this->addFlash('error', 'Benutzer nicht gefunden.');
             return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
         }
 
-        $importId = $userData['importid'] ?: 'MANUAL_' . $username;
-        $realId = $userData['id'];
+        // Check auf Existenz (über Entity Repository)
+        $existing = $this->em->getRepository(Participant::class)->findOneBy(['user' => $user]);
+        if ($existing) {
+            $this->addFlash('warning', 'Teilnehmer existiert bereits.');
+            return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+        }
 
-        // Formular erstellen
-        $form = $this->createFormBuilder()
-            ->add('birthdate', \Symfony\Component\Form\Extension\Core\Type\DateType::class, [
-                'label' => 'Geburtsdatum',
-                'widget' => 'single_text',
-                'required' => false,
-                'data' => new \DateTime('2010-01-01'),
-            ])
-            ->add('gender', \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
-                'label' => 'Geschlecht',
-                // WICHTIG: Rechts stehen die Werte für die Datenbank (MALE, FEMALE)!
-                'choices' => [
-                    'Männlich' => 'MALE',
-                    'Weiblich' => 'FEMALE',
-                    'Divers'   => 'DIVERSE',
-                ],
-                'expanded' => true,
-                'multiple' => false,
-                'data' => 'MALE', // Standardwert muss auch 'MALE' sein, nicht 'm'
-            ])
-            ->add('save', \Symfony\Component\Form\Extension\Core\Type\SubmitType::class, [
-                'label' => 'Teilnehmer hinzufügen',
-                'attr' => ['class' => 'btn btn-success']
-            ])
-            ->getForm();
+        // Neue Entity erstellen
+        $participant = new Participant();
+        $participant->setUser($user);
+        // Fallback Import ID Logik (falls das im Setter der Entity nicht passiert)
+        $importId = $user->getImportId() ?: 'MANUAL_' . $user->getUsername();
+        $participant->setImportId($importId);
+        // Defaults
+        $participant->setGeburtsdatum(new \DateTime('2010-01-01'));
+        $participant->setGeschlecht('MALE');
 
+        // Formular direkt an die Entity binden
+        $form = $this->createParticipantForm($participant, 'Teilnehmer hinzufügen');
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $data = $form->getData();
-            
             try {
-                // Check ob schon existiert
-                $exists = $conn->fetchOne('SELECT 1 FROM sportabzeichen_participants WHERE user_id = :uid', ['uid' => $realId]);
-                
-                if ($exists) {
-                    $this->addFlash('warning', 'Bereits vorhanden!');
-                } else {
-                    // SQL Insert mit korrekten Werten
-                    $conn->insert('sportabzeichen_participants', [
-                        'user_id' => $realId,
-                        'import_id' => $importId,
-                        'geburtsdatum' => $data['birthdate'] ? $data['birthdate']->format('Y-m-d') : null,
-                        'geschlecht' => $data['gender'] // Sendet jetzt 'MALE', 'FEMALE' oder 'DIVERSE'
-                    ]);
-                    $this->addFlash('success', 'Gespeichert: ' . $userData['firstname']);
-                }
-                return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
+                $this->em->persist($participant);
+                $this->em->flush();
 
+                $this->addFlash('success', 'Gespeichert: ' . $user->getFirstname());
+                return $this->redirectToRoute('sportabzeichen_admin_participants_missing');
             } catch (\Exception $e) {
                 $this->addFlash('error', 'Fehler: ' . $e->getMessage());
             }
@@ -209,20 +162,17 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/participants/add.html.twig', [
             'form' => $form->createView(),
-            'user' => $userData
+            'user' => $user // Entity an View übergeben (Twig: user.firstname statt user['firstname'])
         ]);
     }
 
     #[Route('/participants/{id}/update', name: 'participants_update', methods: ['POST'])]
-    public function participantsUpdate(Request $request, int $id): Response
+    public function participantsUpdate(Request $request, Participant $participant): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-
-        $participant = $this->em->getRepository(Participant::class)->find($id);
         
-        if (!$participant) {
-            throw $this->createNotFoundException('Teilnehmer nicht gefunden.');
-        }
+        // Durch Type-Hinting 'Participant $participant' spart man sich das manuelle ->find($id)
+        // und die 404 Exception. Symfony macht das automatisch (ParamConverter).
 
         $dob = $request->request->get('dob');
         $gender = $request->request->get('gender');
@@ -231,15 +181,12 @@ final class AdminController extends AbstractPageController
             try {
                 $participant->setGeburtsdatum(new \DateTime($dob));
             } catch (\Exception $e) {
-                // Ungültiges Datum ignorieren oder Flash-Message setzen
+                // Silent fail oder Logging
             }
         }
         
-        if ($gender) {
-            // Validierung: Nur erlaubte Werte
-            if (in_array($gender, ['MALE', 'FEMALE', 'DIVERSE'])) {
-                 $participant->setGeschlecht($gender);
-            }
+        if ($gender && in_array($gender, ['MALE', 'FEMALE', 'DIVERSE'], true)) {
+             $participant->setGeschlecht($gender);
         }
 
         $this->em->flush();
@@ -249,66 +196,21 @@ final class AdminController extends AbstractPageController
     }
 
     #[Route('/participants/edit/{id}', name: 'participants_edit')]
-    public function participantsEdit(int $id, Request $request, EntityManagerInterface $em): Response
+    public function participantsEdit(Request $request, Participant $participant): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-        $conn = $em->getConnection();
 
-        // Teilnehmer laden
-        $sql = '
-            SELECT p.*, u.firstname, u.lastname 
-            FROM sportabzeichen_participants p
-            JOIN users u ON p.user_id = u.id
-            WHERE p.id = :pid
-        ';
-        $participant = $conn->fetchAssociative($sql, ['pid' => $id]);
-
-        if (!$participant) {
-            $this->addFlash('error', 'Teilnehmer nicht gefunden.');
-            return $this->redirectToRoute('sportabzeichen_admin_participants_index');
-        }
-
-        $currentDate = $participant['geburtsdatum'] ? new \DateTime($participant['geburtsdatum']) : null;
-
-        // Formular erstellen
-        $form = $this->createFormBuilder()
-            ->add('birthdate', \Symfony\Component\Form\Extension\Core\Type\DateType::class, [
-                'label' => 'Geburtsdatum',
-                'widget' => 'single_text',
-                'required' => false,
-                'data' => $currentDate,
-            ])
-            ->add('gender', \Symfony\Component\Form\Extension\Core\Type\ChoiceType::class, [
-                'label' => 'Geschlecht',
-                // WICHTIG: Auch hier müssen die Werte exakt stimmen
-                'choices' => [
-                    'Männlich' => 'MALE',
-                    'Weiblich' => 'FEMALE',
-                    'Divers'   => 'DIVERSE',
-                ],
-                'expanded' => true,
-                'data' => $participant['geschlecht'], // Lädt 'MALE'/'FEMALE' aus der DB
-            ])
-            ->add('save', \Symfony\Component\Form\Extension\Core\Type\SubmitType::class, [
-                'label' => 'Änderungen speichern',
-                'attr' => ['class' => 'btn btn-primary']
-            ])
-            ->getForm();
-
+        // Formular an die existierende Entity binden
+        $form = $this->createParticipantForm($participant, 'Änderungen speichern');
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $data = $form->getData();
-
             try {
-                $conn->update('sportabzeichen_participants', [
-                    'geburtsdatum' => $data['birthdate'] ? $data['birthdate']->format('Y-m-d') : null,
-                    'geschlecht' => $data['gender'] // Sendet 'MALE', 'FEMALE' etc.
-                ], ['id' => $id]);
+                // persist ist bei Updates nicht zwingend nötig, schadet aber nicht
+                $this->em->flush(); 
 
                 $this->addFlash('success', 'Daten aktualisiert.');
                 return $this->redirectToRoute('sportabzeichen_admin_participants_index');
-
             } catch (\Exception $e) {
                 $this->addFlash('error', 'Fehler: ' . $e->getMessage());
             }
@@ -316,11 +218,10 @@ final class AdminController extends AbstractPageController
 
         return $this->render('@PulsRSportabzeichen/admin/add.html.twig', [
             'form' => $form->createView(),
-            'user' => ['firstname' => $participant['firstname'], 'lastname' => $participant['lastname']]
+            'user' => $participant->getUser() // Entity statt Array
         ]);
     }
 
-    // ... Import und Requirements Methoden bleiben einfach Render-Aufrufe ...
     #[Route('/upload', name: 'upload_participants')]
     public function importIndex(): Response
     {
@@ -330,5 +231,32 @@ final class AdminController extends AbstractPageController
             'message' => null, 'error' => null, 'imported' => 0, 'skipped' => 0
         ]);
     }
-}
 
+    /**
+     * Hilfsmethode, um das Formular nicht doppelt zu definieren (DRY)
+     */
+    private function createParticipantForm(Participant $participant, string $btnLabel): \Symfony\Component\Form\FormInterface
+    {
+        return $this->createFormBuilder($participant)
+            ->add('geburtsdatum', DateType::class, [ // Name muss exakt Property in Entity entsprechen
+                'label' => 'Geburtsdatum',
+                'widget' => 'single_text',
+                'required' => false,
+            ])
+            ->add('geschlecht', ChoiceType::class, [
+                'label' => 'Geschlecht',
+                'choices' => [
+                    'Männlich' => 'MALE',
+                    'Weiblich' => 'FEMALE',
+                    'Divers'   => 'DIVERSE',
+                ],
+                'expanded' => true,
+                'multiple' => false,
+            ])
+            ->add('save', SubmitType::class, [
+                'label' => $btnLabel,
+                'attr' => ['class' => 'btn btn-success']
+            ])
+            ->getForm();
+    }
+}
