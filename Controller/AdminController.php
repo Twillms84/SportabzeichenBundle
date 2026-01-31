@@ -84,20 +84,19 @@ final class AdminController extends AbstractPageController
         $userRepo = $this->em->getRepository(User::class);
         $searchTerm = trim((string)$request->query->get('q'));
         
-        // --- ÄNDERUNG: Definition von "Erledigt" ---
-        // Wir schließen nur User aus, die einen Eintrag HABEN UND bei denen
-        // das Geburtsdatum ausgefüllt ist.
-        // Wer in der Tabelle steht, aber NULL beim Datum hat, bleibt in der Liste sichtbar.
+        // 1. Hole IDs von Teilnehmern, die KOMPLETT sind (also Importiert + Geburtsdatum vorhanden)
+        // KORREKTUR: p.birthdate statt p.geburtsdatum (Entity Property Name!)
+        // KORREKTUR: p.gender statt p.geschlecht
         $completedSubQuery = $this->em->createQueryBuilder()
             ->select('IDENTITY(p.user)')
             ->from(Participant::class, 'p')
-            ->where('p.geburtsdatum IS NOT NULL') 
-            ->andWhere("p.geschlecht IS NOT NULL AND p.geschlecht <> ''")
+            ->where('p.birthdate IS NOT NULL') 
+            ->andWhere("p.gender IS NOT NULL AND p.gender <> ''")
             ->getDQL();
 
+        // 2. Suche User, die NICHT in dieser "Komplett"-Liste sind
         $qb = $userRepo->createQueryBuilder('u')
             ->where('u.deleted IS NULL')
-            // Zeige mir alle User, deren ID NICHT in der "Fertig"-Liste ist
             ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $completedSubQuery))
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
