@@ -84,28 +84,38 @@ final class AdminController extends AbstractPageController
         $userRepo = $this->em->getRepository(User::class);
         $searchTerm = trim((string)$request->query->get('q'));
         
-        // 1. Hole IDs von Teilnehmern, die KOMPLETT sind (also Importiert + Geburtsdatum vorhanden)
-        // KORREKTUR: p.birthdate statt p.geburtsdatum (Entity Property Name!)
-        // KORREKTUR: p.gender statt p.geschlecht
+        // --- 1. Subquery: Die "Fertigen" ---
         $completedSubQuery = $this->em->createQueryBuilder()
             ->select('IDENTITY(p.user)')
             ->from(Participant::class, 'p')
-            ->where('p.birthdate IS NOT NULL') 
+            ->where('p.user IS NOT NULL') // <--- WICHTIG: Verhindert SQL-Fehler bei verwaisten Einträgen
+            ->andWhere('p.birthdate IS NOT NULL') 
             ->andWhere("p.gender IS NOT NULL AND p.gender <> ''")
             ->getDQL();
 
-        // 2. Suche User, die NICHT in dieser "Komplett"-Liste sind
+        // --- 2. Hauptquery ---
         $qb = $userRepo->createQueryBuilder('u')
-            ->where('u.deleted IS NULL')
-            ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $completedSubQuery))
-            ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC')
-            ->setMaxResults(51);
-
+            ->where('u.deleted IS NULL') // Nur aktive User
+            ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $completedSubQuery));
+        
+        // Suchelogik verfeinert
         if ($searchTerm !== '') {
-            $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s OR u.importId LIKE :s')
-                ->setParameter('s', '%' . $searchTerm . '%');
+            $qb->andWhere(
+                $qb->expr()->orX(
+                    $qb->expr()->like('LOWER(u.username)', ':s'),
+                    $qb->expr()->like('LOWER(u.firstname)', ':s'),
+                    $qb->expr()->like('LOWER(u.lastname)', ':s'),
+                    $qb->expr()->like('LOWER(u.importId)', ':s') // Falls ImportID existiert
+                )
+            )
+            ->setParameter('s', '%' . mb_strtolower($searchTerm) . '%');
         }
+
+        // Sortierung: Zuerst Nachname, dann Vorname, dann Username (für User ohne Namen wichtig!)
+        $qb->orderBy('u.lastname', 'ASC')
+           ->addOrderBy('u.firstname', 'ASC')
+           ->addOrderBy('u.username', 'ASC') // Fallback für Testuser ohne Realnamen
+           ->setMaxResults(51);
 
         $results = $qb->getQuery()->getResult();
         
