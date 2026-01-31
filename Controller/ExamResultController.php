@@ -456,7 +456,7 @@ final class ExamResultController extends AbstractPageController
              JOIN groups g ON m.group = g.act 
              WHERE m.user = u.act 
              " . ($selectedClass ? "AND g.name = :selectedClass" : "") . "
-             ORDER BY (CASE WHEN g.name REGEXP '^[0-9]' THEN 0 ELSE 1 END), g.name 
+             ORDER BY (CASE WHEN g.name ~ '^[0-9]' THEN 0 ELSE 1 END), g.name 
              LIMIT 1
             )
         ";
