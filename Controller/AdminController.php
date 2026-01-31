@@ -84,18 +84,29 @@ final class AdminController extends AbstractPageController
         $userRepo = $this->em->getRepository(User::class);
         $searchTerm = trim((string)$request->query->get('q'));
         
-        // Optimierte Query: Finde User, die NICHT in der Participant-Tabelle sind via LEFT JOIN
+        // --- KORREKTUR START ---
+        
+        // Statt eines fehleranfälligen Joins nutzen wir eine Subquery.
+        // Schritt 1: Hole alle User-IDs, die BEREITS im System sind.
+        // IDENTITY(p.user) holt die rohe ID aus der Beziehung, ohne das Objekt zu laden.
+        $subQuery = $this->em->createQueryBuilder()
+            ->select('IDENTITY(p.user)')
+            ->from(Participant::class, 'p')
+            ->getDQL();
+
+        // Schritt 2: Hole alle User, deren ID *NICHT* in dieser Liste ist.
         $qb = $userRepo->createQueryBuilder('u')
-            ->leftJoin(Participant::class, 'p', Join::WITH, 'p.user = u')
             ->where('u.deleted IS NULL')
-            ->andWhere('p.id IS NULL') // Nur User, wo kein Participant-Eintrag existiert
+            ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $subQuery))
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
-            ->setMaxResults(51); // +1 um zu prüfen ob Limit erreicht
+            ->setMaxResults(51);
+
+        // --- KORREKTUR ENDE ---
 
         if ($searchTerm !== '') {
             $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s OR u.importId LIKE :s')
-               ->setParameter('s', '%' . $searchTerm . '%');
+                ->setParameter('s', '%' . $searchTerm . '%');
         }
 
         $results = $qb->getQuery()->getResult();
