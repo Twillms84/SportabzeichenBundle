@@ -446,15 +446,11 @@ final class ExamResultController extends AbstractPageController
         $examYearEnd = $examYear . '-12-31';
 
         // 3. Basis-SQL vorbereiten
-        // WICHTIG: 'auxinfo' gibt es nicht mehr. Wir holen den Gruppennamen via Subquery oder nehmen den Filterwert.
-        
-        // Subquery Logik für den Gruppennamen:
-        // Wir suchen eine Gruppe des Users. Falls nach einer Klasse gefiltert wird, nehmen wir die.
-        // Andernfalls nehmen wir die erste Gruppe, die mit einer Ziffer beginnt (Klasse), sonst irgendeine.
+        // KORREKTUR: actgrp statt group, actuser statt user, ~ statt REGEXP
         $groupNameSql = "
             (SELECT g.name FROM members m 
-             JOIN groups g ON m.group = g.act 
-             WHERE m.user = u.act 
+             JOIN groups g ON m.actgrp = g.act 
+             WHERE m.actuser = u.act 
              " . ($selectedClass ? "AND g.name = :selectedClass" : "") . "
              ORDER BY (CASE WHEN g.name ~ '^[0-9]' THEN 0 ELSE 1 END), g.name 
              LIMIT 1
@@ -500,12 +496,12 @@ final class ExamResultController extends AbstractPageController
         else {
             // B) Filterung via Gruppe und/oder Suche
             
-            // 1. Gruppe filtern (via EXISTS Subquery auf members Tabelle)
+            // 1. Gruppe filtern (KORREKTUR: actgrp/actuser)
             if ($selectedClass) {
                 $sql .= " AND EXISTS (
                             SELECT 1 FROM members m 
-                            JOIN groups g ON m.group = g.act 
-                            WHERE m.user = u.act AND g.name = :cls
+                            JOIN groups g ON m.actgrp = g.act 
+                            WHERE m.actuser = u.act AND g.name = :cls
                           )";
                 $params['cls'] = $selectedClass;
             }
@@ -544,7 +540,6 @@ final class ExamResultController extends AbstractPageController
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
 
-            // Falls durch das Subquery kein Gruppenname gefunden wurde (User in keiner Gruppe), Fallback
             if (empty($p['group_name'])) {
                 $p['group_name'] = '-';
             }
