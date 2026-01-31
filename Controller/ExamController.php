@@ -256,8 +256,7 @@ final class ExamController extends AbstractPageController
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
-        // KORRIGIERTE SQL ABFRAGE
-        // WICHTIG: "user" und "group" müssen in Anführungszeichen stehen!
+        // KORREKTUR: Verwendung der Standard-IServ-Spalten 'actuser' und 'actgrp'
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
@@ -265,8 +264,8 @@ final class ExamController extends AbstractPageController
                 g.name as group_name,
                 (sp.geburtsdatum IS NULL) as is_missing_dob
             FROM users u
-            INNER JOIN members m ON u.act = m.\"user\"
-            INNER JOIN sportabzeichen_exam_groups seg ON m.\"group\" = seg.act 
+            INNER JOIN members m ON u.act = m.actuser
+            INNER JOIN sportabzeichen_exam_groups seg ON m.actgrp = seg.act 
             LEFT JOIN groups g ON seg.act = g.act
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             
