@@ -272,13 +272,11 @@ final class ExamController extends AbstractPageController
             WHERE u.deleted IS NULL
             AND seg.exam_id = :examId
             
-            /* --- TEST: DIESEN TEIL AUSKOMMENTIEREN ---
             AND NOT EXISTS (
                 SELECT 1 FROM sportabzeichen_exam_participants sep
                 JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
                 WHERE sp_inner.user_id = u.id AND sep.exam_id = :examId
             )
-            ----------------------------------------- */
         ";
 
         $params = ['examId' => $id];
