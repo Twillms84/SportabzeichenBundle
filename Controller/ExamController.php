@@ -45,6 +45,7 @@ final class ExamController extends AbstractPageController
         foreach ($allGroups as $g) {
             $acc = $g->getAccount();
             if ($acc) {
+                // Key = Account (klasse.5a), Value = Name (Klasse 5a)
                 $groupsForDropdown[$acc] = $g->getName();
             }
         }
@@ -58,8 +59,12 @@ final class ExamController extends AbstractPageController
                 $dateStr = $request->request->get('exam_date');
                 $date = $dateStr ? new \DateTime($dateStr) : null;
                 
+                // Holen der Gruppen. WICHTIG: Im HTML muss name="groups[]" stehen!
                 $postData = $request->request->all();
                 $selectedGroups  = $postData['groups'] ?? [];
+
+                // --- DEBUG: Falls immer noch nichts passiert, Zeile einkommentieren ---
+                // dd($selectedGroups); 
 
                 $exam = new Exam();
                 $exam->setName($name);
@@ -70,20 +75,23 @@ final class ExamController extends AbstractPageController
                 $em->persist($exam);
                 $em->flush();
 
+                // --- DEBUGGING LISTE INITIALISIEREN ---
                 $debugLog = [
                     'added' => [], 
                     'skipped' => [],
-                    'errors' => [] 
+                    'errors' => [] // <--- Das hier hat gefehlt!
                 ];
 
+                // Gruppen importieren
                 if (!empty($selectedGroups) && is_array($selectedGroups)) {
                     foreach ($selectedGroups as $groupAccount) {
                         $groupAccount = (string)$groupAccount;
+                        // Ruft die neue SQL-basierte Methode auf
                         $this->importParticipantsFromGroup($em, $conn, $exam, $groupAccount, $debugLog);
                     }
                 }
 
-                // --- FEEDBACK MELDUNG ---
+                // --- FEEDBACK MELDUNG BAUEN ---
                 $countAdded = count($debugLog['added']);
                 $countErrors = count($debugLog['errors']);
                 
@@ -97,6 +105,7 @@ final class ExamController extends AbstractPageController
                     $msg .= "<strong>Keine Teilnehmer hinzugefügt.</strong>";
                 }
 
+                // WICHTIG: Fehler anzeigen!
                 if ($countErrors > 0) {
                     $msg .= "<br><br><span style='color:red'><strong>$countErrors Fehler/Warnungen:</strong></span><br>";
                     $msg .= implode('<br>', $debugLog['errors']);
@@ -105,6 +114,7 @@ final class ExamController extends AbstractPageController
                 if ($countAdded > 0) {
                      $this->addFlash('success', $msg);
                 } else {
+                     // Wenn niemand hinzugefügt wurde, eher eine Warnung zeigen
                      $this->addFlash('warning', $msg);
                 }
                
@@ -125,9 +135,11 @@ final class ExamController extends AbstractPageController
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
 
+        // Wir brauchen das Entity für die Helper-Methode importParticipantsFromGroup
         $examEntity = $em->getRepository(Exam::class)->find($id);
         if (!$examEntity) throw $this->createNotFoundException('Prüfung nicht gefunden');
         
+        // Array-Daten für DBAL-Operationen (Legacy-Support für deinen Code)
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
 
         // --- POST HANDLING ---
@@ -175,16 +187,57 @@ final class ExamController extends AbstractPageController
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id]);
             }
 
-            // 4. EINZELNEN TEILNEHMER HINZUFÜGEN
+            // 4. EINZELNEN TEILNEHMER HINZUFÜGEN (aus der "Fehlende"-Liste)
             if ($request->request->has('account')) {
-                $this->handleAddSingleParticipant($request, $conn, $id, (int)$exam['exam_year']);
+                $account = trim($request->request->get('account', ''));
+                $gender  = $request->request->get('gender');
+                $dobStr  = $request->request->get('dob');
+
+                if ($account && $gender && $dobStr) {
+                    $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
+                    if ($userId) {
+                        try {
+                            // A) Pool-Daten updaten/anlegen (OHNE ON CONFLICT, da kein Unique-Index existiert)
+                            
+                            // 1. Prüfen, ob Eintrag schon existiert
+                            $existingPartId = $conn->fetchOne(
+                                "SELECT id FROM sportabzeichen_participants WHERE user_id = ?", 
+                                [$userId]
+                            );
+
+                            if ($existingPartId) {
+                                // Update existierender Eintrag
+                                $conn->update('sportabzeichen_participants', [
+                                    'geburtsdatum' => $dobStr,
+                                    'geschlecht' => $gender
+                                ], ['id' => $existingPartId]);
+                            } else {
+                                // Neu anlegen
+                                $conn->insert('sportabzeichen_participants', [
+                                    'user_id' => $userId,
+                                    'geburtsdatum' => $dobStr,
+                                    'geschlecht' => $gender,
+                                    'username' => $account // <--- DAS HIER EINFÜGEN
+                                ]);
+                            }
+
+                            // B) In Prüfung einfügen
+                            $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
+                            
+                            $this->addFlash('success', "Teilnehmer hinzugefügt.");
+                        } catch (\Throwable $e) {
+                            $this->addFlash('error', 'Fehler: ' . $e->getMessage());
+                        }
+                    }
+                }
+                // Redirect um Formular-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
             }
         }
 
         // --- GET DATEN LADEN ---
 
-        // A) Zugeordnete Gruppen
+        // A) Zugeordnete Gruppen laden
         $assignedGroups = $conn->fetchAllAssociative("
             SELECT seg.act, g.name 
             FROM sportabzeichen_exam_groups seg
@@ -195,7 +248,7 @@ final class ExamController extends AbstractPageController
         
         $assignedActs = array_column($assignedGroups, 'act');
 
-        // B) Verfügbare Gruppen
+        // B) Alle Gruppen für Dropdown laden (die noch nicht zugeordnet sind)
         $allGroupsObj = $em->getRepository(Group::class)->findBy([], ['name' => 'ASC']);
         $availableGroups = [];
         foreach ($allGroupsObj as $g) {
@@ -205,10 +258,11 @@ final class ExamController extends AbstractPageController
         }
 
         // C) Liste der fehlenden Schüler laden
-        // REPARIERT: Case-Insensitive Suche + Standard IServ Spalten
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
+        // KORREKTUR: "user" muss in Anführungszeichen stehen (maskiert als \"user\"), 
+        // da es ein reserviertes SQL-Wort ist.
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
@@ -234,23 +288,22 @@ final class ExamController extends AbstractPageController
         $params = ['examId' => $id];
 
         if (!empty($searchTerm)) {
-            // VERBESSERUNG: Suche auch im Account-Namen (für dulli) und Case-Insensitive
-            $sql .= " AND (LOWER(u.lastname) LIKE :search OR LOWER(u.firstname) LIKE :search OR LOWER(u.act) LIKE :search) ";
-            $params['search'] = '%' . mb_strtolower($searchTerm) . '%';
+            $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search) ";
+            $params['search'] = '%' . $searchTerm . '%';
         }
 
-        // VERBESSERUNG: Fallback Sortierung nach 'u.act'
-        $sql .= " ORDER BY is_missing_dob DESC, u.lastname ASC, u.firstname ASC, u.act ASC LIMIT 300";
+        // KORREKTUR: Wir sortieren jetzt nach der oben definierten Hilfsspalte 'is_missing_dob'
+        $sql .= " ORDER BY is_missing_dob DESC, u.lastname ASC, u.firstname ASC LIMIT 300";
 
         $rows = $conn->fetchAllAssociative($sql, $params);
 
         foreach ($rows as $row) {
             $missingStudents[] = [
                 'account'   => $row['act'],
-                'name'      => trim($row['firstname'] . ' ' . $row['lastname']) ?: $row['act'], // Name oder Account als Fallback
+                'name'      => $row['firstname'] . ' ' . $row['lastname'],
                 'dob'       => $row['geburtsdatum'],
                 'gender'    => $row['sp_gender'] ?? 'MALE',
-                'group'     => $row['group_name']
+                'group'     => $row['group_name'] // Damit man sieht, warum der hier auftaucht
             ];
         }
 
@@ -276,9 +329,19 @@ final class ExamController extends AbstractPageController
 
         $conn->beginTransaction();
         try {
-            $conn->executeStatement("DELETE FROM sportabzeichen_exam_results WHERE ep_id IN (SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?)", [$id]);
+            // 1. Ergebnisse löschen
+            $conn->executeStatement("
+                DELETE FROM sportabzeichen_exam_results 
+                WHERE ep_id IN (SELECT id FROM sportabzeichen_exam_participants WHERE exam_id = ?)
+            ", [$id]);
+
+            // 2. Teilnehmer-Verknüpfungen löschen
             $conn->executeStatement("DELETE FROM sportabzeichen_exam_participants WHERE exam_id = ?", [$id]);
+            
+            // 3. Gruppen-Verknüpfungen löschen (Neu, der Sauberkeit halber)
             $conn->executeStatement("DELETE FROM sportabzeichen_exam_groups WHERE exam_id = ?", [$id]);
+
+            // 4. Prüfung selbst löschen
             $conn->executeStatement("DELETE FROM sportabzeichen_exams WHERE id = ?", [$id]);
 
             $conn->commit();
@@ -292,46 +355,21 @@ final class ExamController extends AbstractPageController
         return $this->redirectToRoute('sportabzeichen_exams_dashboard');
     }
 
-    // --- Helper für addParticipant & edit ---
-    private function handleAddSingleParticipant(Request $request, Connection $conn, int $examId, int $examYear): void
+    private function importParticipantsFromGroup(
+        EntityManagerInterface $em, 
+        Connection $conn, 
+        Exam $exam, 
+        string $groupAccount, 
+        array &$debugLog = []
+    ): void
     {
-        $account = trim($request->request->get('account', ''));
-        $gender  = $request->request->get('gender');
-        $dobStr  = $request->request->get('dob');
-
-        if ($account && $gender && $dobStr) {
-            $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
-            if ($userId) {
-                try {
-                    // Update/Create Participant Pool Entry
-                    $conn->executeStatement("
-                        INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht, username)
-                        VALUES (?, ?, ?, ?)
-                        ON CONFLICT (user_id) DO UPDATE SET 
-                            geburtsdatum = EXCLUDED.geburtsdatum, 
-                            geschlecht = EXCLUDED.geschlecht,
-                            username = EXCLUDED.username
-                    ", [$userId, $dobStr, $gender, $account]);
-
-                    // Add to Exam
-                    $this->processParticipantByUserId($conn, $examId, $examYear, (int)$userId);
-                    
-                    $this->addFlash('success', "Teilnehmer hinzugefügt.");
-                } catch (\Throwable $e) {
-                    $this->addFlash('error', 'Fehler: ' . $e->getMessage());
-                }
-            }
-        }
-    }
-
-    private function importParticipantsFromGroup(EntityManagerInterface $em, Connection $conn, Exam $exam, string $groupAccount, array &$debugLog = []): void
-    {
+        // 1. Gruppe mit Prüfung verknüpfen
         $conn->executeStatement("
             INSERT INTO sportabzeichen_exam_groups (exam_id, act) VALUES (?, ?)
             ON CONFLICT (exam_id, act) DO NOTHING
         ", [$exam->getId(), $groupAccount]);
 
-        // REPARIERT: m.actgrp statt m.group
+        // 2. User direkt via SQL holen
         $sql = "
             SELECT u.id, u.act, u.firstname, u.lastname
             FROM users u
@@ -346,22 +384,51 @@ final class ExamController extends AbstractPageController
             return;
         }
 
+        // 3. User iterieren
         foreach ($users as $row) {
             $realUserId = $row['id'];
             $accountName = $row['act'];
             $displayName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: $accountName;
 
-            // Pool Entry
-            $conn->executeStatement("
-                INSERT INTO sportabzeichen_participants (user_id, username) VALUES (?, ?)
-                ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username
-            ", [$realUserId, $accountName]);
+            // --- SCHRITT A: Pool-Eintrag prüfen ---
+            $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
 
-            // Add to Exam
+            $participantId = null;
+            $dobString = null;
+
+            if ($poolData) {
+                $participantId = $poolData['id'];
+                $dobString = $poolData['geburtsdatum'];
+                // Update Username zur Sicherheit
+                $conn->executeStatement("UPDATE sportabzeichen_participants SET username = ? WHERE id = ?", [$accountName, $participantId]);
+            } else {
+                // NEU anlegen
+                $conn->executeStatement("
+                    INSERT INTO sportabzeichen_participants (user_id, username) VALUES (?, ?)
+                ", [$realUserId, $accountName]);
+                $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$realUserId]);
+            }
+
+            if (!$participantId) continue;
+
+            // --- SCHRITT B: In Prüfung eintragen ---
+            $age = 0;
+            if ($dobString) {
+                $birthYear = (int)substr((string)$dobString, 0, 4);
+                $age = $exam->getYear() - $birthYear;
+            }
+
             try {
-                // Wir nutzen die Hilfsfunktion, damit das Alter korrekt berechnet wird
-                $this->processParticipantByUserId($conn, $exam->getId(), $exam->getYear(), $realUserId);
-                $debugLog['added'][] = $displayName;
+                // KORREKTUR: 'created_at' und 'NOW()' entfernt!
+                $inserted = $conn->executeStatement("
+                    INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (exam_id, participant_id) DO NOTHING
+                ", [$exam->getId(), $participantId, $age]);
+
+                if ($inserted > 0) {
+                    $debugLog['added'][] = $displayName;
+                }
             } catch (\Exception $e) {
                 $debugLog['errors'][] = "Fehler bei $displayName: " . $e->getMessage();
             }
@@ -370,34 +437,61 @@ final class ExamController extends AbstractPageController
 
     private function processParticipantByUserId(Connection $conn, int $examId, int $examYear, int $userId): void
     {
-        $data = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
+        // 1. Prüfen, ob User schon im Pool ist, und Geburtsdatum holen
+        $participantId = null;
+        $dob = null;
+
+        $poolData = $conn->fetchAssociative("SELECT id, geburtsdatum FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
         
-        if (!$data) {
-             // Sollte durch vorigen Insert eigentlich da sein, aber zur Sicherheit:
-             $conn->executeStatement("INSERT INTO sportabzeichen_participants (user_id) VALUES (?)", [$userId]);
-             $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
-             $dob = null;
+        if ($poolData) {
+            $participantId = $poolData['id'];
+            if (!empty($poolData['geburtsdatum'])) {
+                $dob = $poolData['geburtsdatum'];
+            }
         } else {
-            $participantId = $data['id'];
-            $dob = $data['geburtsdatum'];
+            // User ist noch gar nicht im Pool -> Anlegen! (Ohne Datum)
+            $conn->executeStatement("INSERT INTO sportabzeichen_participants (user_id) VALUES (?)", [$userId]);
+            $participantId = $conn->fetchOne("SELECT id FROM sportabzeichen_participants WHERE user_id = ?", [$userId]);
         }
 
-        // Alter berechnen
+        // 2. Fallback: System-Daten prüfen (Nur wenn wir noch kein Datum haben)
+        if (!$dob) {
+            try {
+                // Da deine Tabelle 'users' keine birthday-Spalte hat, wird das hier in den catch laufen
+                // oder null zurückgeben. Wir lassen es drin für die Zukunft/Kompatibilität.
+                $sysData = $conn->fetchAssociative("SELECT birthday FROM users WHERE id = ?", [$userId]);
+                
+                if ($sysData && !empty($sysData['birthday'])) {
+                    $dob = $sysData['birthday'];
+                    // Gefundenes Datum sofort im Pool speichern
+                    $conn->executeStatement("UPDATE sportabzeichen_participants SET geburtsdatum = ? WHERE id = ?", [$dob, $participantId]);
+                }
+            } catch (\Throwable $e) {
+                // Spalte existiert nicht -> Ignorieren.
+            }
+        }
+
+        // WICHTIG: Hier NICHT abbrechen, auch wenn $dob leer ist!
+
+        // 3. Alter berechnen (0 falls unbekannt)
         $age = 0;
         if ($dob) {
             $birthYear = (int)substr((string)$dob, 0, 4);
             $age = $examYear - $birthYear;
         }
 
-        // In Prüfung eintragen
-        $conn->executeStatement("
-            INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
-            VALUES (?, ?, ?, NOW())
-            ON CONFLICT (exam_id, participant_id) DO NOTHING
-        ", [$examId, $participantId, $age]);
+        // 4. In Prüfung eintragen
+        // Da wir oben sichergestellt haben, dass $participantId existiert, können wir jetzt inserten.
+        if ($participantId) {
+            $conn->executeStatement("
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
+                VALUES (?, ?, ?, NOW())
+                ON CONFLICT (exam_id, participant_id) DO NOTHING
+            ", [$examId, $participantId, $age]);
+        }
     }
 
-    // --- Add Participant (Manuelles Fenster) ---
+    // --- Add Participant ---
     #[Route('/{id}/add_participant', name: 'add_participant', methods: ['GET', 'POST'])]
     public function addParticipant(int $id, Request $request, Connection $conn): Response
     {
@@ -406,8 +500,40 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
+        // --- POST: User manuell hinzufügen ---
         if ($request->isMethod('POST')) {
-            $this->handleAddSingleParticipant($request, $conn, $id, (int)$exam['exam_year']);
+            $account = trim($request->request->get('account', ''));
+            $gender  = $request->request->get('gender');
+            $dobStr  = $request->request->get('dob');
+
+            if ($account && $gender && $dobStr) {
+                $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
+                
+                if ($userId) {
+                    try {
+                        $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
+                        // Falls wir ein manuelles Update des Datums brauchen, müsste man das hier erweitern, 
+                        // aber processParticipantByUserId verlässt sich auf DB-Daten.
+                        // Wenn der User im Formular ein Datum angibt, wollen wir das ggf. in den Pool schreiben:
+                        
+                        $conn->executeStatement("
+                            INSERT INTO sportabzeichen_participants (user_id, geburtsdatum, geschlecht, username)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT (user_id) DO UPDATE SET 
+                                geburtsdatum = EXCLUDED.geburtsdatum, 
+                                geschlecht = EXCLUDED.geschlecht,
+                                username = EXCLUDED.username
+                        ", [$userId, $dobStr, $gender, $account]); // <--- $account am Ende hinzufügen!
+
+                        // Nochmal prozessieren, damit er ins Exam kommt
+                        $this->processParticipantByUserId($conn, (int)$id, (int)$exam['exam_year'], (int)$userId);
+                        
+                        $this->addFlash('success', "Teilnehmer hinzugefügt.");
+                    } catch (\Throwable $e) {
+                        $this->addFlash('error', 'Fehler: ' . $e->getMessage());
+                    }
+                }
+            }
             return $this->redirectToRoute('sportabzeichen_exams_add_participant', [
                 'id' => $id, 
                 'q' => $request->query->get('q')
@@ -415,17 +541,18 @@ final class ExamController extends AbstractPageController
         }
 
         // --- GET: Liste laden ---
+        
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
-        // REPARIERT: m.actuser und m.actgrp verwenden! (Vorher war es user/group)
+        // SQL: Nur User laden, die in einer zugeordneten Gruppe sind (Klasse auxinfo komplett entfernt)
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
                 sp.geburtsdatum, sp.geschlecht as sp_gender
             FROM users u
-            INNER JOIN members m ON u.act = m.actuser
-            INNER JOIN sportabzeichen_exam_groups seg ON m.actgrp = seg.act 
+            INNER JOIN members m ON u.act = m.user
+            INNER JOIN sportabzeichen_exam_groups seg ON m.group = seg.act 
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             
             WHERE u.deleted IS NULL
@@ -441,20 +568,19 @@ final class ExamController extends AbstractPageController
         $params = ['examId' => $id];
 
         if (!empty($searchTerm)) {
-            // REPARIERT: Case-Insensitive + Suche in Account-Namen
-            $sql .= " AND (LOWER(u.lastname) LIKE :search OR LOWER(u.firstname) LIKE :search OR LOWER(u.act) LIKE :search) ";
-            $params['search'] = '%' . mb_strtolower($searchTerm) . '%';
+            $sql .= " AND (u.lastname ILIKE :search OR u.firstname ILIKE :search) ";
+            $params['search'] = '%' . $searchTerm . '%';
         }
 
-        // REPARIERT: Fallback Sortierung nach Account
-        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC, u.act ASC LIMIT 500";
+        // Sortierung: Ohne Geburtsdatum zuerst, dann Nachname
+        $sql .= " ORDER BY (sp.geburtsdatum IS NULL) DESC, u.lastname ASC, u.firstname ASC LIMIT 500";
 
         $rows = $conn->fetchAllAssociative($sql, $params);
 
         foreach ($rows as $row) {
             $missingStudents[] = [
                 'account'   => $row['act'],
-                'name'      => trim($row['firstname'] . ' ' . $row['lastname']) ?: $row['act'],
+                'name'      => $row['firstname'] . ' ' . $row['lastname'],
                 'dob'       => $row['geburtsdatum'],
                 'gender'    => $row['sp_gender'] ?? 'MALE'
             ];
