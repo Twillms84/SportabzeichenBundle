@@ -139,7 +139,7 @@ final class ExamController extends AbstractPageController
         $examEntity = $em->getRepository(Exam::class)->find($id);
         if (!$examEntity) throw $this->createNotFoundException('Prüfung nicht gefunden');
         
-        // Array-Daten für DBAL-Operationen (Legacy-Support für deinen Code)
+        // Array-Daten für DBAL-Operationen
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
 
         // --- POST HANDLING ---
@@ -187,7 +187,7 @@ final class ExamController extends AbstractPageController
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id]);
             }
 
-            // 4. EINZELNEN TEILNEHMER HINZUFÜGEN (aus der "Fehlende"-Liste)
+            // 4. EINZELNEN TEILNEHMER HINZUFÜGEN
             if ($request->request->has('account')) {
                 $account = trim($request->request->get('account', ''));
                 $gender  = $request->request->get('gender');
@@ -197,27 +197,23 @@ final class ExamController extends AbstractPageController
                     $userId = $conn->fetchOne("SELECT id FROM users WHERE act = :act AND deleted IS NULL", ['act' => $account]);
                     if ($userId) {
                         try {
-                            // A) Pool-Daten updaten/anlegen (OHNE ON CONFLICT, da kein Unique-Index existiert)
-                            
-                            // 1. Prüfen, ob Eintrag schon existiert
+                            // A) Pool-Daten updaten/anlegen
                             $existingPartId = $conn->fetchOne(
                                 "SELECT id FROM sportabzeichen_participants WHERE user_id = ?", 
                                 [$userId]
                             );
 
                             if ($existingPartId) {
-                                // Update existierender Eintrag
                                 $conn->update('sportabzeichen_participants', [
                                     'geburtsdatum' => $dobStr,
                                     'geschlecht' => $gender
                                 ], ['id' => $existingPartId]);
                             } else {
-                                // Neu anlegen
                                 $conn->insert('sportabzeichen_participants', [
                                     'user_id' => $userId,
                                     'geburtsdatum' => $dobStr,
                                     'geschlecht' => $gender,
-                                    'username' => $account // <--- DAS HIER EINFÜGEN
+                                    'username' => $account
                                 ]);
                             }
 
@@ -230,14 +226,13 @@ final class ExamController extends AbstractPageController
                         }
                     }
                 }
-                // Redirect um Formular-Resubmission zu verhindern
                 return $this->redirectToRoute('sportabzeichen_exams_edit', ['id' => $id, 'q' => $request->query->get('q')]);
             }
         }
 
         // --- GET DATEN LADEN ---
 
-        // A) Zugeordnete Gruppen laden
+        // A) Zugeordnete Gruppen
         $assignedGroups = $conn->fetchAllAssociative("
             SELECT seg.act, g.name 
             FROM sportabzeichen_exam_groups seg
@@ -248,7 +243,7 @@ final class ExamController extends AbstractPageController
         
         $assignedActs = array_column($assignedGroups, 'act');
 
-        // B) Alle Gruppen für Dropdown laden (die noch nicht zugeordnet sind)
+        // B) Verfügbare Gruppen
         $allGroupsObj = $em->getRepository(Group::class)->findBy([], ['name' => 'ASC']);
         $availableGroups = [];
         foreach ($allGroupsObj as $g) {
@@ -261,8 +256,8 @@ final class ExamController extends AbstractPageController
         $searchTerm = trim($request->query->get('q', ''));
         $missingStudents = [];
 
-        // KORREKTUR: "user" muss in Anführungszeichen stehen (maskiert als \"user\"), 
-        // da es ein reserviertes SQL-Wort ist.
+        // KORRIGIERTE SQL ABFRAGE
+        // WICHTIG: "user" und "group" müssen in Anführungszeichen stehen!
         $sql = "
             SELECT DISTINCT
                 u.id, u.act, u.firstname, u.lastname,
@@ -270,8 +265,8 @@ final class ExamController extends AbstractPageController
                 g.name as group_name,
                 (sp.geburtsdatum IS NULL) as is_missing_dob
             FROM users u
-            INNER JOIN members m ON u.act = m.actuser
-            INNER JOIN sportabzeichen_exam_groups seg ON m.actgrp = seg.act 
+            INNER JOIN members m ON u.act = m.\"user\"
+            INNER JOIN sportabzeichen_exam_groups seg ON m.\"group\" = seg.act 
             LEFT JOIN groups g ON seg.act = g.act
             LEFT JOIN sportabzeichen_participants sp ON u.id = sp.user_id
             
@@ -292,7 +287,6 @@ final class ExamController extends AbstractPageController
             $params['search'] = '%' . $searchTerm . '%';
         }
 
-        // KORREKTUR: Wir sortieren jetzt nach der oben definierten Hilfsspalte 'is_missing_dob'
         $sql .= " ORDER BY is_missing_dob DESC, u.lastname ASC, u.firstname ASC LIMIT 300";
 
         $rows = $conn->fetchAllAssociative($sql, $params);
@@ -303,7 +297,7 @@ final class ExamController extends AbstractPageController
                 'name'      => $row['firstname'] . ' ' . $row['lastname'],
                 'dob'       => $row['geburtsdatum'],
                 'gender'    => $row['sp_gender'] ?? 'MALE',
-                'group'     => $row['group_name'] // Damit man sieht, warum der hier auftaucht
+                'group'     => $row['group_name']
             ];
         }
 
