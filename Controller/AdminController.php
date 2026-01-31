@@ -84,25 +84,24 @@ final class AdminController extends AbstractPageController
         $userRepo = $this->em->getRepository(User::class);
         $searchTerm = trim((string)$request->query->get('q'));
         
-        // --- KORREKTUR START ---
-        
-        // Statt eines fehleranfälligen Joins nutzen wir eine Subquery.
-        // Schritt 1: Hole alle User-IDs, die BEREITS im System sind.
-        // IDENTITY(p.user) holt die rohe ID aus der Beziehung, ohne das Objekt zu laden.
-        $subQuery = $this->em->createQueryBuilder()
+        // --- ÄNDERUNG: Definition von "Erledigt" ---
+        // Wir schließen nur User aus, die einen Eintrag HABEN UND bei denen
+        // das Geburtsdatum ausgefüllt ist.
+        // Wer in der Tabelle steht, aber NULL beim Datum hat, bleibt in der Liste sichtbar.
+        $completedSubQuery = $this->em->createQueryBuilder()
             ->select('IDENTITY(p.user)')
             ->from(Participant::class, 'p')
+            ->where('p.geburtsdatum IS NOT NULL') 
+            ->andWhere("p.geschlecht IS NOT NULL AND p.geschlecht <> ''")
             ->getDQL();
 
-        // Schritt 2: Hole alle User, deren ID *NICHT* in dieser Liste ist.
         $qb = $userRepo->createQueryBuilder('u')
             ->where('u.deleted IS NULL')
-            ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $subQuery))
+            // Zeige mir alle User, deren ID NICHT in der "Fertig"-Liste ist
+            ->andWhere($userRepo->createQueryBuilder('u')->expr()->notIn('u.id', $completedSubQuery))
             ->orderBy('u.lastname', 'ASC')
             ->addOrderBy('u.firstname', 'ASC')
             ->setMaxResults(51);
-
-        // --- KORREKTUR ENDE ---
 
         if ($searchTerm !== '') {
             $qb->andWhere('u.username LIKE :s OR u.firstname LIKE :s OR u.lastname LIKE :s OR u.importId LIKE :s')
