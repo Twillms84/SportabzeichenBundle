@@ -594,4 +594,117 @@ final class ExamController extends AbstractPageController
             'search_term' => $searchTerm
         ]);
     }
+
+    #[Route('/{id}/stats', name: 'stats', methods: ['GET'])]
+    public function stats(int $id, Connection $conn): Response
+    {
+        $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        // 1. Prüfungsdaten laden
+        $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
+        if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
+
+        // 2. Punkte pro Teilnehmer berechnen (für das Kreisdiagramm)
+        // Wir summieren die Punkte aus der Results-Tabelle pro Teilnehmer
+        $sqlPoints = "
+            SELECT 
+                ep.id,
+                u.firstname, u.lastname,
+                SUM(COALESCE(r.points, 0)) as total_points
+            FROM sportabzeichen_exam_participants ep
+            JOIN sportabzeichen_participants p ON ep.participant_id = p.id
+            JOIN users u ON p.user_id = u.id
+            LEFT JOIN sportabzeichen_exam_results r ON ep.id = r.ep_id
+            WHERE ep.exam_id = :id
+            GROUP BY ep.id, u.lastname, u.firstname
+        ";
+        
+        $participants = $conn->fetchAllAssociative($sqlPoints);
+
+        // Statistik berechnen
+        $stats = [
+            'Gold' => 0,
+            'Silber' => 0,
+            'Bronze' => 0,
+            'Ohne' => 0
+        ];
+
+        foreach ($participants as $p) {
+            $pts = (int)$p['total_points'];
+            if ($pts >= 11) {
+                $stats['Gold']++;
+            } elseif ($pts >= 8) {
+                $stats['Silber']++;
+            } elseif ($pts >= 4) {
+                $stats['Bronze']++;
+            } else {
+                $stats['Ohne']++;
+            }
+        }
+
+        // 3. Top 10 pro Disziplin laden
+        // Wir holen alle Ergebnisse, die > 0 Punkte haben
+        $sqlResults = "
+            SELECT 
+                r.discipline_name,
+                r.value,
+                r.points,
+                u.firstname, 
+                u.lastname,
+                g.name as group_name
+            FROM sportabzeichen_exam_results r
+            JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
+            JOIN sportabzeichen_participants p ON ep.participant_id = p.id
+            JOIN users u ON p.user_id = u.id
+            -- Versuch, die Klasse zu holen (optional, falls via exam_groups verknüpft)
+            LEFT JOIN members m ON u.act = m.actuser
+            LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
+            
+            WHERE ep.exam_id = :id AND r.points > 0
+            ORDER BY r.discipline_name ASC, r.points DESC, r.value DESC
+        ";
+
+        $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
+
+        // Gruppieren und Sortieren (PHP-seitig für Flexibilität)
+        $groupedResults = [];
+        foreach ($allResults as $row) {
+            $disc = $row['discipline_name'];
+            if (!isset($groupedResults[$disc])) {
+                $groupedResults[$disc] = [];
+            }
+            // Duplikate vermeiden (falls Schüler in mehreren Gruppen ist, durch JOIN oben)
+            // Wir nehmen einfach an, das Query ist sauber genug oder wir filtern hier grob.
+            $groupedResults[$disc][] = $row;
+        }
+
+        // Sortierung verfeinern & auf Top 10 beschneiden
+        $topList = [];
+        foreach ($groupedResults as $disc => $rows) {
+            // Sortieren: Erst Punkte (DESC), dann Wert. 
+            // ACHTUNG: Bei Laufdisziplinen ist kleinerer Wert besser, bei Sprung größerer.
+            // Da 'points' aber schon die Leistung normiert (3 ist immer besser als 1),
+            // sortieren wir primär nach Points. Bei Gleichstand entscheidet der Wert.
+            // Da wir nicht wissen, ob "10,5" Sekunden oder Meter sind, nehmen wir hier
+            // vereinfacht an: Mehr Punkte = Besser.
+            
+            usort($rows, function ($a, $b) {
+                if ($a['points'] === $b['points']) {
+                    // Bei Punktgleichheit: String-Vergleich des Wertes (nicht perfekt, aber ok für Display)
+                    return strcmp($b['value'], $a['value']); 
+                }
+                return $b['points'] <=> $a['points'];
+            });
+
+            // Die besten 10 nehmen
+            $topList[$disc] = array_slice($rows, 0, 10);
+        }
+
+        return $this->render('@PulsRSportabzeichen/exams/stats.html.twig', [
+            'exam' => $exam,
+            'stats' => $stats,
+            'topList' => $topList,
+            'totalParticipants' => count($participants)
+        ]);
+    }
 }
