@@ -152,7 +152,7 @@ class MyResultsController extends AbstractController
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex 
               AND :age BETWEEN r.age_min AND r.age_max
-              AND d.einheit != 'UNIT_NONE'  -- <--- HIER FILTERN WIR UNIT_NONE RAUS
+              AND d.einheit != 'NONE'  -- <--- HIER FILTERN WIR UNIT_NONE RAUS
             ORDER BY d.kategorie ASC, r.auswahlnummer ASC, d.name ASC
         ";
         
