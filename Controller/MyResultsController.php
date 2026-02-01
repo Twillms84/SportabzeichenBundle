@@ -101,7 +101,7 @@ class MyResultsController extends AbstractController
                     }
                 }
                 $this->addFlash('success', 'Wert gespeichert.');
-                return $this->redirectToRoute('sportabzeichen_my_results');
+                return $this->redirectToRoute('pulsr_sportabzeichen_my_results');
             }
         }
 
