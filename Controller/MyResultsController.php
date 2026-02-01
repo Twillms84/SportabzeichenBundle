@@ -5,21 +5,16 @@ declare(strict_types=1);
 namespace PulsR\SportabzeichenBundle\Controller;
 
 use Doctrine\DBAL\Connection;
-use Doctrine\ORM\EntityManagerInterface;
-use PulsR\SportabzeichenBundle\Entity\Discipline;
-use PulsR\SportabzeichenBundle\Entity\TrainingEntry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
-use PulsR\SportabzeichenBundle\Entity\Participant; // Falls benötigt, sonst optional
 
 #[Route('/sportabzeichen/my_results', name: 'sportabzeichen_my_results')]
 class MyResultsController extends AbstractController
 {
     public function __construct(
-        private readonly Connection $conn,
-        private readonly EntityManagerInterface $em
+        private readonly Connection $conn
     ) {
     }
 
@@ -32,89 +27,93 @@ class MyResultsController extends AbstractController
 
         $currentYear = (int)date('Y');
         
-        // --- 1. ECHTE USER-ID ERMITTELN ---
-        // $user->getId() gibt bei IServ oft den Namen zurück ("timo.willms").
-        // Wir brauchen aber die Zahl (z.B. 1054). Wir holen sie uns via SQL.
-        
+        // --- 1. ID SICHER ERMITTELN (INT vs STRING Problem lösen) ---
         $username = method_exists($user, 'getUserIdentifier') ? $user->getUserIdentifier() : $user->getUsername();
         
-        // Wir suchen die ID in der users Tabelle anhand des Namens (Spalte 'act')
+        // Echte ID aus der DB holen (verhindert den Fehler mit "timo.willms")
         $userId = (int)$this->conn->fetchOne("SELECT id FROM users WHERE act = ?", [$username]);
 
         if (!$userId) {
-            throw $this->createNotFoundException('Benutzer-ID in Datenbank nicht gefunden.');
+            // Fallback, falls User in Tabelle nicht gefunden (sollte bei IServ nicht passieren)
+            throw $this->createNotFoundException('User ID Error');
         }
 
-        // --- 2. TEILNEHMER LADEN / ERSTELLEN ---
-        
+        // --- 2. TEILNEHMER PRÜFEN / AUTO-CREATE ---
         $participant = $this->conn->fetchAssociative("
             SELECT p.id, p.geburtsdatum, p.geschlecht 
             FROM sportabzeichen_participants p
             WHERE p.user_id = :uid
         ", ['uid' => $userId]);
 
-        // AUTO-ONBOARDING: Falls noch kein Eintrag existiert
         if (!$participant) {
             $this->conn->executeStatement("
                 INSERT INTO sportabzeichen_participants (user_id, username, geburtsdatum, geschlecht)
                 VALUES (:uid, :act, :dob, :sex)
             ", [
-                'uid' => $userId,       // Jetzt ist das garantiert die korrekte Zahl
+                'uid' => $userId,
                 'act' => $username,
-                'dob' => '2008-01-01',  // Dummy-Datum
-                'sex' => 'MALE'         // Dummy-Geschlecht
+                'dob' => '2008-01-01',
+                'sex' => 'MALE'
             ]);
-
-            // Sofort neu laden
+            
+            // Neu laden
             $participant = $this->conn->fetchAssociative("
                 SELECT p.id, p.geburtsdatum, p.geschlecht 
                 FROM sportabzeichen_participants p
                 WHERE p.user_id = :uid
             ", ['uid' => $userId]);
-            
-            $this->addFlash('info', 'Dein Profil wurde automatisch angelegt (Standard: Männlich, *2008).');
+
+            $this->addFlash('info', 'Dein Profil wurde initialisiert.');
         }
 
-        if (!$participant) {
-            return $this->render('@PulsRSportabzeichen/my_results/not_found.html.twig');
-        }
-
-        // --- 3. SPEICHERN (POST) ---
+        // --- 3. SPEICHERN (Fix: Per SQL statt Doctrine Entity) ---
         if ($request->isMethod('POST') && $request->request->has('save_training')) {
             $discId = (int)$request->request->get('discipline_id');
             $value  = trim((string)$request->request->get('training_value'));
 
             if ($discId > 0) {
-                $repo = $this->em->getRepository(TrainingEntry::class);
-                
-                // Wir suchen hier wieder über die Doctrine User Entity
-                // Da $user->getId() strings liefert, könnte Doctrine verwirrt sein.
-                // Sicherer: Wir suchen via findOneBy und übergeben das User-Objekt.
-                // Doctrine mappt das intern meist korrekt auf den Primary Key.
-                $entry = $repo->findOneBy([
-                    'user' => $user, 
-                    'discipline' => $this->em->getReference(Discipline::class, $discId), 
-                    'year' => $currentYear
+                // Prüfen, ob Eintrag schon existiert
+                $existing = $this->conn->fetchOne("
+                    SELECT id FROM sportabzeichen_training 
+                    WHERE user_id = :uid AND discipline_id = :did AND year = :yr
+                ", [
+                    'uid' => $userId,
+                    'did' => $discId,
+                    'yr'  => $currentYear
                 ]);
 
-                if (!$entry) {
-                    $entry = new TrainingEntry();
-                    $entry->setUser($user);
-                    $entry->setDiscipline($this->em->getReference(Discipline::class, $discId));
-                    $entry->setYear($currentYear);
+                if ($existing) {
+                    // Update
+                    $this->conn->executeStatement("
+                        UPDATE sportabzeichen_training SET value = :val 
+                        WHERE user_id = :uid AND discipline_id = :did AND year = :yr
+                    ", [
+                        'val' => $value,
+                        'uid' => $userId,
+                        'did' => $discId,
+                        'yr'  => $currentYear
+                    ]);
+                } else {
+                    // Insert (Nur wenn Wert nicht leer ist, um DB sauber zu halten)
+                    if ($value !== '') {
+                        $this->conn->executeStatement("
+                            INSERT INTO sportabzeichen_training (user_id, discipline_id, year, value)
+                            VALUES (:uid, :did, :yr, :val)
+                        ", [
+                            'uid' => $userId,
+                            'did' => $discId,
+                            'yr'  => $currentYear,
+                            'val' => $value
+                        ]);
+                    }
                 }
 
-                $entry->setValue($value);
-                $this->em->persist($entry);
-                $this->em->flush();
-
-                $this->addFlash('success', 'Gespeichert.');
+                $this->addFlash('success', 'Wert gespeichert.');
                 return $this->redirectToRoute('sportabzeichen_my_results');
             }
         }
 
-        // --- 4. DATEN LADEN FÜR ANZEIGE ---
-        
+        // --- 4. DATEN LADEN ---
         $birthDate = new \DateTime($participant['geburtsdatum']);
         $age = $currentYear - (int)$birthDate->format('Y');
 
@@ -136,8 +135,7 @@ class MyResultsController extends AbstractController
             $officialResults[$r['discipline_id']] = $r;
         }
 
-        // Trainingsdaten (Eigene Einträge)
-        // Hier nutzen wir jetzt die sicher ermittelte $userId (Integer)
+        // Eigene Trainingsdaten
         $trainingData = $this->conn->fetchAllAssociative("
             SELECT discipline_id, value 
             FROM sportabzeichen_training 
@@ -152,10 +150,10 @@ class MyResultsController extends AbstractController
             $myTraining[$t['discipline_id']] = $t['value'];
         }
 
-        // Anforderungen
+        // Anforderungen laden
         $sqlReq = "
-            SELECT 
-                d.id as discipline_id, d.name, d.kategorie, d.einheit, d.berechnungsart,
+            SELECT DISTINCT
+                d.id as discipline_id, d.name, d.kategorie, d.einheit,
                 r.bronze, r.silber, r.gold
             FROM sportabzeichen_requirements r
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
@@ -168,10 +166,20 @@ class MyResultsController extends AbstractController
             'age' => $age
         ]);
 
+        // --- 5. ZUSAMMENBAU & DUPLIKATE FILTERN ---
         $categories = ['Ausdauer' => [], 'Kraft' => [], 'Schnelligkeit' => [], 'Koordination' => []];
+        $addedDisciplines = []; // Hilfs-Array gegen Duplikate
 
         foreach ($rows as $row) {
             $dId = $row['discipline_id'];
+
+            // FIX: Wenn wir diese Disziplin-ID schon hatten -> überspringen
+            if (isset($addedDisciplines[$dId])) {
+                continue;
+            }
+            $addedDisciplines[$dId] = true;
+            
+            // Daten anreichern
             $row['official_result'] = $officialResults[$dId] ?? null;
             $row['training_value'] = $myTraining[$dId] ?? '';
 
