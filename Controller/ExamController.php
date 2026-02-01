@@ -485,9 +485,10 @@ final class ExamController extends AbstractPageController
         // Da wir oben sichergestellt haben, dass $participantId existiert, können wir jetzt inserten.
         if ($participantId) {
             $conn->executeStatement("
-                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year, created_at)
-                VALUES (?, ?, ?, NOW())
-                ON CONFLICT (exam_id, participant_id) DO NOTHING
+                INSERT INTO sportabzeichen_exam_participants (exam_id, participant_id, age_year)
+                VALUES (?, ?, ?)
+                ON CONFLICT (exam_id, participant_id) 
+                DO UPDATE SET age_year = EXCLUDED.age_year
             ", [$examId, $participantId, $age]);
         }
     }
