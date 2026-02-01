@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use PulsR\SportabzeichenBundle\Entity\Participant; // Falls benötigt, sonst optional
 
 #[Route('/sportabzeichen/my_results', name: 'sportabzeichen_my_results')]
 class MyResultsController extends AbstractController
@@ -30,11 +31,21 @@ class MyResultsController extends AbstractController
         }
 
         $currentYear = (int)date('Y');
-        // Sicherstellen, dass wir eine Integer-ID haben
-        $userId = (int)$user->getId(); 
-        $accountName = method_exists($user, 'getUserIdentifier') ? $user->getUserIdentifier() : $user->getUsername();
+        
+        // --- 1. ECHTE USER-ID ERMITTELN ---
+        // $user->getId() gibt bei IServ oft den Namen zurück ("timo.willms").
+        // Wir brauchen aber die Zahl (z.B. 1054). Wir holen sie uns via SQL.
+        
+        $username = method_exists($user, 'getUserIdentifier') ? $user->getUserIdentifier() : $user->getUsername();
+        
+        // Wir suchen die ID in der users Tabelle anhand des Namens (Spalte 'act')
+        $userId = (int)$this->conn->fetchOne("SELECT id FROM users WHERE act = ?", [$username]);
 
-        // --- TEIL 1: TEILNEHMER LADEN ODER ERSTELLEN ---
+        if (!$userId) {
+            throw $this->createNotFoundException('Benutzer-ID in Datenbank nicht gefunden.');
+        }
+
+        // --- 2. TEILNEHMER LADEN / ERSTELLEN ---
         
         $participant = $this->conn->fetchAssociative("
             SELECT p.id, p.geburtsdatum, p.geschlecht 
@@ -42,19 +53,19 @@ class MyResultsController extends AbstractController
             WHERE p.user_id = :uid
         ", ['uid' => $userId]);
 
-        // AUTO-ONBOARDING: Wenn du noch nicht existierst, legen wir dich an!
+        // AUTO-ONBOARDING: Falls noch kein Eintrag existiert
         if (!$participant) {
             $this->conn->executeStatement("
                 INSERT INTO sportabzeichen_participants (user_id, username, geburtsdatum, geschlecht)
                 VALUES (:uid, :act, :dob, :sex)
             ", [
-                'uid' => $userId,
-                'act' => $accountName,
-                'dob' => '2008-01-01', // Dummy-Datum
-                'sex' => 'MALE'        // Dummy-Geschlecht
+                'uid' => $userId,       // Jetzt ist das garantiert die korrekte Zahl
+                'act' => $username,
+                'dob' => '2008-01-01',  // Dummy-Datum
+                'sex' => 'MALE'         // Dummy-Geschlecht
             ]);
 
-            // Nach dem Insert sofort neu laden
+            // Sofort neu laden
             $participant = $this->conn->fetchAssociative("
                 SELECT p.id, p.geburtsdatum, p.geschlecht 
                 FROM sportabzeichen_participants p
@@ -64,12 +75,11 @@ class MyResultsController extends AbstractController
             $this->addFlash('info', 'Dein Profil wurde automatisch angelegt (Standard: Männlich, *2008).');
         }
 
-        // Falls es immer noch schiefgeht (sollte nicht passieren)
-        if (!$participant || empty($participant['geburtsdatum'])) {
+        if (!$participant) {
             return $this->render('@PulsRSportabzeichen/my_results/not_found.html.twig');
         }
 
-        // --- TEIL 2: SPEICHERN (POST) ---
+        // --- 3. SPEICHERN (POST) ---
         if ($request->isMethod('POST') && $request->request->has('save_training')) {
             $discId = (int)$request->request->get('discipline_id');
             $value  = trim((string)$request->request->get('training_value'));
@@ -77,7 +87,10 @@ class MyResultsController extends AbstractController
             if ($discId > 0) {
                 $repo = $this->em->getRepository(TrainingEntry::class);
                 
-                // Wir suchen den Eintrag explizit mit der User-Entity
+                // Wir suchen hier wieder über die Doctrine User Entity
+                // Da $user->getId() strings liefert, könnte Doctrine verwirrt sein.
+                // Sicherer: Wir suchen via findOneBy und übergeben das User-Objekt.
+                // Doctrine mappt das intern meist korrekt auf den Primary Key.
                 $entry = $repo->findOneBy([
                     'user' => $user, 
                     'discipline' => $this->em->getReference(Discipline::class, $discId), 
@@ -100,7 +113,7 @@ class MyResultsController extends AbstractController
             }
         }
 
-        // --- TEIL 3: DATEN LADEN FÜR ANZEIGE ---
+        // --- 4. DATEN LADEN FÜR ANZEIGE ---
         
         $birthDate = new \DateTime($participant['geburtsdatum']);
         $age = $currentYear - (int)$birthDate->format('Y');
@@ -114,7 +127,7 @@ class MyResultsController extends AbstractController
             WHERE ep.participant_id = :pid AND e.exam_year = :year
         ";
         $rawResults = $this->conn->fetchAllAssociative($sqlResults, [
-            'pid' => (int)$participant['id'], // <--- WICHTIG: (int) erzwingen
+            'pid' => (int)$participant['id'],
             'year' => $currentYear
         ]);
         
@@ -123,14 +136,14 @@ class MyResultsController extends AbstractController
             $officialResults[$r['discipline_id']] = $r;
         }
 
-        // Trainingsdaten
-        // Hier lag wahrscheinlich der Fehler: Wir nutzen hier explizit $userId (Integer)
+        // Trainingsdaten (Eigene Einträge)
+        // Hier nutzen wir jetzt die sicher ermittelte $userId (Integer)
         $trainingData = $this->conn->fetchAllAssociative("
             SELECT discipline_id, value 
             FROM sportabzeichen_training 
             WHERE user_id = :uid AND year = :year
         ", [
-            'uid' => $userId, // <--- WICHTIG: Hier muss die Zahl rein, nicht "timo.willms"
+            'uid' => $userId, 
             'year' => $currentYear
         ]);
         
