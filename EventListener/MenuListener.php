@@ -19,6 +19,21 @@ final class MenuListener implements MainMenuListenerInterface
         $menu = $event->getMenu();
 
         /* ----------------------------------------------------------
+         * SCHÜLER / TEILNEHMER ANSICHT (NEU)
+         * ---------------------------------------------------------- */
+        if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_VIEW_OWN')) {
+            $menu->addChild('sportabzeichen_my_results', [
+                'route' => 'puls_r_sportabzeichen_my_results', // Die Route müssen wir gleich noch erstellen
+                'label' => _('Mein Sportabzeichen'),
+                'extras' => [
+                    'icon' => 'user-graduate', // Passendes Icon für Schüler/Absolvent
+                    'icon_style' => 'fas',
+                    'weight' => 10, // Damit es im Menü oben steht (optional)
+                ],
+            ]);
+        }
+        
+        /* ----------------------------------------------------------
          * Ergebnisse eintragen
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
