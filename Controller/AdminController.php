@@ -202,15 +202,14 @@ final class AdminController extends AbstractPageController
             }
         }
 
-        // Geschlecht setzen (m, w, d)
-        if ($gender && in_array($gender, ['m', 'w', 'd'], true)) {
+        // Geschlecht setzen: Wir erwarten jetzt direkt die DB-Werte MALE oder FEMALE
+        if ($gender && in_array($gender, ['MALE', 'FEMALE'], true)) {
              $participant->setGeschlecht($gender);
         }
 
         $this->em->flush();
         $this->addFlash('success', 'Daten gespeichert.');
 
-        // Zurück zur Liste (ggf. auf die gleiche Seite, falls man Page-Parameter übergibt)
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 

@@ -23,7 +23,6 @@
 
         <div class="panel-body">
             
-            {# Einfaches Suchfeld (Server-Side wäre besser, aber hier lassen wir es erstmal weg oder nutzen Standard-HTML Form) #}
             <form method="get" class="input-group mb-3">
                 <span class="input-group-addon">{{ icon('search') }}</span>
                 <input type="text" name="q" class="form-control" value="{{ searchTerm }}" placeholder="{{ _('Suche (Enter drücken)...') }}">
@@ -63,14 +62,16 @@
                             </td>
                             <td>{{ p.geburtsdatum ? p.geburtsdatum|date('d.m.Y') : '-' }}</td>
                             <td>
-                                {# Anzeige M / W / D #}
-                                {% if p.geschlecht == 'm' %}M
-                                {% elseif p.geschlecht == 'w' %}W
-                                {% elseif p.geschlecht == 'd' %}D
-                                {% else %}{{ p.geschlecht }}{% endif %}
+                                {# HIER: Mapping von DB-Wert (MALE/FEMALE) zur Anzeige (M/W) #}
+                                {% if p.geschlecht == 'MALE' %}
+                                    M
+                                {% elseif p.geschlecht == 'FEMALE' %}
+                                    W
+                                {% else %}
+                                    {{ p.geschlecht }}
+                                {% endif %}
                             </td>
                             <td class="text-end">
-                                {# Button öffnet das spezifische Modal dieser Zeile #}
                                 <button type="button" class="btn btn-default btn-sm"
                                         data-toggle="modal" 
                                         data-target="#modal-{{ p.id }}">
@@ -79,7 +80,7 @@
                             </td>
                         </tr>
 
-                        {# --- MODAL DIREKT IN DER LOOP (Kein JS nötig) --- #}
+                        {# --- MODAL (Server-Side rendered per Row) --- #}
                         <div class="modal fade" id="modal-{{ p.id }}" tabindex="-1" role="dialog">
                             <div class="modal-dialog" role="document">
                                 <form method="post" action="{{ path('sportabzeichen_admin_participants_update', {id: p.id}) }}">
@@ -103,10 +104,14 @@
                                             </div>
                                             <div class="form-group">
                                                 <label>{{ _('Geschlecht') }}</label>
+                                                {# Select sendet MALE/FEMALE an den Controller #}
                                                 <select name="gender" class="form-control">
-                                                    <option value="m" {{ p.geschlecht == 'm' ? 'selected' : '' }}>{{ _('Männlich') }} (M)</option>
-                                                    <option value="w" {{ p.geschlecht == 'w' ? 'selected' : '' }}>{{ _('Weiblich') }} (W)</option>
-                                                    <option value="d" {{ p.geschlecht == 'd' ? 'selected' : '' }}>{{ _('Divers') }} (D)</option>
+                                                    <option value="MALE" {{ p.geschlecht == 'MALE' ? 'selected' : '' }}>
+                                                        {{ _('Männlich') }} (M)
+                                                    </option>
+                                                    <option value="FEMALE" {{ p.geschlecht == 'FEMALE' ? 'selected' : '' }}>
+                                                        {{ _('Weiblich') }} (W)
+                                                    </option>
                                                 </select>
                                             </div>
                                         </div>
@@ -131,7 +136,7 @@
                 </table>
             </div>
 
-            {# Paginierung ... (Code wie gehabt) #}
+            {# Paginierung #}
              {% if maxPages > 1 %}
                 <nav aria-label="Page navigation" class="text-center">
                     <ul class="pagination">
