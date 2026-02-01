@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Request; // Wichtig!
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-#[Route('/sportabzeichen/my-results', name: 'sportabzeichen_my_results')]
+#[Route('/sportabzeichen/my_results', name: 'pulsr_sportabzeichen_my_results')]
 class MyResultsController extends AbstractController
 {
     public function __construct(

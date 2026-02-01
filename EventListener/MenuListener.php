@@ -23,7 +23,7 @@ final class MenuListener implements MainMenuListenerInterface
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_VIEW_OWN')) {
             $menu->addChild('sportabzeichen_my_results', [
-                'route' => 'puls_r_sportabzeichen_my_results', // Die Route müssen wir gleich noch erstellen
+                'route' => 'pulsr_sportabzeichen_my_results', // Die Route müssen wir gleich noch erstellen
                 'label' => _('Mein Sportabzeichen'),
                 'extras' => [
                     'icon' => 'user-graduate', // Passendes Icon für Schüler/Absolvent
@@ -32,7 +32,7 @@ final class MenuListener implements MainMenuListenerInterface
                 ],
             ]);
         }
-        
+
         /* ----------------------------------------------------------
          * Ergebnisse eintragen
          * ---------------------------------------------------------- */
