@@ -736,7 +736,7 @@ final class ExamController extends AbstractPageController
                         $type = $a['berechnungsart']; // z.B. 'GREATER' oder 'LESS'
                         
                         // Fall A: 'GREATER' (Weitsprung etc.) -> Absteigend sortieren
-                        if ($type === 'GREATER') {
+                        if ($type === 'BIGGER') {
                             return $b['value'] <=> $a['value'];
                         } 
                         
