@@ -646,26 +646,29 @@ final class ExamController extends AbstractPageController
         $sqlResults = "
             SELECT 
                 d.name as discipline_name,
-                r.value,
+                r.leistung as value,  -- KORREKTUR: Die Spalte heißt 'leistung'
                 r.points,
                 u.firstname, 
                 u.lastname,
                 g.name as group_name
             FROM sportabzeichen_exam_results r
             
-            -- KORREKTUR: Wir joinen direkt auf die Disziplin
-            -- Wir nehmen an, dass die Spalte in results 'discipline_id' heißt
+            -- JOIN auf Disziplinen (um den Namen zu bekommen)
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             
+            -- JOIN auf Teilnehmer
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
             JOIN users u ON p.user_id = u.id
             
+            -- JOIN auf Gruppen (Klasse/Kurs)
             LEFT JOIN members m ON u.act = m.actuser
             LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
             
             WHERE ep.exam_id = :id AND r.points > 0
-            ORDER BY d.name ASC, r.points DESC, r.value DESC
+            
+            -- Sortierung
+            ORDER BY d.name ASC, r.points DESC, r.leistung DESC
         ";
 
         $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
