@@ -1,164 +1,76 @@
-{% extends "@IServCore/page.html.twig" %}
+{# ... dein Header Code ... #}
 
-{% block page_title %}
-    {{ 'Statistik: ' ~ exam.exam_name|default(exam.exam_year) }}
-{% endblock %}
-
-{% block page_content %}
-<div class="content">
-    
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>{{ icon('chart-pie') }} Statistik: {{ exam.exam_name|default(exam.exam_year) }}</h1>
-        <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
-            {{ icon('arrow-left') }} Zurück
-        </a>
-    </div>
-
-    {# --- ROW 1: Übersicht & Diagramm --- #}
-    <div class="row mb-5">
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-header bg-light fw-bold">{{ 'Zusammenfassung'|trans }}</div>
-                <div class="card-body">
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ 'Teilnehmer gesamt'|trans }}
-                            <span class="badge bg-primary rounded-pill">{{ totalParticipants }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span class="text-warning">{{ icon('medal') }} {{ 'Gold (11-12 Pkt.)'|trans }}</span>
-                            <span class="badge bg-warning text-dark rounded-pill">{{ stats.Gold }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span class="text-secondary">{{ icon('medal') }} {{ 'Silber (8-10 Pkt.)'|trans }}</span>
-                            <span class="badge bg-secondary rounded-pill">{{ stats.Silber }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span style="color: #CD7F32;">{{ icon('medal') }} {{ 'Bronze (4-7 Pkt.)'|trans }}</span>
-                            <span class="badge rounded-pill" style="background-color: #CD7F32;">{{ stats.Bronze }}</span>
-                        </li>
-                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span class="text-muted">{{ 'Noch ohne Abzeichen'|trans }}</span>
-                            <span class="badge bg-light text-dark border rounded-pill">{{ stats.Ohne }}</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+{% for discipline, genders in topList %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3>{{ discipline }}</h3>
         </div>
-        
-        <div class="col-md-8">
-            <div class="card h-100">
-                <div class="card-body">
-                    {# Canvas für Chart.js #}
-                    <div style="max-height: 300px; position: relative;">
-                        <canvas id="badgeChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <hr>
-
-    {# --- ROW 2: Top 10 Listen --- #}
-    <h2 class="mb-4">{{ 'Top 10 Leistungen pro Disziplin'|trans }}</h2>
-    
-    {% if topList is empty %}
-        <div class="alert alert-info">{{ 'Noch keine Ergebnisse vorhanden.'|trans }}</div>
-    {% else %}
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-            {% for discipline, rows in topList %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-header bg-primary text-white d-flex justify-content-between">
-                            <span class="fw-bold">{{ discipline }}</span>
-                            <span>{{ icon('trophy') }}</span>
-                        </div>
-                        <div class="card-body p-0">
-                            <table class="table table-sm table-striped mb-0" style="font-size: 0.9rem;">
-                                <thead class="table-light">
+        <div class="card-body">
+            <div class="row">
+                {# MÄNNLICH #}
+                {% if genders['Männlich'] is defined and genders['Männlich'] is not empty %}
+                <div class="col-md-6">
+                    <h4 class="text-primary">Männlich</h4>
+                    
+                    {% for ak, results in genders['Männlich'] %}
+                        <h5 class="mt-3 text-secondary">{{ ak }}</h5>
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Platz</th>
+                                    <th>Name</th>
+                                    <th>Klasse</th>
+                                    <th class="text-end">Leistung</th>
+                                    <th class="text-end">Punkte</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in results %}
                                     <tr>
-                                        <th class="ps-3">#</th>
-                                        <th>Name</th>
-                                        <th class="text-end">Wert</th>
-                                        <th class="text-end pe-3">Pkt.</th>
+                                        <td>{{ loop.index }}.</td>
+                                        <td>{{ row.firstname }} {{ row.lastname }}</td>
+                                        <td>{{ row.group_name }}</td>
+                                        <td class="text-end">{{ row.value }}</td>
+                                        <td class="text-end"><strong>{{ row.points }}</strong></td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in rows %}
-                                        <tr>
-                                            <td class="ps-3 fw-bold text-muted">{{ loop.index }}.</td>
-                                            <td>
-                                                {{ row.firstname }} {{ row.lastname|first }}.
-                                                {% if row.group_name %}
-                                                    <span class="text-muted small">({{ row.group_name }})</span>
-                                                {% endif %}
-                                            </td>
-                                            <td class="text-end fw-bold">{{ row.value }}</td>
-                                            <td class="text-end pe-3">
-                                                {% if row.points == 3 %}
-                                                    <span class="badge bg-warning text-dark">3</span>
-                                                {% elseif row.points == 2 %}
-                                                    <span class="badge bg-secondary">2</span>
-                                                {% else %}
-                                                    <span class="badge" style="background-color: #CD7F32;">1</span>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endfor %}
                 </div>
-            {% endfor %}
+                {% endif %}
+
+                {# WEIBLICH #}
+                {% if genders['Weiblich'] is defined and genders['Weiblich'] is not empty %}
+                <div class="col-md-6">
+                    <h4 class="text-danger">Weiblich</h4> {% for ak, results in genders['Weiblich'] %}
+                        <h5 class="mt-3 text-secondary">{{ ak }}</h5>
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Platz</th>
+                                    <th>Name</th>
+                                    <th>Klasse</th>
+                                    <th class="text-end">Leistung</th>
+                                    <th class="text-end">Punkte</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in results %}
+                                    <tr>
+                                        <td>{{ loop.index }}.</td>
+                                        <td>{{ row.firstname }} {{ row.lastname }}</td>
+                                        <td>{{ row.group_name }}</td>
+                                        <td class="text-end">{{ row.value }}</td>
+                                        <td class="text-end"><strong>{{ row.points }}</strong></td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
         </div>
-    {% endif %}
-
-</div>
-
-{# --- JAVASCRIPT FÜR CHART.JS --- #}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const ctx = document.getElementById('badgeChart');
-        if (ctx) {
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Gold', 'Silber', 'Bronze', 'Ohne'],
-                    datasets: [{
-                        data: [{{ stats.Gold }}, {{ stats.Silber }}, {{ stats.Bronze }}, {{ stats.Ohne }}],
-                        backgroundColor: [
-                            '#FFD700', // Gold
-                            '#C0C0C0', // Silber
-                            '#CD7F32', // Bronze
-                            '#f8f9fa'  // Ohne (Light Gray)
-                        ],
-                        borderColor: [
-                            '#DAA520',
-                            '#A9A9A9',
-                            '#A0522D',
-                            '#dee2e6'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Medaillenspiegel'
-                        }
-                    }
-                }
-            });
-        }
-    });
-</script>
-{% endblock %}
+    </div>
+{% endfor %}
