@@ -53,7 +53,7 @@ final class MyResultsController extends AbstractController
             SELECT 
                 d.id as discipline_id,
                 d.name,
-                d.kategorie, -- Ausdauer, Kraft, Schnelligkeit, Koordination
+                d.kategorie, 
                 d.einheit,
                 d.berechnungsart,
                 r.bronze,
@@ -62,7 +62,7 @@ final class MyResultsController extends AbstractController
             FROM sportabzeichen_requirements r
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex
-              AND :age BETWEEN r.min_alter AND r.max_alter
+              AND :age BETWEEN r.age_min AND r.age_max
             ORDER BY d.kategorie ASC, d.name ASC
         ";
         
