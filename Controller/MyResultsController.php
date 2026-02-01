@@ -27,14 +27,11 @@ class MyResultsController extends AbstractController
 
         $currentYear = (int)date('Y');
         
-        // --- 1. ID SICHER ERMITTELN (INT vs STRING Problem lösen) ---
+        // --- 1. ID SICHER ERMITTELN ---
         $username = method_exists($user, 'getUserIdentifier') ? $user->getUserIdentifier() : $user->getUsername();
-        
-        // Echte ID aus der DB holen (verhindert den Fehler mit "timo.willms")
         $userId = (int)$this->conn->fetchOne("SELECT id FROM users WHERE act = ?", [$username]);
 
         if (!$userId) {
-            // Fallback, falls User in Tabelle nicht gefunden (sollte bei IServ nicht passieren)
             throw $this->createNotFoundException('User ID Error');
         }
 
@@ -56,7 +53,6 @@ class MyResultsController extends AbstractController
                 'sex' => 'MALE'
             ]);
             
-            // Neu laden
             $participant = $this->conn->fetchAssociative("
                 SELECT p.id, p.geburtsdatum, p.geschlecht 
                 FROM sportabzeichen_participants p
@@ -66,13 +62,12 @@ class MyResultsController extends AbstractController
             $this->addFlash('info', 'Dein Profil wurde initialisiert.');
         }
 
-        // --- 3. SPEICHERN (Fix: Per SQL statt Doctrine Entity) ---
+        // --- 3. SPEICHERN ---
         if ($request->isMethod('POST') && $request->request->has('save_training')) {
             $discId = (int)$request->request->get('discipline_id');
             $value  = trim((string)$request->request->get('training_value'));
 
             if ($discId > 0) {
-                // Prüfen, ob Eintrag schon existiert
                 $existing = $this->conn->fetchOne("
                     SELECT id FROM sportabzeichen_training 
                     WHERE user_id = :uid AND discipline_id = :did AND year = :yr
@@ -83,7 +78,6 @@ class MyResultsController extends AbstractController
                 ]);
 
                 if ($existing) {
-                    // Update
                     $this->conn->executeStatement("
                         UPDATE sportabzeichen_training SET value = :val 
                         WHERE user_id = :uid AND discipline_id = :did AND year = :yr
@@ -94,7 +88,6 @@ class MyResultsController extends AbstractController
                         'yr'  => $currentYear
                     ]);
                 } else {
-                    // Insert (Nur wenn Wert nicht leer ist, um DB sauber zu halten)
                     if ($value !== '') {
                         $this->conn->executeStatement("
                             INSERT INTO sportabzeichen_training (user_id, discipline_id, year, value)
@@ -107,7 +100,6 @@ class MyResultsController extends AbstractController
                         ]);
                     }
                 }
-
                 $this->addFlash('success', 'Wert gespeichert.');
                 return $this->redirectToRoute('sportabzeichen_my_results');
             }
@@ -150,36 +142,37 @@ class MyResultsController extends AbstractController
             $myTraining[$t['discipline_id']] = $t['value'];
         }
 
-        // Anforderungen laden
+        // --- HIER DIE ÄNDERUNG: SORTIERUNG NACH AUSWAHLNUMMER ---
         $sqlReq = "
             SELECT DISTINCT
                 d.id as discipline_id, d.name, d.kategorie, d.einheit,
-                r.bronze, r.silber, r.gold
+                r.bronze, r.silber, r.gold,
+                r.auswahlnummer 
             FROM sportabzeichen_requirements r
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex AND :age BETWEEN r.age_min AND r.age_max
-            ORDER BY d.kategorie ASC, d.name ASC
+            ORDER BY d.kategorie ASC, r.auswahlnummer ASC, d.name ASC
         ";
-        
+        // Hinweis: Falls die Spalte in der DB nicht 'auswahlnummer' heißt, 
+        // bitte oben im SQL anpassen!
+
         $rows = $this->conn->fetchAllAssociative($sqlReq, [
             'sex' => $participant['geschlecht'],
             'age' => $age
         ]);
 
-        // --- 5. ZUSAMMENBAU & DUPLIKATE FILTERN ---
+        // --- 5. ZUSAMMENBAU ---
         $categories = ['Ausdauer' => [], 'Kraft' => [], 'Schnelligkeit' => [], 'Koordination' => []];
-        $addedDisciplines = []; // Hilfs-Array gegen Duplikate
+        $addedDisciplines = [];
 
         foreach ($rows as $row) {
             $dId = $row['discipline_id'];
 
-            // FIX: Wenn wir diese Disziplin-ID schon hatten -> überspringen
             if (isset($addedDisciplines[$dId])) {
                 continue;
             }
             $addedDisciplines[$dId] = true;
             
-            // Daten anreichern
             $row['official_result'] = $officialResults[$dId] ?? null;
             $row['training_value'] = $myTraining[$dId] ?? '';
 
