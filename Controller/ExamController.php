@@ -646,6 +646,8 @@ final class ExamController extends AbstractPageController
         $sqlResults = "
             SELECT 
                 d.name as discipline_name,
+                d.berechnungsart,  -- NEU: Wichtig für die Sortierung!
+                d.einheit,         -- NEU: Hilfreich für die Anzeige (m, s, min)
                 r.leistung as value,
                 r.points,
                 u.firstname, 
@@ -653,7 +655,7 @@ final class ExamController extends AbstractPageController
                 p.geburtsdatum, 
                 p.geschlecht,
                 
-                -- KORREKTUR: Gruppe per Subquery holen, um Duplikate zu verhindern
+                -- Subquery für Gruppen (verhindert doppelte Zeilen)
                 (
                     SELECT STRING_AGG(DISTINCT g_sub.name, ', ')
                     FROM groups g_sub
@@ -668,54 +670,42 @@ final class ExamController extends AbstractPageController
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
             JOIN users u ON p.user_id = u.id
             
-            -- WICHTIG: Die LEFT JOINs hier unten LÖSCHEN, da sie die Duplikate verursachen!
-            -- (wurden durch das Subquery oben ersetzt)
-            
             WHERE ep.exam_id = :id AND r.points > 0
             
-            ORDER BY d.name ASC, r.points DESC, r.leistung DESC
+            -- Grobe Vorsortierung (Fein-Sortierung macht PHP gleich)
+            ORDER BY d.name ASC, r.points DESC
         ";
 
         $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
 
-        // Prüfungsjahr ermitteln (für Altersberechnung)
+        // ... (Jahresberechnung $examYear bleibt gleich) ...
         $examYear = (int)date('Y');
-        if (isset($exam['date'])) {
-            $examYear = (int)(new \DateTime($exam['date']))->format('Y');
-        } elseif (isset($exam['created_at'])) {
-             $examYear = (int)(new \DateTime($exam['created_at']))->format('Y');
+        if (!empty($exam['exam_year'])) {
+            $examYear = (int)$exam['exam_year'];
+        } elseif (!empty($exam['exam_date'])) {
+            $examYear = (int)(new \DateTime($exam['exam_date']))->format('Y');
         }
 
-        // Struktur aufbauen: [Disziplin][Geschlecht][AK] = [Zeilen]
+        // Struktur aufbauen
         $topList = [];
 
         foreach ($allResults as $row) {
             $disc = $row['discipline_name'];
             
-            // 1. Geschlecht zuordnen (Datenbank -> Anzeige)
-            $dbGeschlecht = $row['geschlecht']; // 'MALE' oder 'FEMALE'
-            
-            if ($dbGeschlecht === 'MALE') {
-                $genderKey = 'Männlich';
-            } elseif ($dbGeschlecht === 'FEMALE') {
-                $genderKey = 'Weiblich';
-            } else {
-                $genderKey = 'Divers';
-            }
+            // Geschlecht
+            $dbGeschlecht = $row['geschlecht'];
+            $genderKey = ($dbGeschlecht === 'MALE') ? 'Männlich' : (($dbGeschlecht === 'FEMALE') ? 'Weiblich' : 'Divers');
 
-            // 2. Altersklasse berechnen (AK = Prüfungsjahr - Geburtsjahr)
+            // Altersklasse
             $akKey = 'Unbekannt';
             if (!empty($row['geburtsdatum'])) {
                 try {
                     $birthYear = (int)(new \DateTime($row['geburtsdatum']))->format('Y');
                     $age = $examYear - $birthYear;
                     $akKey = 'AK ' . $age; 
-                } catch (\Exception $e) {
-                    // Falls Datum ungültig
-                }
+                } catch (\Exception $e) {}
             }
 
-            // Array initialisieren
             if (!isset($topList[$disc])) {
                 $topList[$disc] = ['Männlich' => [], 'Weiblich' => [], 'Divers' => []];
             }
@@ -723,35 +713,41 @@ final class ExamController extends AbstractPageController
                 $topList[$disc][$genderKey][$akKey] = [];
             }
 
-            // Eintrag hinzufügen
             $topList[$disc][$genderKey][$akKey][] = $row;
         }
 
-        // Sortieren und auf Top 10 beschränken
+        // SORTIERUNG & FILTERUNG
         foreach ($topList as $disc => $genders) {
             foreach ($genders as $gender => $aks) {
-                // Leere Geschlechter entfernen
                 if (empty($aks)) {
                     unset($topList[$disc][$gender]);
                     continue;
                 }
 
                 foreach ($aks as $ak => $rows) {
-                    // Teilnehmer innerhalb der AK sortieren (Punkte, dann Leistung)
                     usort($rows, function ($a, $b) {
-                        if ($a['points'] === $b['points']) {
-                            // Hier vereinfacht: Mehr Leistung ist besser. 
-                            // (Für Laufdisziplinen müsste man eigentlich umdrehen, aber meist entscheidet Punktzahl)
-                            return $b['value'] <=> $a['value']; 
+                        // 1. PUNKTE vergleichen (immer absteigend: 3 ist besser als 1)
+                        if ($a['points'] !== $b['points']) {
+                            return $b['points'] <=> $a['points'];
                         }
-                        return $b['points'] <=> $a['points'];
+
+                        // 2. WERT vergleichen (nur wenn Punkte gleich sind)
+                        // Hier kommt 'berechnungsart' ins Spiel
+                        $type = $a['berechnungsart']; // z.B. 'GREATER' oder 'LESS'
+                        
+                        // Fall A: 'GREATER' (Weitsprung etc.) -> Absteigend sortieren
+                        if ($type === 'GREATER') {
+                            return $b['value'] <=> $a['value'];
+                        } 
+                        
+                        // Fall B: 'LESS' (Laufen, Schwimmen etc.) -> Aufsteigend sortieren
+                        // (Kleinerer Wert ist besser)
+                        return $a['value'] <=> $b['value'];
                     });
 
-                    // Top 10 pro Altersklasse
+                    // Top 10 beschneiden
                     $topList[$disc][$gender][$ak] = array_slice($rows, 0, 10);
                 }
-                
-                // Altersklassen numerisch sortieren (AK 6, AK 7, ... AK 18)
                 uksort($topList[$disc][$gender], 'strnatcmp');
             }
         }
