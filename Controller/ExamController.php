@@ -645,22 +645,32 @@ final class ExamController extends AbstractPageController
         // 3. Top 10 pro Disziplin laden
         $sqlResults = "
             SELECT 
-                r.discipline_name,
+                d.name as discipline_name,  -- KORREKTUR: Name aus Tabelle 'd' holen
                 r.value,
                 r.points,
                 u.firstname, 
                 u.lastname,
                 g.name as group_name
             FROM sportabzeichen_exam_results r
+            -- JOIN 1: Verknüpfung zur Anforderung (Requirement)
+            JOIN sportabzeichen_requirements req ON r.requirement_id = req.id
+            -- JOIN 2: Verknüpfung zur Disziplin (um den Namen zu holen)
+            JOIN sportabzeichen_disciplines d ON req.discipline_id = d.id
+            
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
             JOIN users u ON p.user_id = u.id
+            
             LEFT JOIN members m ON u.act = m.actuser
             LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
             
             WHERE ep.exam_id = :id AND r.points > 0
-            ORDER BY r.discipline_name ASC, r.points DESC, r.value DESC
+            
+            -- KORREKTUR: Sortierung auch auf d.name anpassen
+            ORDER BY d.name ASC, r.points DESC, r.value DESC
         ";
+
+        $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
 
         // Hier war es bereits korrekt, aber zur Sicherheit:
         $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
