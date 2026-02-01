@@ -1,0 +1,126 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    {# --- HEADER --- #}
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1">Mein Sportabzeichen {{ year }}</h1>
+            <p class="text-muted mb-0">
+                Altersklasse <strong>{{ age }}</strong> 
+                &bull; 
+                {% if gender == 'MALE' %}<i class="fa fa-mars text-primary"></i> Männlich
+                {% elseif gender == 'FEMALE' %}<i class="fa fa-venus text-danger"></i> Weiblich
+                {% else %}Divers{% endif %}
+            </p>
+        </div>
+        <div class="text-end">
+             {# Hier könnte später ein Gesamtstatus stehen #}
+             <span class="badge bg-light text-dark border p-2">Saison {{ year }}</span>
+        </div>
+    </div>
+
+    {# --- KATEGORIEN LOOP --- #}
+    {% for catName, disciplines in categories %}
+        {% if disciplines is not empty %}
+        <div class="card shadow-sm mb-4 border-left-{{ cycle(['primary', 'success', 'warning', 'info'], loop.index0) }}">
+            <div class="card-header bg-white py-3">
+                <h5 class="m-0 font-weight-bold text-dark d-flex align-items-center">
+                    {# Icons je nach Kategorie #}
+                    {% if catName == 'Ausdauer' %}<i class="fa fa-lungs me-2 text-primary"></i>
+                    {% elseif catName == 'Kraft' %}<i class="fa fa-dumbbell me-2 text-success"></i>
+                    {% elseif catName == 'Schnelligkeit' %}<i class="fa fa-running me-2 text-warning"></i>
+                    {% elseif catName == 'Koordination' %}<i class="fa fa-balance-scale me-2 text-info"></i>
+                    {% endif %}
+                    {{ catName }}
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-muted small text-uppercase">
+                            <tr>
+                                <th style="width: 25%;" class="ps-4">Disziplin</th>
+                                <th style="width: 15%;" class="text-center text-bronze">Bronze</th>
+                                <th style="width: 15%;" class="text-center text-secondary">Silber</th>
+                                <th style="width: 15%;" class="text-center text-warning">Gold</th>
+                                <th style="width: 30%;" class="text-end pe-4">Mein Ergebnis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in disciplines %}
+                                {% set myRes = row.my_result %}
+                                {% set hasResult = myRes is not null %}
+                                
+                                <tr class="{{ hasResult ? 'bg-light-success' : '' }}">
+                                    <td class="ps-4">
+                                        <strong>{{ row.name }}</strong><br>
+                                        <small class="text-muted">{{ row.einheit }}</small>
+                                    </td>
+                                    
+                                    {# Anforderungen Spalten #}
+                                    <td class="text-center {{ (hasResult and myRes.points == 1) ? 'fw-bold bg-white border border-warning' : 'text-muted' }}" 
+                                        style="{{ (hasResult and myRes.points == 1) ? 'border-color: #cd7f32 !important; color: #cd7f32;' : '' }}">
+                                        {{ row.bronze }}
+                                    </td>
+                                    <td class="text-center {{ (hasResult and myRes.points == 2) ? 'fw-bold bg-white border border-secondary' : 'text-muted' }}">
+                                        {{ row.silber }}
+                                    </td>
+                                    <td class="text-center {{ (hasResult and myRes.points == 3) ? 'fw-bold bg-white border border-warning' : 'text-muted' }}">
+                                        {{ row.gold }}
+                                    </td>
+
+                                    {# Mein Ergebnis Spalte #}
+                                    <td class="text-end pe-4">
+                                        {% if hasResult %}
+                                            <div class="d-flex flex-column align-items-end">
+                                                <span class="h5 mb-0 font-monospace fw-bold">{{ myRes.leistung }}</span>
+                                                <span class="badge rounded-pill 
+                                                    {% if myRes.points == 3 %}bg-warning text-dark
+                                                    {% elseif myRes.points == 2 %}bg-secondary
+                                                    {% else %}bg-danger{% endif %}"
+                                                    style="{% if myRes.points == 1 %}background-color: #cd7f32 !important;{% endif %}">
+                                                    
+                                                    {% if myRes.points == 3 %}GOLD
+                                                    {% elseif myRes.points == 2 %}SILBER
+                                                    {% else %}BRONZE{% endif %}
+                                                </span>
+                                            </div>
+                                        {% else %}
+                                            <span class="badge bg-light text-muted border">- offen -</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    {# Legende / Info #}
+    <div class="alert alert-light border small mt-4">
+        <i class="fa fa-info-circle me-1"></i>
+        Pro Kategorie (Ausdauer, Kraft, Schnelligkeit, Koordination) muss <strong>eine</strong> Disziplin erfolgreich absolviert werden. 
+        Zusätzlich ist ein Nachweis der Schwimmfertigkeit erforderlich.
+    </div>
+
+</div>
+
+<style>
+    /* Kleiner Custom Style für Bronze Farbe, da Bootstrap das nicht hat */
+    .text-bronze { color: #cd7f32; }
+    .bg-light-success { background-color: rgba(25, 135, 84, 0.03); }
+    
+    /* Rahmenfarben für die Karten links */
+    .border-left-primary { border-left: 4px solid #0d6efd; }
+    .border-left-success { border-left: 4px solid #198754; }
+    .border-left-warning { border-left: 4px solid #ffc107; }
+    .border-left-info { border-left: 4px solid #0dcaf0; }
+</style>
+{% endblock %}
