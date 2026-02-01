@@ -650,26 +650,29 @@ final class ExamController extends AbstractPageController
                 r.points,
                 u.firstname, 
                 u.lastname,
-                
-                -- KORREKTUR: Daten aus der participants Tabelle (p)
                 p.geburtsdatum, 
                 p.geschlecht,
                 
-                g.name as group_name
+                -- KORREKTUR: Gruppe per Subquery holen, um Duplikate zu verhindern
+                (
+                    SELECT STRING_AGG(DISTINCT g_sub.name, ', ')
+                    FROM groups g_sub
+                    JOIN members m_sub ON g_sub.act = m_sub.actgrp
+                    WHERE m_sub.actuser = u.act
+                    AND g_sub.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
+                ) as group_name
+
             FROM sportabzeichen_exam_results r
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
-            -- Hier joinen wir die Participants Tabelle 'p'
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
-            -- Und hier die User Tabelle 'u' für die Namen
             JOIN users u ON p.user_id = u.id
             
-            LEFT JOIN members m ON u.act = m.actuser
-            LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
+            -- WICHTIG: Die LEFT JOINs hier unten LÖSCHEN, da sie die Duplikate verursachen!
+            -- (wurden durch das Subquery oben ersetzt)
             
             WHERE ep.exam_id = :id AND r.points > 0
             
-            -- Vorsortierung
             ORDER BY d.name ASC, r.points DESC, r.leistung DESC
         ";
 
