@@ -272,10 +272,18 @@ final class ExamController extends AbstractPageController
             WHERE u.deleted IS NULL
             AND seg.exam_id = :examId
             
-            AND NOT EXISTS (
-                SELECT 1 FROM sportabzeichen_exam_participants sep
-                JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
-                WHERE sp_inner.user_id = u.id AND sep.exam_id = :examId
+            AND (
+                -- FALL 1: Schüler nimmt noch gar nicht teil (Normalfall für diese Liste)
+                NOT EXISTS (
+                    SELECT 1 FROM sportabzeichen_exam_participants sep
+                    JOIN sportabzeichen_participants sp_inner ON sep.participant_id = sp_inner.id
+                    WHERE sp_inner.user_id = u.id AND sep.exam_id = :examId
+                )
+                
+                OR
+                
+                -- FALL 2: Schüler nimmt schon teil, hat aber KEIN Geburtsdatum (damit er hier trotzdem erscheint)
+                (sp.geburtsdatum IS NULL OR sp.geschlecht IS NULL OR sp.geschlecht = '')
             )
         ";
 
