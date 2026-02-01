@@ -2,20 +2,26 @@
 
 {% block title %}Statistik: {{ exam.name }}{% endblock %}
 
+{% block title %}Statistik: {{ exam.exam_name }}{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
 
     {# --- HEADER & ZURÜCK BUTTON --- #}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 mb-0">Statistik: {{ exam.name }}</h1>
-            <p class="text-muted">Datum: {{ exam.date|date('d.m.Y') }}</p>
+            {# KORREKTUR: exam_name statt name #}
+            <h1 class="h3 mb-0">Statistik: {{ exam.exam_name }}</h1>
+            
+            {# KORREKTUR: exam_date statt date #}
+            {# Falls exam_date ein String ist, funktioniert date() meist trotzdem. Falls Fehler, das |date(...) entfernen #}
+            <p class="text-muted">Datum: {{ exam.exam_date|date('d.m.Y') }}</p>
         </div>
         <a href="{{ path('puls_r_sportabzeichen_exam_show', {'id': exam.id}) }}" class="btn btn-secondary">
             <i class="fa fa-arrow-left"></i> Zurück zur Prüfung
         </a>
     </div>
-
+    
     {# --- ÜBERSICHTS-DASHBOARD (KACHELN) --- #}
     <div class="row mb-5">
         <div class="col-md-3">
