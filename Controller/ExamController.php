@@ -604,8 +604,7 @@ final class ExamController extends AbstractPageController
         $exam = $conn->fetchAssociative("SELECT * FROM sportabzeichen_exams WHERE id = :id", ['id' => $id]);
         if (!$exam) throw $this->createNotFoundException('Prüfung nicht gefunden');
 
-        // 2. Punkte pro Teilnehmer berechnen (für das Kreisdiagramm)
-        // Wir summieren die Punkte aus der Results-Tabelle pro Teilnehmer
+        // 2. Punkte pro Teilnehmer berechnen
         $sqlPoints = "
             SELECT 
                 ep.id,
@@ -619,7 +618,8 @@ final class ExamController extends AbstractPageController
             GROUP BY ep.id, u.lastname, u.firstname
         ";
         
-        $participants = $conn->fetchAllAssociative($sqlPoints);
+        // KORREKTUR: Hier fehlte das Array ['id' => $id]
+        $participants = $conn->fetchAllAssociative($sqlPoints, ['id' => $id]);
 
         // Statistik berechnen
         $stats = [
@@ -643,7 +643,6 @@ final class ExamController extends AbstractPageController
         }
 
         // 3. Top 10 pro Disziplin laden
-        // Wir holen alle Ergebnisse, die > 0 Punkte haben
         $sqlResults = "
             SELECT 
                 r.discipline_name,
@@ -656,7 +655,6 @@ final class ExamController extends AbstractPageController
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
             JOIN users u ON p.user_id = u.id
-            -- Versuch, die Klasse zu holen (optional, falls via exam_groups verknüpft)
             LEFT JOIN members m ON u.act = m.actuser
             LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
             
@@ -664,39 +662,28 @@ final class ExamController extends AbstractPageController
             ORDER BY r.discipline_name ASC, r.points DESC, r.value DESC
         ";
 
+        // Hier war es bereits korrekt, aber zur Sicherheit:
         $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
 
-        // Gruppieren und Sortieren (PHP-seitig für Flexibilität)
+        // Gruppieren und Sortieren
         $groupedResults = [];
         foreach ($allResults as $row) {
             $disc = $row['discipline_name'];
             if (!isset($groupedResults[$disc])) {
                 $groupedResults[$disc] = [];
             }
-            // Duplikate vermeiden (falls Schüler in mehreren Gruppen ist, durch JOIN oben)
-            // Wir nehmen einfach an, das Query ist sauber genug oder wir filtern hier grob.
             $groupedResults[$disc][] = $row;
         }
 
-        // Sortierung verfeinern & auf Top 10 beschneiden
         $topList = [];
         foreach ($groupedResults as $disc => $rows) {
-            // Sortieren: Erst Punkte (DESC), dann Wert. 
-            // ACHTUNG: Bei Laufdisziplinen ist kleinerer Wert besser, bei Sprung größerer.
-            // Da 'points' aber schon die Leistung normiert (3 ist immer besser als 1),
-            // sortieren wir primär nach Points. Bei Gleichstand entscheidet der Wert.
-            // Da wir nicht wissen, ob "10,5" Sekunden oder Meter sind, nehmen wir hier
-            // vereinfacht an: Mehr Punkte = Besser.
-            
             usort($rows, function ($a, $b) {
                 if ($a['points'] === $b['points']) {
-                    // Bei Punktgleichheit: String-Vergleich des Wertes (nicht perfekt, aber ok für Display)
                     return strcmp($b['value'], $a['value']); 
                 }
                 return $b['points'] <=> $a['points'];
             });
 
-            // Die besten 10 nehmen
             $topList[$disc] = array_slice($rows, 0, 10);
         }
 
