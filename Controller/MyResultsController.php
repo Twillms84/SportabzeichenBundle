@@ -82,16 +82,12 @@ final class MyResultsController extends AbstractController
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
             JOIN sportabzeichen_exams e ON ep.exam_id = e.id
             WHERE ep.participant_id = :pid
-              AND (
-                  EXTRACT(YEAR FROM e.date) = :year 
-                  OR e.created_at >= :startOfYear
-              )
+              AND e.exam_year = :year
         ";
 
         $rawResults = $this->conn->fetchAllAssociative($sqlResults, [
             'pid' => $participant['id'],
-            'year' => $currentYear,
-            'startOfYear' => $currentYear . '-01-01'
+            'year' => $currentYear
         ]);
 
         // Ergebnisse indexieren (DisciplineID -> ResultData)
