@@ -1,6 +1,6 @@
 --
 -- Sportabzeichen Modul – Datenbankschema
--- Version 2.4.1 (DOSB + Exam Groups)
+-- Version 2.5.0 (DOSB + Exam Groups + Training)
 --
 
 ------------------------------------------------------------
@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exams (
     creator_id      TEXT
 );
 
--- 1.2 Zuordnung Gruppen zu Prüfungen (NEU)
--- Speichert, welche Gruppen/Accounts zu einer Prüfung gehören
+-- 1.2 Zuordnung Gruppen zu Prüfungen
 CREATE TABLE IF NOT EXISTS sportabzeichen_exam_groups (
     exam_id         INT NOT NULL,
     act             VARCHAR(255) NOT NULL, -- Gruppen-Account/ID
@@ -29,7 +28,6 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_exam_groups (
         REFERENCES sportabzeichen_exams (id) 
         ON DELETE CASCADE
 );
--- Optional: Index für schnelle Suche nach "Welche Prüfungen hat Gruppe X?"
 CREATE INDEX IF NOT EXISTS idx_exam_groups_act ON sportabzeichen_exam_groups (act);
 
 -- 1.3 Teilnehmer (Participants)
@@ -41,7 +39,6 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_participants (
     user_id         INT REFERENCES users(id) ON DELETE SET NULL,
     username        VARCHAR(255)
 );
--- Index für Performance
 CREATE INDEX IF NOT EXISTS idx_sportabzeichen_user ON sportabzeichen_participants(user_id);
 
 
@@ -59,7 +56,6 @@ CREATE TABLE IF NOT EXISTS sportabzeichen_swimming_proofs (
     exam_year           INT,
     CONSTRAINT unique_participant_proof_year UNIQUE (participant_id, exam_year)
 );
--- Indexe
 CREATE INDEX IF NOT EXISTS idx_swimming_proofs_exam_year ON sportabzeichen_swimming_proofs(exam_year);
 CREATE INDEX IF NOT EXISTS idx_swimming_validity ON sportabzeichen_swimming_proofs(participant_id, valid_until);
 
@@ -128,7 +124,25 @@ CREATE INDEX IF NOT EXISTS idx_results_ep ON sportabzeichen_exam_results(ep_id);
 
 
 ------------------------------------------------------------
--- 6. Rechte
+-- 6. Trainingstagebuch (NEU)
 ------------------------------------------------------------
+-- Hier speichern Schüler ihre eigenen Übungswerte
+CREATE TABLE IF NOT EXISTS sportabzeichen_training (
+    id              SERIAL PRIMARY KEY,
+    user_id         INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    discipline_id   INT NOT NULL REFERENCES sportabzeichen_disciplines(id) ON DELETE CASCADE,
+    year            INT NOT NULL,
+    value           VARCHAR(255), -- Textfeld für Zeit/Weite (z.B. "12:30" oder "5.20")
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uniq_user_discipline_year UNIQUE (user_id, discipline_id, year)
+);
+-- Index für schnellen Zugriff beim Laden der "My Results" Seite
+CREATE INDEX IF NOT EXISTS idx_training_lookup ON sportabzeichen_training(user_id, year);
+
+
+------------------------------------------------------------
+-- 7. Rechte
+------------------------------------------------------------
+-- Gewährt dem Symfony-User Zugriff auf alle (auch die neuen) Tabellen
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO symfony;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO symfony;
