@@ -23,12 +23,18 @@ final class MyResultsController extends AbstractController
         $user = $this->getUser();
         $currentYear = (int)date('Y');
 
+        // SICHERHEIT: Den Benutzernamen holen (kompatibel mit neueren Symfony Versionen)
+        // Falls getUserIdentifier() nicht existiert (altes Symfony), nutze getUsername()
+        $username = method_exists($user, 'getUserIdentifier') ? $user->getUserIdentifier() : $user->getUsername();
+
         // 1. Teilnehmer-Daten laden
+        // KORREKTUR: Wir suchen über den JOIN auf die Users-Tabelle nach dem Namen
         $participant = $this->conn->fetchAssociative("
-            SELECT id, geburtsdatum, geschlecht 
-            FROM sportabzeichen_participants 
-            WHERE user_id = :uid
-        ", ['uid' => $user->getId()]);
+            SELECT p.id, p.geburtsdatum, p.geschlecht 
+            FROM sportabzeichen_participants p
+            JOIN users u ON p.user_id = u.id
+            WHERE u.username = :username
+        ", ['username' => $username]);
 
         if (!$participant || empty($participant['geburtsdatum'])) {
             return $this->render('@PulsRSportabzeichen/my_results/not_found.html.twig');
