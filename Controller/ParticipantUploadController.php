@@ -33,50 +33,60 @@ final class ParticipantUploadController extends AbstractPageController
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
                 
-                // Header lesen und ignorieren
+                // Header lesen und ignorieren (optional: prüfen ob Header korrekt)
                 fgetcsv($handle); 
-                $lineNumber = 1;
+                $lineNumber = 1; // Wir starten bei 1 (Header war Zeile 1)
 
                 // ---------------------------------------------------------
-                // 1. Spaltenname in der 'users' Tabelle ermitteln (für Lookup)
+                // 1. Spaltenname in der 'users' Tabelle ermitteln
                 // ---------------------------------------------------------
+                // IServ speichert die Import-ID in neueren Versionen als 'import_id',
+                // in älteren manchmal anders. Der Check ist gut.
                 $userImportCol = 'import_id'; 
                 try {
+                    // Testabfrage
                     $conn->executeQuery("SELECT import_id FROM users LIMIT 1");
                 } catch (\Throwable $e) {
                     $userImportCol = 'importid';
                 }
 
                 // ---------------------------------------------------------
-                // 2. Prepared Statements vorbereiten
+                // 2. Query vorbereiten
                 // ---------------------------------------------------------
+                // Wir holen 'id' und 'act' (Username) aus der Core-Tabelle
                 
-                // WICHTIG: Wir holen 'act' (Username), da wir das speichern müssen.
-                // import_id brauchen wir im Result nicht mehr, nur für die WHERE-Klausel.
                 if ($strategy === 'act') {
-                    // Suche via Accountname
+                    // Suche via Accountname (case-insensitive für Robustheit)
                     $sqlLookup = "SELECT id, act FROM users WHERE LOWER(act) = LOWER(:val) AND deleted IS NULL LIMIT 1";
                 } else {
-                    // Suche via Import-ID
+                    // Suche via Import-ID (Exakte Übereinstimmung)
                     $sqlLookup = "SELECT id, act FROM users WHERE $userImportCol = :val AND deleted IS NULL LIMIT 1";
                 }
+                
+                // Prepared Statement erstellen
                 $stmtLookup = $conn->prepare($sqlLookup);
 
-                // Prüfen, ob Teilnehmer existiert (via user_id)
+                // Check-Statement (Existiert der Teilnehmer schon?)
                 $stmtCheckExist = $conn->prepare('SELECT id FROM sportabzeichen_participants WHERE user_id = :uid');
 
+                // ---------------------------------------------------------
+                // 3. CSV Durchlauf
+                // ---------------------------------------------------------
                 while (($row = fgetcsv($handle, 1000, ';')) !== false) {
                     $lineNumber++;
 
-                    // Fallback für Komma
+                    // Fallback für falsches Trennzeichen (Komma statt Semikolon)
                     if (count($row) < 2) {
-                        $row = str_getcsv($row[0], ',');
+                        $lineParsed = str_getcsv($row[0], ',');
+                        if (count($lineParsed) >= 2) {
+                            $row = $lineParsed;
+                        }
                     }
 
                     try {
                         if (count($row) < 3) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Zu wenige Spalten.";
+                            $detailedErrors[] = "Zeile $lineNumber: Zu wenige Spalten (Erwartet: ID;Geschlecht;Datum).";
                             continue;
                         }
 
@@ -84,33 +94,34 @@ final class ParticipantUploadController extends AbstractPageController
 
                         if ($identifier === '') {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: ID/Name ist leer.";
-                            continue;
+                            continue; // Leere Zeilen ignorieren ohne Fehler
                         }
 
                         // A. User in IServ DB suchen
+                        // --------------------------
                         $userData = $stmtLookup->executeQuery(['val' => $identifier])->fetchAssociative();
 
                         if (!$userData) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: User '$identifier' nicht im System gefunden.";
+                            $detailedErrors[] = "Zeile $lineNumber: Person '$identifier' nicht im IServ gefunden.";
                             continue;
                         }
 
                         $userId = $userData['id'];
-                        $username = $userData['act']; // Das brauchen wir für die DB
+                        $username = $userData['act']; // Accountname aus der DB holen
 
                         // B. Daten validieren
+                        // -------------------
+                        // Nur noch MALE / FEMALE erlauben (kein Divers mehr)
                         $geschlecht = match (strtolower($geschlechtRaw)) {
                             'm', 'male', 'männlich', 'maennlich' => 'MALE',
-                            'w', 'female', 'weiblich' => 'FEMALE',
-                            'd', 'diverse', 'divers' => 'DIVERSE',
-                            default => null,
+                            'w', 'f', 'female', 'weiblich'       => 'FEMALE',
+                            default                              => null, 
                         };
 
                         if (!$geschlecht) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Unbekanntes Geschlecht '$geschlechtRaw'.";
+                            $detailedErrors[] = "Zeile $lineNumber ($identifier): Ungültiges Geschlecht '$geschlechtRaw'.";
                             continue;
                         }
 
@@ -118,13 +129,14 @@ final class ParticipantUploadController extends AbstractPageController
 
                         if (!$geburtsdatum) {
                             $skipped++;
-                            $detailedErrors[] = "Zeile $lineNumber: Ungültiges Datum '$geburtsdatumRaw'.";
+                            $detailedErrors[] = "Zeile $lineNumber ($identifier): Ungültiges Datum '$geburtsdatumRaw'.";
                             continue;
                         }
 
-                        // C. UPDATE oder INSERT
+                        // C. Speichern (Ohne Import-ID in der Ziel-Tabelle)
+                        // -------------------------------------------------
                         
-                        // Gibt es den Teilnehmer schon?
+                        // Prüfen ob Teilnehmer-Eintrag schon existiert
                         $existingPartId = $stmtCheckExist->executeQuery(['uid' => $userId])->fetchOne();
 
                         if ($existingPartId) {
@@ -132,17 +144,18 @@ final class ParticipantUploadController extends AbstractPageController
                             $conn->update('sportabzeichen_participants', [
                                 'geschlecht'   => $geschlecht,
                                 'geburtsdatum' => $geburtsdatum,
-                                'username'     => $username, // Auch beim Update aktualisieren, falls User umbenannt wurde
+                                'username'     => $username, // Aktualisieren, falls sich der IServ-Accountname geändert hat
                                 'updated_at'   => (new \DateTime())->format('Y-m-d H:i:s')
                             ], ['id' => $existingPartId]);
                         } else {
                             // INSERT
-                            // HIER GEÄNDERT: import_id entfernt, username hinzugefügt
+                            // Hier speichern wir KEINE Import-ID, sondern nur die Verknüpfung via user_id
                             $conn->insert('sportabzeichen_participants', [
                                 'user_id'      => $userId,
                                 'username'     => $username,
                                 'geschlecht'   => $geschlecht,
-                                'geburtsdatum' => $geburtsdatum
+                                'geburtsdatum' => $geburtsdatum,
+                                // created_at wird meist von der DB per Default gesetzt, sonst hier hinzufügen
                             ]);
                         }
 
@@ -150,22 +163,23 @@ final class ParticipantUploadController extends AbstractPageController
 
                     } catch (\Throwable $e) {
                         $skipped++;
-                        $detailedErrors[] = "Zeile $lineNumber: DB-Fehler - " . $e->getMessage();
+                        $detailedErrors[] = "Zeile $lineNumber: Systemfehler - " . $e->getMessage();
                     }
                 }
 
                 fclose($handle);
                 
                 if ($imported > 0) {
-                    $message = "Import erfolgreich abgeschlossen.";
-                } elseif ($skipped > 0) {
+                    $message = "Import erfolgreich: $imported Einträge verarbeitet.";
+                } elseif ($skipped > 0 && empty($detailedErrors)) {
+                     // Fallback falls alles übersprungen wurde aber keine Details gesammelt wurden
                     $error = "Es konnten keine Daten importiert werden.";
                 }
             }
         }
 
         return $this->render('@PulsRSportabzeichen/admin/upload_participants.html.twig', [
-            'activeTab' => 'participants_upload',
+            'activeTab' => 'import', // Achte darauf, dass der Tab-Name stimmt (import oder participants_upload)
             'imported'  => $imported,
             'skipped'   => $skipped,
             'error'     => $error,
@@ -183,6 +197,13 @@ final class ParticipantUploadController extends AbstractPageController
         foreach ($formats as $fmt) {
             $dt = \DateTime::createFromFormat($fmt, $input);
             if ($dt !== false) {
+                 // Reset auf 00:00:00 um keine Zeitverschiebungsprobleme zu haben
+                 $dt->setTime(0, 0, 0);
+                 // Wichtig: Checken ob das Parsing logisch war (z.B. verhindert 32.01.2023)
+                 $errors = \DateTime::getLastErrors();
+                 if ($errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+                     continue;
+                 }
                  return $dt->format('Y-m-d');
             }
         }
