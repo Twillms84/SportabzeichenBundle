@@ -15,8 +15,8 @@
             {# Falls exam_date ein String ist, funktioniert date() meist trotzdem. Falls Fehler, das |date(...) entfernen #}
             <p class="text-muted">Datum: {{ exam.exam_date|date('d.m.Y') }}</p>
         </div>
-        <a href="{{ path('puls_r_sportabzeichen_exam_show', {'id': exam.id}) }}" class="btn btn-secondary">
-            <i class="fa fa-arrow-left"></i> Zurück zur Prüfung
+         <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+                {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
         </a>
     </div>
 
