@@ -189,28 +189,28 @@ final class AdminController extends AbstractPageController
     public function participantsUpdate(Request $request, Participant $participant): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_ADMIN');
-        
-        // Durch Type-Hinting 'Participant $participant' spart man sich das manuelle ->find($id)
-        // und die 404 Exception. Symfony macht das automatisch (ParamConverter).
 
         $dob = $request->request->get('dob');
         $gender = $request->request->get('gender');
 
+        // Datum setzen
         if ($dob) {
             try {
                 $participant->setGeburtsdatum(new \DateTime($dob));
             } catch (\Exception $e) {
-                // Silent fail oder Logging
+                // Ignore invalid date
             }
         }
-        
-        if ($gender && in_array($gender, ['MALE', 'FEMALE', 'DIVERSE'], true)) {
+
+        // Geschlecht setzen (m, w, d)
+        if ($gender && in_array($gender, ['m', 'w', 'd'], true)) {
              $participant->setGeschlecht($gender);
         }
 
         $this->em->flush();
         $this->addFlash('success', 'Daten gespeichert.');
 
+        // Zurück zur Liste (ggf. auf die gleiche Seite, falls man Page-Parameter übergibt)
         return $this->redirectToRoute('sportabzeichen_admin_participants_index');
     }
 
