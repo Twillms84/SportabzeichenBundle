@@ -646,53 +646,111 @@ final class ExamController extends AbstractPageController
         $sqlResults = "
             SELECT 
                 d.name as discipline_name,
-                r.leistung as value,  -- KORREKTUR: Die Spalte heißt 'leistung'
+                r.leistung as value,
                 r.points,
                 u.firstname, 
                 u.lastname,
+                
+                -- KORREKTUR: Daten aus der participants Tabelle (p)
+                p.geburtsdatum, 
+                p.geschlecht,
+                
                 g.name as group_name
             FROM sportabzeichen_exam_results r
-            
-            -- JOIN auf Disziplinen (um den Namen zu bekommen)
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
-            
-            -- JOIN auf Teilnehmer
             JOIN sportabzeichen_exam_participants ep ON r.ep_id = ep.id
+            -- Hier joinen wir die Participants Tabelle 'p'
             JOIN sportabzeichen_participants p ON ep.participant_id = p.id
+            -- Und hier die User Tabelle 'u' für die Namen
             JOIN users u ON p.user_id = u.id
             
-            -- JOIN auf Gruppen (Klasse/Kurs)
             LEFT JOIN members m ON u.act = m.actuser
             LEFT JOIN groups g ON m.actgrp = g.act AND g.act IN (SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = :id)
             
             WHERE ep.exam_id = :id AND r.points > 0
             
-            -- Sortierung
+            -- Vorsortierung
             ORDER BY d.name ASC, r.points DESC, r.leistung DESC
         ";
 
         $allResults = $conn->fetchAllAssociative($sqlResults, ['id' => $id]);
 
-        // Gruppieren und Sortieren
-        $groupedResults = [];
-        foreach ($allResults as $row) {
-            $disc = $row['discipline_name'];
-            if (!isset($groupedResults[$disc])) {
-                $groupedResults[$disc] = [];
-            }
-            $groupedResults[$disc][] = $row;
+        // Prüfungsjahr ermitteln (für Altersberechnung)
+        $examYear = (int)date('Y');
+        if (isset($exam['date'])) {
+            $examYear = (int)(new \DateTime($exam['date']))->format('Y');
+        } elseif (isset($exam['created_at'])) {
+             $examYear = (int)(new \DateTime($exam['created_at']))->format('Y');
         }
 
+        // Struktur aufbauen: [Disziplin][Geschlecht][AK] = [Zeilen]
         $topList = [];
-        foreach ($groupedResults as $disc => $rows) {
-            usort($rows, function ($a, $b) {
-                if ($a['points'] === $b['points']) {
-                    return strcmp($b['value'], $a['value']); 
-                }
-                return $b['points'] <=> $a['points'];
-            });
 
-            $topList[$disc] = array_slice($rows, 0, 10);
+        foreach ($allResults as $row) {
+            $disc = $row['discipline_name'];
+            
+            // 1. Geschlecht zuordnen (Datenbank -> Anzeige)
+            $dbGeschlecht = $row['geschlecht']; // 'MALE' oder 'FEMALE'
+            
+            if ($dbGeschlecht === 'MALE') {
+                $genderKey = 'Männlich';
+            } elseif ($dbGeschlecht === 'FEMALE') {
+                $genderKey = 'Weiblich';
+            } else {
+                $genderKey = 'Divers';
+            }
+
+            // 2. Altersklasse berechnen (AK = Prüfungsjahr - Geburtsjahr)
+            $akKey = 'Unbekannt';
+            if (!empty($row['geburtsdatum'])) {
+                try {
+                    $birthYear = (int)(new \DateTime($row['geburtsdatum']))->format('Y');
+                    $age = $examYear - $birthYear;
+                    $akKey = 'AK ' . $age; 
+                } catch (\Exception $e) {
+                    // Falls Datum ungültig
+                }
+            }
+
+            // Array initialisieren
+            if (!isset($topList[$disc])) {
+                $topList[$disc] = ['Männlich' => [], 'Weiblich' => [], 'Divers' => []];
+            }
+            if (!isset($topList[$disc][$genderKey][$akKey])) {
+                $topList[$disc][$genderKey][$akKey] = [];
+            }
+
+            // Eintrag hinzufügen
+            $topList[$disc][$genderKey][$akKey][] = $row;
+        }
+
+        // Sortieren und auf Top 10 beschränken
+        foreach ($topList as $disc => $genders) {
+            foreach ($genders as $gender => $aks) {
+                // Leere Geschlechter entfernen
+                if (empty($aks)) {
+                    unset($topList[$disc][$gender]);
+                    continue;
+                }
+
+                foreach ($aks as $ak => $rows) {
+                    // Teilnehmer innerhalb der AK sortieren (Punkte, dann Leistung)
+                    usort($rows, function ($a, $b) {
+                        if ($a['points'] === $b['points']) {
+                            // Hier vereinfacht: Mehr Leistung ist besser. 
+                            // (Für Laufdisziplinen müsste man eigentlich umdrehen, aber meist entscheidet Punktzahl)
+                            return $b['value'] <=> $a['value']; 
+                        }
+                        return $b['points'] <=> $a['points'];
+                    });
+
+                    // Top 10 pro Altersklasse
+                    $topList[$disc][$gender][$ak] = array_slice($rows, 0, 10);
+                }
+                
+                // Altersklassen numerisch sortieren (AK 6, AK 7, ... AK 18)
+                uksort($topList[$disc][$gender], 'strnatcmp');
+            }
         }
 
         return $this->render('@PulsRSportabzeichen/exams/stats.html.twig', [
