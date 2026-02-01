@@ -10,3 +10,7 @@ privileges:
     PRIV_SPORTABZEICHEN_REQUIREMENTS:
         label: "Sportabzeichen: Anforderungen verwalten"
         description: "Darf Anforderungen importieren, CSV hochladen und bearbeiten."
+
+    PRIV_SPORTABZEICHEN_VIEW_OWN:
+            label: "Sportabzeichen: Eigene Ergebnisse einsehen"
+            description: "Erlaubt dem Benutzer, seine eigenen Sportabzeichen-Anforderungen und Ergebnisse einzusehen."

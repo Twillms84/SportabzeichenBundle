@@ -19,6 +19,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('PRIV_SPORTABZEICHEN_RESULTS')]
 final class SwimmingProofController extends AbstractPageController
 {
+    // Konstanten vermeiden Tippfehler
+    private const BLOCKING_CATEGORIES = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SportabzeichenService $service
@@ -29,76 +32,37 @@ final class SwimmingProofController extends AbstractPageController
     public function addSwimmingProof(Request $request): JsonResponse
     {
         try {
-            $content = $request->getContent();
-            $data = !empty($content) ? json_decode($content, true) : [];
-            
-            $epId = $data['ep_id'] ?? $data['epId'] ?? null;
-            $disciplineId = $data['discipline_id'] ?? $data['disciplineId'] ?? null;
+            $data = $this->decodeRequest($request);
+            $epId = $data['epId'] ?? $data['ep_id'] ?? null;
+            $disciplineId = $data['disciplineId'] ?? $data['discipline_id'] ?? null;
 
             if (!$epId) {
-                throw new \Exception('Teilnehmer-ID fehlt.');
+                throw new \InvalidArgumentException('Teilnehmer-ID fehlt.');
             }
 
-            // --- FIX: Eager Loading statt find() ---
-            // Wir laden ep, participant (p) UND user (u) gleichzeitig.
-            // Das verhindert den "Missing value for primary key username" Fehler.
-            /** @var ExamParticipant|null $ep */
-            $ep = $this->em->createQueryBuilder()
-                ->select('ep', 'p', 'u')
-                ->from(ExamParticipant::class, 'ep')
-                ->join('ep.participant', 'p')
-                ->join('p.user', 'u')
-                ->where('ep.id = :id')
-                ->setParameter('id', (int)$epId)
-                ->getQuery()
-                ->getOneOrNullResult();
-            // ---------------------------------------
+            $ep = $this->loadExamParticipant((int)$epId);
 
-            if (!$ep) {
-                throw new \Exception('Teilnehmer nicht gefunden.');
-            }
-
-            // Disziplin laden
+            // Disziplin verarbeiten
             if (!empty($disciplineId) && $disciplineId !== '-') {
                 $discipline = $this->em->getRepository(Discipline::class)->find((int)$disciplineId);
                 if (!$discipline) {
-                    throw new \Exception('Disziplin nicht gefunden.');
+                    throw new \InvalidArgumentException('Disziplin nicht gefunden.');
                 }
 
-                // Service-Aufruf (jetzt sicher, da User geladen ist)
                 $this->service->createSwimmingProofFromDiscipline($ep, $discipline);
                 
-                // Optional: Speichern, welche Disziplin gewählt wurde (falls Feld existiert)
+                // Falls Property existiert (Code-Review Check)
                 if (method_exists($ep, 'setSwimmingDiscipline')) {
                     $ep->setSwimmingDiscipline($discipline);
-                    $this->em->persist($ep);
+                    // Persist ist nicht nötig, wenn EP schon managed ist, aber schadet hier nicht
                     $this->em->flush();
                 }
             }
 
-            // Zusammenfassung aktualisieren
-            $summary = $this->service->syncSummary($ep);
-            
-            // Entity refreshen, um sicherzugehen
-            $this->em->refresh($ep);
-
-            return new JsonResponse([
-                'status' => 'ok',
-                'success' => true,
-                'has_swimming' => $summary['has_swimming'] ?? false,
-                'swimming_met_via' => $summary['met_via'] ?? ($discipline ? $discipline->getName() : 'Manuell'),
-                'total_points' => $summary['total'] ?? 0,
-                'final_medal' => $summary['medal'] ?? 'none'
-            ]);
+            return $this->buildSuccessResponse($ep);
 
         } catch (\Throwable $e) {
-            return new JsonResponse([
-                'status' => 'error',
-                'success' => false,
-                'message' => 'Fehler: ' . $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ], 500);
+            return $this->buildErrorResponse($e);
         }
     }
 
@@ -106,160 +70,181 @@ final class SwimmingProofController extends AbstractPageController
     public function removeSwimmingProof(Request $request): JsonResponse
     {
         try {
-            $content = $request->getContent();
-            $data = !empty($content) ? json_decode($content, true) : [];
+            $data = $this->decodeRequest($request);
             $epId = $data['epId'] ?? $data['ep_id'] ?? null;
 
             if (!$epId) {
-                throw new \Exception('ID fehlt.');
+                throw new \InvalidArgumentException('ID fehlt.');
             }
 
-            // Eager Loading: Participant und User mitladen
-            $ep = $this->em->createQueryBuilder()
-                ->select('ep', 'p', 'u')
-                ->from(ExamParticipant::class, 'ep')
-                ->join('ep.participant', 'p')
-                ->join('p.user', 'u')
-                ->where('ep.id = :id')
-                ->setParameter('id', (int)$epId)
-                ->getQuery()
-                ->getOneOrNullResult();
+            $ep = $this->loadExamParticipant((int)$epId);
+            $proofRepo = $this->em->getRepository(SwimmingProof::class);
+            $examYear = $ep->getExam()->getYear();
 
-            if (!$ep) {
-                throw new \Exception('Teilnehmer nicht gefunden.');
-            }
-
-            $participant = $ep->getParticipant();
-            $examYear = $ep->getExam()->getYear(); // z.B. 2026
-
-            $repo = $this->em->getRepository(SwimmingProof::class);
-
-            // 1. Wir suchen explizit einen Nachweis für das AKTUELLE Prüfungsjahr
+            // 1. Suche Nachweis für das aktuelle Jahr
             /** @var SwimmingProof|null $proofToDelete */
-            $proofToDelete = $repo->findOneBy([
-                'participant' => $participant,
+            $proofToDelete = $proofRepo->findOneBy([
+                'participant' => $ep->getParticipant(),
                 'examYear' => $examYear
             ]);
-            
-            // =================================================================
-            // LOGIK ANPASSUNG: Feedback bei historischem Nachweis
-            // =================================================================
+
+            // 2. Fall: Kein aktueller Nachweis -> Prüfe auf blockierende historische Nachweise
             if (!$proofToDelete) {
-                // Wir haben für 2026 (examYear) nichts gefunden.
-                // Wir suchen den aktuellsten Nachweis, egal aus welchem Jahr.
-                $historicalProof = $repo->findOneBy(
-                    ['participant' => $participant], 
-                    ['validUntil' => 'DESC'] // Den am längsten gültigen nehmen
-                );
-
-                // Prüfen, ob dieser alte Nachweis noch gültig ist für das aktuelle Jahr
-                if ($historicalProof) {
-                    $validUntil = $historicalProof->getValidUntil();
-                    
-                    // Logik: Wenn das Gültigkeitsdatum (Jahr) >= Prüfungsjahr ist
-                    if ($validUntil && (int)$validUntil->format('Y') >= $examYear) {
-                        return new JsonResponse([
-                            'success' => false,
-                            'message' => sprintf(
-                                'Der Schwimmnachweis stammt aus dem Jahr %s und ist noch bis %s gültig. Er kann im aktuellen Prüfungsjahr (%s) nicht gelöscht werden, da er automatisch übernommen wird.',
-                                $historicalProof->getExamYear(),
-                                $validUntil->format('d.m.Y'),
-                                $examYear
-                            )
-                        ], 400); // 400 = Fehler-Popup im Frontend
-                    }
-                }
-
-                // Wenn gar kein Nachweis da ist oder er abgelaufen ist:
-                return new JsonResponse([
-                    'success' => false, 
-                    'message' => 'Es wurde kein aktueller Schwimmnachweis zum Löschen gefunden.'
-                ], 400);
+                $this->checkHistoricalProofBlocking($ep->getParticipant(), $examYear);
+                // Wenn checkHistoricalProofBlocking keine Exception wirft, aber auch nichts gefunden wurde:
+                throw new \RuntimeException('Es wurde kein aktueller Schwimmnachweis zum Löschen gefunden.');
             }
 
-            // =================================================================
-            // AB HIER: Normales Löschen (wenn Nachweis aus aktuellem Jahr ist)
-            // =================================================================
-            
-            $via = $proofToDelete->getRequirementMetVia();
-            
-            // Prüfen: Wurde der Nachweis durch eine Disziplin erzeugt?
-            if ($via && str_starts_with($via, 'DISCIPLINE:')) {
-                
-                // ID parsen "DISCIPLINE:{id}"
-                $parts = explode(':', $via);
-                $disciplineId = $parts[1] ?? null;
-                
-                $canDelete = true; // Standardannahme: Löschen erlaubt
+            // 3. Fall: Aktueller Nachweis gefunden -> Prüfe ob Löschen erlaubt (Kategorie-Check)
+            $this->ensureDeletionIsAllowed($proofToDelete, $ep);
 
-                if ($disciplineId) {
-                    $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
-                    
-                    if ($discipline) {
-                        // Kategorie Name sicher ermitteln
-                        $categoryRaw = $discipline->getCategory();
-                        $categoryName = '';
-
-                        if (is_object($categoryRaw) && method_exists($categoryRaw, 'getName')) {
-                            $categoryName = strtoupper($categoryRaw->getName());
-                        } elseif (is_string($categoryRaw)) {
-                            $categoryName = strtoupper($categoryRaw);
-                        }
-
-                        // Kategorien, bei denen NICHT gelöscht werden darf
-                        $blockingCategories = ['AUSDAUER', 'ENDURANCE', 'SCHNELLIGKEIT', 'RAPIDNESS'];
-
-                        if (in_array($categoryName, $blockingCategories)) {
-                            $canDelete = false;
-                        } else {
-                            // Wenn es erlaubt ist (z.B. Kategorie "SCHWIMMEN"), Result nullen
-                            foreach ($ep->getResults() as $result) {
-                                if ($result->getDiscipline() && $result->getDiscipline()->getId() === $discipline->getId()) {
-                                    $result->setValue(0);
-                                    $result->setPoints(0);
-                                    $result->setData(null);
-                                    // $this->em->persist($result); // Flush reicht
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (!$canDelete) {
-                    return new JsonResponse([
-                        'success' => false,
-                        'message' => 'Dieser Nachweis resultiert aus einer Leistung in Ausdauer/Schnelligkeit. Bitte löschen Sie die Zeit in der Leistungstabelle.'
-                    ], 400);
-                }
-            }
-            
-            // Löschen durchführen
+            // 4. Löschen durchführen
             $this->em->remove($proofToDelete);
 
-            // Verknüpfung am ExamParticipant lösen (UI Cleanup)
             if (method_exists($ep, 'setSwimmingDiscipline')) {
                 $ep->setSwimmingDiscipline(null);
             }
 
             $this->em->flush();
-            
-            // Neu berechnen
-            $summary = $this->service->syncSummary($ep);
 
-            return new JsonResponse([
-                'success' => true, 
-                'epId' => $epId,
-                'swimming_met_via' => $summary['met_via'] ?? null,
-                'has_swimming' => $summary['has_swimming'] ?? false,
-                'total_points' => $summary['total'] ?? 0,
-                'final_medal' => $summary['medal'] ?? 'none'
-            ]);
+            return $this->buildSuccessResponse($ep);
 
+        } catch (\RuntimeException|\InvalidArgumentException $e) {
+            // Logik-Fehler (400 Bad Request)
+            return new JsonResponse(['success' => false, 'message' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
-            return new JsonResponse([
-                'success' => false,
-                'message' => 'Lösch-Fehler: ' . $e->getMessage()
-            ], 500);
+            // System-Fehler (500)
+            return $this->buildErrorResponse($e);
         }
+    }
+
+    /**
+     * Zentralisiertes Laden mit Eager Loading um "Missing Value" Fehler zu vermeiden.
+     */
+    private function loadExamParticipant(int $id): ExamParticipant
+    {
+        $ep = $this->em->createQueryBuilder()
+            ->select('ep', 'p', 'u')
+            ->from(ExamParticipant::class, 'ep')
+            ->join('ep.participant', 'p')
+            ->join('p.user', 'u')
+            ->where('ep.id = :id')
+            ->setParameter('id', $id)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$ep) {
+            throw new \InvalidArgumentException('Teilnehmer nicht gefunden.');
+        }
+
+        return $ep;
+    }
+
+    /**
+     * Prüft, ob ein alter Nachweis das Löschen/Bearbeiten im aktuellen Jahr "blockiert",
+     * weil er noch gültig ist.
+     */
+    private function checkHistoricalProofBlocking($participant, int $currentExamYear): void
+    {
+        $repo = $this->em->getRepository(SwimmingProof::class);
+        
+        // Den am längsten gültigen historischen Nachweis holen
+        $historicalProof = $repo->findOneBy(
+            ['participant' => $participant], 
+            ['validUntil' => 'DESC']
+        );
+
+        if ($historicalProof) {
+            $validUntil = $historicalProof->getValidUntil();
+            if ($validUntil && (int)$validUntil->format('Y') >= $currentExamYear) {
+                throw new \RuntimeException(sprintf(
+                    'Der Schwimmnachweis stammt aus dem Jahr %s und ist noch bis %s gültig. Er wird automatisch übernommen.',
+                    $historicalProof->getExamYear(),
+                    $validUntil->format('d.m.Y')
+                ));
+            }
+        }
+    }
+
+    /**
+     * Prüft, ob der Nachweis gelöscht werden darf oder ob er aus einer
+     * Disziplin (Ausdauer/Schnelligkeit) resultiert.
+     */
+    private function ensureDeletionIsAllowed(SwimmingProof $proof, ExamParticipant $ep): void
+    {
+        $via = $proof->getRequirementMetVia();
+        
+        // Nur prüfen wenn via "DISCIPLINE:123" ist
+        if (!$via || !str_starts_with($via, 'DISCIPLINE:')) {
+            return;
+        }
+
+        $parts = explode(':', $via);
+        $disciplineId = $parts[1] ?? null;
+
+        if (!$disciplineId) {
+            return;
+        }
+
+        $discipline = $this->em->getRepository(Discipline::class)->find($disciplineId);
+        if (!$discipline) {
+            return;
+        }
+
+        // Kategorie prüfen
+        $catRaw = $discipline->getCategory();
+        // Hier nutzen wir, wenn möglich, den Getter oder String-Cast, um sicher zu sein
+        $catName = is_object($catRaw) && method_exists($catRaw, 'getName') 
+            ? $catRaw->getName() 
+            : (string)$catRaw;
+        
+        if (in_array(strtoupper($catName), self::BLOCKING_CATEGORIES, true)) {
+            throw new \RuntimeException('Dieser Nachweis resultiert aus einer Leistung in Ausdauer/Schnelligkeit. Bitte löschen Sie die Zeit in der Leistungstabelle.');
+        }
+
+        // Wenn wir hier sind, ist es eine "erlaubte" Disziplin (z.B. reines Schwimmen).
+        // Ergebnisse nullen:
+        foreach ($ep->getResults() as $result) {
+            if ($result->getDiscipline()?->getId() === $discipline->getId()) {
+                $result->setValue(0);
+                $result->setPoints(0);
+                $result->setData(null);
+            }
+        }
+    }
+
+    private function buildSuccessResponse(ExamParticipant $ep): JsonResponse
+    {
+        // Zusammenfassung aktualisieren & Refresh (falls nötig für Berechnungen)
+        $summary = $this->service->syncSummary($ep);
+        // Refresh ist meistens unnötig, wenn der Service sauber arbeitet, 
+        // aber bei komplexen DB-Triggern manchmal erforderlich.
+        // $this->em->refresh($ep); 
+
+        return new JsonResponse([
+            'status' => 'ok',
+            'success' => true,
+            'epId' => $ep->getId(),
+            'has_swimming' => $summary['has_swimming'] ?? false,
+            'swimming_met_via' => $summary['met_via'] ?? null,
+            'total_points' => $summary['total'] ?? 0,
+            'final_medal' => $summary['medal'] ?? 'none'
+        ]);
+    }
+
+    private function buildErrorResponse(\Throwable $e): JsonResponse
+    {
+        // Niemals File/Line in Production ausgeben!
+        return new JsonResponse([
+            'status' => 'error',
+            'success' => false,
+            'message' => 'Fehler: ' . $e->getMessage()
+        ], 500);
+    }
+    
+    private function decodeRequest(Request $request): array
+    {
+        $content = $request->getContent();
+        return !empty($content) ? json_decode($content, true, 512, JSON_THROW_ON_ERROR) : [];
     }
 }

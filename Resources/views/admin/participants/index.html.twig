@@ -23,24 +23,23 @@
 
         <div class="panel-body">
             
-            {# JS Suchfeld #}
-            <div class="input-group mb-3">
+            <form method="get" class="input-group mb-3">
                 <span class="input-group-addon">{{ icon('search') }}</span>
-                <input type="text" id="searchTable" class="form-control" placeholder="{{ _('Auf dieser Seite filtern (Name, Klasse)...') }}">
-            </div>
+                <input type="text" name="q" class="form-control" value="{{ searchTerm }}" placeholder="{{ _('Suche (Enter drücken)...') }}">
+            </form>
 
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle">
                     <thead>
                         <tr>
                             <th>{{ _('Name') }}</th>
-                            <th>{{ _('Gruppen / Klasse') }}</th>
+                            <th>{{ _('Klasse') }}</th>
                             <th>{{ _('Geburtstag') }}</th>
                             <th>{{ _('Geschlecht') }}</th>
                             <th class="text-end">{{ _('Aktion') }}</th>
                         </tr>
                     </thead>
-                    <tbody id="participantRows">
+                    <tbody>
                     {% for p in participants %}
                         <tr>
                             <td>
@@ -63,23 +62,69 @@
                             </td>
                             <td>{{ p.geburtsdatum ? p.geburtsdatum|date('d.m.Y') : '-' }}</td>
                             <td>
-                                {% if p.geschlecht == 'm' %}{{ _('Männlich') }}
-                                {% elseif p.geschlecht == 'w' %}{{ _('Weiblich') }}
-                                {% elseif p.geschlecht == 'd' %}{{ _('Divers') }}
-                                {% else %}{{ p.geschlecht }}{% endif %}
+                                {# HIER: Mapping von DB-Wert (MALE/FEMALE) zur Anzeige (M/W) #}
+                                {% if p.geschlecht == 'MALE' %}
+                                    M
+                                {% elseif p.geschlecht == 'FEMALE' %}
+                                    W
+                                {% else %}
+                                    {{ p.geschlecht }}
+                                {% endif %}
                             </td>
                             <td class="text-end">
                                 <button type="button" class="btn btn-default btn-sm"
                                         data-toggle="modal" 
-                                        data-target="#genericEditModal"
-                                        data-id="{{ p.id }}"
-                                        data-name="{% if p.user %}{{ p.user.firstname }} {{ p.user.lastname }}{% else %}{{ _('Unbekannt') }}{% endif %}"
-                                        data-dob="{{ p.geburtsdatum ? p.geburtsdatum|date('Y-m-d') : '' }}"
-                                        data-gender="{{ p.geschlecht }}">
+                                        data-target="#modal-{{ p.id }}">
                                     {{ icon('pencil') }}
                                 </button>
                             </td>
                         </tr>
+
+                        {# --- MODAL (Server-Side rendered per Row) --- #}
+                        <div class="modal fade" id="modal-{{ p.id }}" tabindex="-1" role="dialog">
+                            <div class="modal-dialog" role="document">
+                                <form method="post" action="{{ path('sportabzeichen_admin_participants_update', {id: p.id}) }}">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                            <h4 class="modal-title">
+                                                {{ _('Bearbeiten') }}: 
+                                                {% if p.user %}
+                                                    {{ p.user.firstname }} {{ p.user.lastname }}
+                                                {% else %}
+                                                    {{ _('Unbekannt') }}
+                                                {% endif %}
+                                            </h4>
+                                        </div>
+                                        <div class="modal-body text-left">
+                                            <div class="form-group">
+                                                <label>{{ _('Geburtsdatum') }}</label>
+                                                <input type="date" name="dob" class="form-control" 
+                                                       value="{{ p.geburtsdatum ? p.geburtsdatum|date('Y-m-d') : '' }}">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>{{ _('Geschlecht') }}</label>
+                                                {# Select sendet MALE/FEMALE an den Controller #}
+                                                <select name="gender" class="form-control">
+                                                    <option value="MALE" {{ p.geschlecht == 'MALE' ? 'selected' : '' }}>
+                                                        {{ _('Männlich') }} (M)
+                                                    </option>
+                                                    <option value="FEMALE" {{ p.geschlecht == 'FEMALE' ? 'selected' : '' }}>
+                                                        {{ _('Weiblich') }} (W)
+                                                    </option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-default" data-dismiss="modal">{{ _('Abbrechen') }}</button>
+                                            <button type="submit" class="btn btn-primary">{{ _('Speichern') }}</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        {# --- ENDE MODAL --- #}
+
                     {% else %}
                         <tr>
                             <td colspan="5" class="text-center text-muted">
@@ -92,11 +137,11 @@
             </div>
 
             {# Paginierung #}
-            {% if maxPages > 1 %}
+             {% if maxPages > 1 %}
                 <nav aria-label="Page navigation" class="text-center">
                     <ul class="pagination">
                         <li class="{{ currentPage == 1 ? 'disabled' : '' }}">
-                            <a href="{{ currentPage > 1 ? path('sportabzeichen_admin_participants_index', {page: currentPage - 1}) : '#' }}" aria-label="Previous">
+                            <a href="{{ currentPage > 1 ? path('sportabzeichen_admin_participants_index', {page: currentPage - 1, q: searchTerm}) : '#' }}" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -104,7 +149,7 @@
                             <span>Seite {{ currentPage }} von {{ maxPages }}</span>
                         </li>
                         <li class="{{ currentPage == maxPages ? 'disabled' : '' }}">
-                            <a href="{{ currentPage < maxPages ? path('sportabzeichen_admin_participants_index', {page: currentPage + 1}) : '#' }}" aria-label="Next">
+                            <a href="{{ currentPage < maxPages ? path('sportabzeichen_admin_participants_index', {page: currentPage + 1, q: searchTerm}) : '#' }}" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
@@ -113,47 +158,4 @@
             {% endif %}
         </div>
     </div>
-
-    {# --- SINGLE MODAL --- #}
-    <div class="modal fade" id="genericEditModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
-            <form method="post" 
-                  data-url-template="{{ path('sportabzeichen_admin_participants_update', {id: 'PLACEHOLDER_ID'}) }}">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal">&times;</button>
-                        <h4 class="modal-title">{{ _('Bearbeiten') }}: <span id="modalUserName"></span></h4>
-                    </div>
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label>{{ _('Geburtsdatum') }}</label>
-                            <input type="date" name="dob" id="modalDob" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>{{ _('Geschlecht') }}</label>
-                            <div class="form-group">
-                                <label>{{ _('Geschlecht') }}</label>
-                                <select name="gender" id="modalGender" class="form-control">
-                                    {# Die Values müssen exakt so heißen wie im Controller/Datenbank #}
-                                    <option value="MALE">{{ _('Männlich') }}</option>
-                                    <option value="FEMALE">{{ _('Weiblich') }}</option>
-                                    <option value="DIVERSE">{{ _('Divers') }}</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-default" data-dismiss="modal">{{ _('Abbrechen') }}</button>
-                        <button type="submit" class="btn btn-primary">{{ _('Speichern') }}</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-{% endblock %}
-
-{% block javascripts %}
-    {{ parent() }}
-    {# Pfad ggf. anpassen, wenn das Bundle anders heißt #}
-    <script src="{{ asset('js/admin_participants.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}

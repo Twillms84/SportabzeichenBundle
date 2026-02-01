@@ -10,7 +10,7 @@
 
         <h2>{{ 'Neue Prüfung anlegen'|trans }}</h2>
 
-        {# --- HIER WAR DER FEHLER: Wir nutzen jetzt Flash-Messages --- #}
+        {# Flash Messages #}
         {% for label, messages in app.flashes %}
             {% for message in messages %}
                 <div class="alert alert-{{ label == 'error' ? 'danger' : label }}">
@@ -20,45 +20,58 @@
         {% endfor %}
 
         <form method="post">
-            <div class="mb-3">
-                <label class="form-label" for="exam_name">{{ 'Bezeichnung (optional)'|trans }}</label>
-                <input type="text" id="exam_name" name="exam_name" class="form-control" placeholder="z.B. Sommerfest">
-            </div>
-
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="exam_year">{{ 'Jahr'|trans }} *</label>
-                    <input type="number" id="exam_year" name="exam_year" class="form-control" required value="{{ 'now'|date('Y') }}">
+            {# --- TEIL 1: Stammdaten --- #}
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">{{ 'Stammdaten'|trans }}</h3>
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="exam_date">{{ 'Datum'|trans }}</label>
-                    <input type="date" id="exam_date" name="exam_date" class="form-control">
+                <div class="panel-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="exam_name">{{ 'Bezeichnung (optional)'|trans }}</label>
+                        <input type="text" id="exam_name" name="exam_name" class="form-control" placeholder="z.B. Sommerfest">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="exam_year">{{ 'Jahr'|trans }} *</label>
+                            <input type="number" id="exam_year" name="exam_year" class="form-control" required value="{{ 'now'|date('Y') }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="exam_date">{{ 'Datum'|trans }}</label>
+                            <input type="date" id="exam_date" name="exam_date" class="form-control">
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <hr />
+            {# --- TEIL 2: Import (Nur noch Gruppen) --- #}
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">{{ 'Teilnehmer importieren'|trans }}</h3>
+                </div>
+                <div class="panel-body">
+                    <p class="text-muted">
+                        {{ 'Wähle hier die Gruppen aus, die an der Prüfung teilnehmen sollen. Alle Mitglieder werden importiert.'|trans }}
+                    </p>
 
-            <div class="mb-3">
-                <label class="form-label" for="classes">{{ 'Teilnehmer direkt importieren (Mehrfachauswahl möglich)'|trans }}</label>
-                
-                {# 
-                   ACHTUNG: 
-                   1. name="classes[]" -> Damit PHP ein Array bekommt
-                   2. multiple="multiple" -> Erlaubt Mehrfachauswahl
-                   3. class="form-control select2" -> Aktiviert das IServ Such-Feature
-                #}
-                <select name="classes[]" id="classes" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Bitte wählen (z.B. 5a, 6b)...'|trans }}">
-                    {% for c in classes %}
-                        <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                </select>
-                
-                <small class="text-muted d-block mt-1">
-                    {{ 'Klicke in das Feld, um Klassen zu suchen und hinzuzufügen.'|trans }}
-                </small>
+                    <div class="mb-3">
+                        <label class="form-label" for="groups">{{ 'Gruppen'|trans }}</label>
+                        {# groups[] ist wichtig für PHP #}
+                        <select name="groups[]" id="groups" class="form-control select2" multiple="multiple" data-placeholder="{{ 'Gruppe wählen...'|trans }}">
+                            {# groups ist ein assoziatives Array: key=account, value=Name #}
+                            {% for account, name in groups %}
+                                <option value="{{ account }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <small class="text-muted d-block mt-2">
+                        {{ icon('info-sign') }} {{ 'Ist ein Benutzer in mehreren der ausgewählten Gruppen, wird er nur einmal importiert.'|trans }}
+                    </small>
+                </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">{{ 'Speichern'|trans }}</button>
+            <button type="submit" class="btn btn-primary">{{ icon('floppy-disk') }} {{ 'Speichern & Anlegen'|trans }}</button>
         </form>
     </div>
 {% endblock %}

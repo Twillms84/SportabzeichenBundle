@@ -44,49 +44,105 @@ final class ExamResultController extends AbstractPageController
     #[Route('/exam/{id}', name: 'index', methods: ['GET'])]
     public function index(Exam $exam, Request $request): Response
     {
-        $selectedClass = $request->query->get('class');
+        // Der gewünschte Filter aus der URL (z.B. ?class=5a)
+        $selectedFilter = $request->query->get('class'); 
 
-        // 1. Teilnehmer mit allen relevanten Daten laden (Eager Loading)
+        // ---------------------------------------------------------
+        // 0. PRÜFUNGSGRUPPEN LADEN
+        // ---------------------------------------------------------
+        // Wir holen uns die Acts der Gruppen, die explizit zugeordnet sind.
+        $allowedGroupActs = $this->em->getConnection()->fetchFirstColumn(
+            'SELECT act FROM sportabzeichen_exam_groups WHERE exam_id = ?',
+            [$exam->getId()]
+        );
+
+        // ---------------------------------------------------------
+        // 1. TEILNEHMER DATENBANKABFRAGE
+        // ---------------------------------------------------------
         $qb = $this->em->createQueryBuilder();
-        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd')
+        
+        $qb->select('ep', 'p', 'u', 'sp', 'res', 'd', 'ug') 
             ->from(ExamParticipant::class, 'ep')
             ->join('ep.participant', 'p')
             ->join('p.user', 'u')
+            ->leftJoin('u.groups', 'ug') // IServ User -> Groups Relation
             ->leftJoin('p.swimmingProofs', 'sp')
             ->leftJoin('ep.results', 'res')
             ->leftJoin('res.discipline', 'd')
             ->where('ep.exam = :exam')
             ->setParameter('exam', $exam);
 
-        // Sortierung verarbeiten
+        // --- Filter direkt in der Datenbank ---
+        // Nur Teilnehmer laden, die in einer der erlaubten Gruppen sind
+        if (!empty($allowedGroupActs)) {
+            // FIX: Use 'ug.account' instead of 'ug.act'
+            $qb->andWhere('ug.account IN (:allowedGroups)')
+               ->setParameter('allowedGroups', $allowedGroupActs);
+        }
+
+        // Sortierung
         $sort = $request->query->get('sort', 'lastname');
         $order = strtoupper($request->query->get('order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
 
         if ($sort === 'lastname') {
             $qb->orderBy('u.lastname', $order)->addOrderBy('u.firstname', 'ASC');
         } else {
-            $qb->orderBy('u.lastname', 'ASC'); // Default fallback
+            $qb->orderBy('u.lastname', 'ASC'); 
         }
 
-        if ($selectedClass) {
-            $qb->andWhere('u.auxinfo = :class')->setParameter('class', $selectedClass);
-        }
+        /** @var ExamParticipant[] $examParticipants */
+        // DISTINCT wichtig, da User in mehreren Gruppen sein können und durch den Join sonst vervielfacht werden
+        $examParticipants = $qb->distinct()->getQuery()->getResult();
 
-        $examParticipants = $qb->getQuery()->getResult();
-
-        // 2. Daten für Twig aufbereiten
+        // ---------------------------------------------------------
+        // 2. DATEN AUFBEREITEN
+        // ---------------------------------------------------------
         $participantsData = [];
         $resultsData = [];
+        $filterOptions = []; 
         $today = new \DateTime();
 
         foreach ($examParticipants as $ep) {
+            $user = $ep->getParticipant()->getUser();
+            $userGroups = $user->getGroups();
+            
+            // --- LOGIK: GRUPPENNAME ERMITTELN ---
+            $categoryName = 'Sonstige';
+            
+            if (!empty($allowedGroupActs)) {
+                foreach ($userGroups as $g) {
+                    // Wir prüfen, welche der Gruppen des Users diejenige ist, die im Exam erlaubt ist
+                    // Wir nutzen getAct() oder getAccount(), je nach Entity-Version. Meist getAct() oder via __toString()
+                    $gAct = (method_exists($g, 'getAct')) ? $g->getAct() : $g->getAccount();
+                    
+                    if (in_array($gAct, $allowedGroupActs)) {
+                        $categoryName = $g->getName(); // Der Anzeigename (z.B. "Klasse 5a")
+                        break; 
+                    }
+                }
+            } else {
+                // Fallback: Erste Gruppe nehmen, idealerweise eine Klasse (startet oft mit Ziffer)
+                if (!$userGroups->isEmpty()) {
+                    // Einfache Heuristik: Nimm die erste Gruppe
+                    $categoryName = $userGroups->first()->getName();
+                    // Optional: Man könnte hier durchloopen und bevorzugt Gruppen nehmen, die wie Klassen aussehen
+                }
+            }
+
+            // Kategorie für das Dropdown-Menü merken
+            $filterOptions[] = $categoryName;
+
+            // --- FILTER PRÜFUNG (Frontend Filter via URL) ---
+            if ($selectedFilter && $categoryName !== $selectedFilter) {
+                continue;
+            }
+
+            // --- SCHWIMMSTATUS PRÜFEN ---
             $hasSwimming = false;
             $swimmingExpiry = null;
             $metVia = null; 
             
-            // Schwimmstatus prüfen (Gültigkeit oder aktuelles Jahr)
             foreach ($ep->getParticipant()->getSwimmingProofs() as $proof) {
-                // Check: Prüfung im gleichen Jahr ODER noch gültig
                 if ($proof->getExamYear() == $exam->getYear() || ($proof->getValidUntil() && $proof->getValidUntil() >= $today)) {
                     $hasSwimming = true;
                     $metVia = $proof->getRequirementMetVia(); 
@@ -96,7 +152,7 @@ final class ExamResultController extends AbstractPageController
                 }
             }
 
-            // Ergebnisse indizieren: [ep_id][discipline_id] => ResultData
+            // --- ERGEBNISSE INDIZIEREN ---
             foreach ($ep->getResults() as $res) {
                 $resultsData[$ep->getId()][$res->getDiscipline()->getId()] = [
                     'leistung' => $res->getLeistung(),
@@ -106,12 +162,14 @@ final class ExamResultController extends AbstractPageController
                 ];
             }
             
+            // --- DATENSATZ BAUEN ---
             $participantsData[] = [
                 'entity' => $ep,
                 'ep_id' => $ep->getId(),
-                'vorname' => $ep->getParticipant()->getUser()->getFirstname(),
-                'nachname' => $ep->getParticipant()->getUser()->getLastname(),
-                'klasse' => $ep->getParticipant()->getUser()->getAuxinfo(),
+                'vorname' => $user->getFirstname(),
+                'nachname' => $user->getLastname(),
+                'klasse' => $categoryName, 
+                'group'  => $categoryName, 
                 'geschlecht' => $ep->getParticipant()->getGender(),
                 'age_year' => $ep->getAgeYear(),
                 'total_points' => $ep->getTotalPoints(),
@@ -122,7 +180,13 @@ final class ExamResultController extends AbstractPageController
             ];
         }
 
-        // 3. Anforderungen/Disziplinen strukturiert laden
+        // Filter-Optionen bereinigen
+        $filterOptions = array_unique($filterOptions);
+        sort($filterOptions, SORT_NATURAL | SORT_FLAG_CASE);
+
+        // ---------------------------------------------------------
+        // 3. ANFORDERUNGEN FÜR TABELLENKOPF LADEN
+        // ---------------------------------------------------------
         $requirementsData = $this->em->createQueryBuilder()
             ->select('r', 'd')
             ->from(Requirement::class, 'r')
@@ -148,15 +212,10 @@ final class ExamResultController extends AbstractPageController
             $disciplines[$cat][$dId]['requirements'][] = $reqRow;
         }
         
-        // Indizes für Twig-Loop glätten
         foreach($disciplines as $kat => $vals) {
             $disciplines[$kat] = array_values($vals);
         }
 
-        // 4. Listen für Filter und Dropdowns
-        $classes = $this->em->getConnection()->fetchFirstColumn("SELECT DISTINCT auxinfo FROM users WHERE auxinfo != '' ORDER BY auxinfo");
-
-        // Spezielle Liste nur für Schwimm-Disziplinen im Dropdown
         $swimmingDisciplines = $this->em->getRepository(Discipline::class)->findBy(
             ['category' => 'Schwimmen'], 
             ['name' => 'ASC']
@@ -167,8 +226,8 @@ final class ExamResultController extends AbstractPageController
             'participants' => $participantsData,
             'disciplines' => $disciplines,
             'results' => $resultsData,
-            'classes' => $classes,
-            'selectedClass' => $selectedClass,
+            'classes' => $filterOptions, 
+            'selectedClass' => $selectedFilter,
             'swimming_disciplines' => $swimmingDisciplines,
         ]);
     }
@@ -187,9 +246,7 @@ final class ExamResultController extends AbstractPageController
         $discipline = $this->em->getRepository(Discipline::class)->find((int)($data['discipline_id'] ?? 0));
         if (!$discipline) return new JsonResponse(['error' => 'Disziplin nicht gefunden'], 404);
 
-        // -----------------------------------------------------------
         // 1. Alte Ergebnisse dieser Kategorie aufräumen
-        // -----------------------------------------------------------
         $currentCat = $discipline->getCategory();
         foreach ($ep->getResults() as $existingRes) {
             if ($existingRes->getDiscipline()->getCategory() === $currentCat) {
@@ -201,9 +258,7 @@ final class ExamResultController extends AbstractPageController
         }
         $this->em->flush(); 
 
-        // -----------------------------------------------------------
         // 2. Berechnung & Logik
-        // -----------------------------------------------------------
         $leistung = $this->formatLeistung($data['leistung'] ?? null);
         $unit = $discipline->getUnit();
         $isVerband = ($unit === 'NONE' || $unit === 'UNIT_NONE' || empty($unit));
@@ -226,10 +281,7 @@ final class ExamResultController extends AbstractPageController
             $stufe = $pData['stufe'];
         }
 
-        // -----------------------------------------------------------
-        // NEU: 2a. Requirements für das Frontend laden!
-        // Damit das JS die Labels "Bronze: 12:00" etc. aktualisieren kann.
-        // -----------------------------------------------------------
+        // 2a. Requirements für das Frontend laden
         $requirementsData = null;
 
         if (!$isVerband) {
@@ -250,16 +302,14 @@ final class ExamResultController extends AbstractPageController
             if ($reqEntity) {
                 $requirementsData = [
                     'bronze' => $reqEntity->getBronze(),
-                    'silber' => $reqEntity->getSilver(), // <--- HIER WAR DER FEHLER (b -> v)
+                    'silber' => $reqEntity->getSilver(),
                     'gold'   => $reqEntity->getGold(),
                     'unit'   => $unit
                 ];
             }
         }
 
-        // -----------------------------------------------------------
         // 3. Ergebnis speichern
-        // -----------------------------------------------------------
         $newResult = new ExamResult();
         $newResult->setExamParticipant($ep);
         $newResult->setDiscipline($discipline);
@@ -274,9 +324,7 @@ final class ExamResultController extends AbstractPageController
         
         $this->em->persist($newResult);
 
-        // -----------------------------------------------------------
         // 4. Schwimm-Proof Update
-        // -----------------------------------------------------------
         if ($discipline->isSwimmingCategory()) {
             $this->service->updateSwimmingProof($ep, $discipline, $points);
         }
@@ -284,19 +332,11 @@ final class ExamResultController extends AbstractPageController
         $this->em->flush();
         $this->em->refresh($ep); 
         
-        // -----------------------------------------------------------
-        // 5. Response bauen (Requirements einschleusen)
-        // -----------------------------------------------------------
+        // 5. Response bauen
         $response = $this->generateSummaryResponse($ep, $points, $stufe);
-        
-        // Wir müssen das JSON decoded, um die Requirements hinzuzufügen, 
-        // oder generateSummaryResponse anpassen. Hier machen wir es direkt:
         $content = json_decode($response->getContent(), true);
         
-        // Die neuen Requirements ins JSON packen
         $content['new_requirements'] = $requirementsData;
-        
-        // Einheit mitschicken, falls sich das Input-Feld ändern muss
         $content['discipline_unit'] = $unit; 
 
         return new JsonResponse($content);
@@ -336,7 +376,6 @@ final class ExamResultController extends AbstractPageController
         if ($leistung === null && !$isUnitNone) {
             // Wert gelöscht -> Ergebnis entfernen
             if ($result) {
-                // Schwimmnachweis zurücknehmen
                 if ($discipline->isSwimmingCategory()) {
                     $this->service->updateSwimmingProof($ep, $discipline, 0);
                 }
@@ -351,11 +390,9 @@ final class ExamResultController extends AbstractPageController
                 $this->em->persist($result);
             }
 
-            // KORREKTUR: Auch hier Logik für Verbandsabzeichen (immer 3 Punkte/Gold)
             if ($isUnitNone) {
                 $points = 3;
                 $stufe = 'GOLD';
-                // Kein Requirement-Objekt nötig
                 $reqObj = null;
             } else {
                 $pData = $this->service->calculateResult(
@@ -374,7 +411,6 @@ final class ExamResultController extends AbstractPageController
             $result->setPoints($points);
             $result->setStufe($stufe);
 
-            // Update Schwimmnachweis
             if ($discipline->isSwimmingCategory()) {
                 $this->service->updateSwimmingProof($ep, $discipline, $points, $reqObj);
             }
@@ -393,16 +429,10 @@ final class ExamResultController extends AbstractPageController
     public function printGroupcard(int $examId, Request $request): Response
     {
         // 1. Parameter auslesen
-        // HINWEIS: Das JS sendet 'class_filter', dein Controller erwartete 'class'. 
-        // Wir prüfen jetzt beides, um sicherzugehen.
         $selectedClass = $request->query->get('class_filter') ?? $request->query->get('class');
-        
-        // NEU: Suchbegriff auslesen
         $searchQuery   = $request->query->get('search_query');
+        $selectedIds   = $request->query->get('ids'); 
         
-        $selectedIds   = $request->query->get('ids'); // Erwartet kommagetrennte IDs z.B. "1,2,5"
-        
-        // Sortierung aus Request laden (Standard: Nachname ASC)
         $sort = $request->query->get('sort', 'lastname');
         $order = strtoupper($request->query->get('order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
 
@@ -416,12 +446,25 @@ final class ExamResultController extends AbstractPageController
         $examYearEnd = $examYear . '-12-31';
 
         // 3. Basis-SQL vorbereiten
+        // KORREKTUR: actgrp statt group, actuser statt user, ~ statt REGEXP
+        $groupNameSql = "
+            (SELECT g.name FROM members m 
+             JOIN groups g ON m.actgrp = g.act 
+             WHERE m.actuser = u.act 
+             " . ($selectedClass ? "AND g.name = :selectedClass" : "") . "
+             ORDER BY (CASE WHEN g.name ~ '^[0-9]' THEN 0 ELSE 1 END), g.name 
+             LIMIT 1
+            )
+        ";
+
         $sql = "
             SELECT 
                 ep.id as ep_id, 
+                u.act as account_act,
                 u.lastname, u.firstname, 
                 p.geburtsdatum, p.geschlecht, 
                 ep.age_year, ep.total_points, ep.final_medal, ep.participant_id,
+                $groupNameSql as group_name,
                 (SELECT sp.exam_year 
                  FROM sportabzeichen_swimming_proofs sp 
                  WHERE sp.participant_id = ep.participant_id 
@@ -436,10 +479,14 @@ final class ExamResultController extends AbstractPageController
         ";
         
         $params = ['examId' => $examId, 'year' => $examYear, 'yearEnd' => $examYearEnd];
+        
+        if ($selectedClass) {
+            $params['selectedClass'] = $selectedClass;
+        }
 
-        // --- FILTER LOGIK (NEU & KORRIGIERT) ---
+        // --- FILTER LOGIK ---
 
-        // A) Explizite IDs haben Vorrang (z.B. Checkboxen)
+        // A) Explizite IDs
         if (!empty($selectedIds)) {
             $idArray = array_map('intval', explode(',', $selectedIds));
             if (count($idArray) > 0) {
@@ -447,16 +494,19 @@ final class ExamResultController extends AbstractPageController
             }
         } 
         else {
-            // B) Filterung nach Klasse UND/ODER Suchbegriff
-            // Wir nutzen hier kein 'elseif', damit man Klasse UND Name kombinieren kann.
+            // B) Filterung via Gruppe und/oder Suche
             
-            // 1. Klasse filtern
+            // 1. Gruppe filtern (KORREKTUR: actgrp/actuser)
             if ($selectedClass) {
-                $sql .= " AND u.auxinfo = :cls";
+                $sql .= " AND EXISTS (
+                            SELECT 1 FROM members m 
+                            JOIN groups g ON m.actgrp = g.act 
+                            WHERE m.actuser = u.act AND g.name = :cls
+                          )";
                 $params['cls'] = $selectedClass;
             }
 
-            // 2. Suchbegriff filtern (Vorname oder Nachname)
+            // 2. Suchbegriff filtern
             if ($searchQuery) {
                 $sql .= " AND (u.firstname LIKE :search OR u.lastname LIKE :search)";
                 $params['search'] = '%' . $searchQuery . '%';
@@ -465,19 +515,11 @@ final class ExamResultController extends AbstractPageController
 
         // --- SORTIERUNG ---
         switch ($sort) {
-            case 'firstname':
-                $orderBy = "u.firstname $order, u.lastname ASC";
-                break;
-            case 'points':
-                $orderBy = "ep.total_points $order, u.lastname ASC";
-                break;
-            case 'age':
-                $orderBy = "ep.age_year $order, u.lastname ASC";
-                break;
+            case 'firstname': $orderBy = "u.firstname $order, u.lastname ASC"; break;
+            case 'points':    $orderBy = "ep.total_points $order, u.lastname ASC"; break;
+            case 'age':       $orderBy = "ep.age_year $order, u.lastname ASC"; break;
             case 'lastname':
-            default:
-                $orderBy = "u.lastname $order, u.firstname ASC";
-                break;
+            default:          $orderBy = "u.lastname $order, u.firstname ASC"; break;
         }
 
         $participants = $conn->fetchAllAssociative($sql . " ORDER BY " . $orderBy, $params);
@@ -497,6 +539,10 @@ final class ExamResultController extends AbstractPageController
             $p['birthday_fmt'] = $p['geburtsdatum'] ? (new \DateTime($p['geburtsdatum']))->format('d.m.Y') : '';
             $p['has_swimming'] = !empty($p['swimming_proof_year']);
             $p['swimming_year'] = $p['swimming_proof_year'] ? substr((string)$p['swimming_proof_year'], -2) : '';
+
+            if (empty($p['group_name'])) {
+                $p['group_name'] = '-';
+            }
 
             // Ergebnisse laden
             $resultsRaw = $conn->fetchAllAssociative("
@@ -554,7 +600,6 @@ final class ExamResultController extends AbstractPageController
         // Batches für Seitenumbruch (je 10)
         $batches = array_chunk($enrichedParticipants, 10);
         
-        // Leere Zeilen auffüllen
         if (count($batches) > 0) {
             $lastIndex = count($batches) - 1;
             while (count($batches[$lastIndex]) < 10) {
@@ -601,22 +646,15 @@ final class ExamResultController extends AbstractPageController
 
     private function generateSummaryResponse(ExamParticipant $ep, int $points, string $stufe): JsonResponse
     {
-        // 1. Service aufrufen: Berechnet Total, Medaille und prüft Schwimmstatus neu
         $summary = $this->service->syncSummary($ep);
         
         return new JsonResponse([
             'status' => 'ok',
-            
-            // Daten für das aktuelle Eingabefeld
             'points' => $points,
             'stufe' => $stufe,
-
-            // KORREKTUR: Keys so benennen, wie dein JavaScript ('updateUIWidgets') sie erwartet:
-            'total'         => $summary['total'],        // statt 'total_points'
-            'medal'         => $summary['medal'],        // statt 'final_medal'
+            'total'         => $summary['total'],        
+            'medal'         => $summary['medal'],        
             'has_swimming'  => $summary['has_swimming'],
-            
-            // Optionale Daten
             'swimming_met_via' => $summary['swimming_met_via'] ?? ($summary['met_via'] ?? ''),
             'expiry'           => $summary['expiry'] ?? null,
         ]);

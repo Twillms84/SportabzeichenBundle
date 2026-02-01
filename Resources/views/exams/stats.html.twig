@@ -1,0 +1,197 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}Statistik: {{ exam.exam_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+    {# --- HEADER & ZURÜCK BUTTON --- #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            {# KORREKTUR: exam_name statt name #}
+            <h1 class="h3 mb-0">Statistik: {{ exam.exam_name }}</h1>
+            
+            {# KORREKTUR: exam_date statt date #}
+            {# Falls exam_date ein String ist, funktioniert date() meist trotzdem. Falls Fehler, das |date(...) entfernen #}
+            <p class="text-muted">Datum: {{ exam.exam_date|date('d.m.Y') }}</p>
+        </div>
+         <a href="{{ path('sportabzeichen_exams_dashboard') }}" class="btn btn-secondary">
+                {{ icon('arrow-left') }} {{ 'Zurück zur Übersicht'|trans }}
+        </a>
+    </div>
+
+    {# --- ÜBERSICHTS-DASHBOARD (KACHELN) --- #}
+    <div class="row mb-5">
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm border-left-primary h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Teilnehmer Gesamt</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ totalParticipants }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100 py-2 border-warning" style="border-left: 5px solid #FFD700;">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #FFD700;">Gold</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.Gold }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100 py-2 border-secondary" style="border-left: 5px solid #C0C0C0;">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #A9A9A9;">Silber</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.Silber }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100 py-2 border-danger" style="border-left: 5px solid #cd7f32;">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #cd7f32;">Bronze</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.Bronze }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="mb-5">
+
+    {# --- DETAILLISTE NACH DISZIPLINEN --- #}
+    {% if topList is empty %}
+        <div class="alert alert-info text-center">
+            Noch keine Ergebnisse vorhanden.
+        </div>
+    {% else %}
+        
+        {% for discipline, genders in topList %}
+            <div class="card shadow mb-5">
+                {# Karten-Kopfzeile: Name der Disziplin #}
+                <div class="card-header py-3 bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="m-0 font-weight-bold text-dark">{{ discipline }}</h5>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        
+                        {# ================= LINKS: MÄNNLICH ================= #}
+                        <div class="col-lg-6 border-end">
+                            <h4 class="text-center text-primary mb-4"><i class="fa fa-mars"></i> Männlich</h4>
+
+                            {% if genders['Männlich'] is defined and genders['Männlich'] is not empty %}
+                                {% for ak, results in genders['Männlich'] %}
+                                    <div class="mb-4">
+                                        {# Altersklassen-Badge #}
+                                        <div class="d-flex align-items-center mb-2">
+                                            <span class="badge bg-primary me-2" style="font-size: 0.9rem;">{{ ak }}</span>
+                                            <hr class="flex-grow-1 my-0">
+                                        </div>
+
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-striped">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width: 40px;">#</th>
+                                                        <th>Name</th>
+                                                        <th>Klasse</th>
+                                                        <th class="text-end">Leistung</th>
+                                                        <th class="text-end">Punkte</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for row in results %}
+                                                        <tr>
+                                                            <td class="text-muted small align-middle">{{ loop.index }}.</td>
+                                                            <td class="align-middle fw-bold">
+                                                                {{ row.firstname }} {{ row.lastname }}
+                                                            </td>
+                                                            <td class="align-middle text-muted small">{{ row.group_name }}</td>
+                                                            <td class="text-end align-middle font-monospace">{{ row.value }}</td>
+                                                            <td class="text-end align-middle">
+                                                                {% if row.points == 3 %}
+                                                                    <span class="badge bg-warning text-dark">3</span>
+                                                                {% elseif row.points == 2 %}
+                                                                    <span class="badge bg-secondary">2</span>
+                                                                {% else %}
+                                                                    <span class="badge bg-danger" style="background-color: #cd7f32 !important;">1</span>
+                                                                {% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <small>Keine Ergebnisse</small>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# ================= RECHTS: WEIBLICH ================= #}
+                        <div class="col-lg-6">
+                            <h4 class="text-center text-danger mb-4"><i class="fa fa-venus"></i> Weiblich</h4>
+
+                            {% if genders['Weiblich'] is defined and genders['Weiblich'] is not empty %}
+                                {% for ak, results in genders['Weiblich'] %}
+                                    <div class="mb-4">
+                                        {# Altersklassen-Badge #}
+                                        <div class="d-flex align-items-center mb-2">
+                                            <span class="badge bg-danger me-2" style="font-size: 0.9rem;">{{ ak }}</span>
+                                            <hr class="flex-grow-1 my-0">
+                                        </div>
+
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-striped">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width: 40px;">#</th>
+                                                        <th>Name</th>
+                                                        <th>Klasse</th>
+                                                        <th class="text-end">Leistung</th>
+                                                        <th class="text-end">Punkte</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for row in results %}
+                                                        <tr>
+                                                            <td class="text-muted small align-middle">{{ loop.index }}.</td>
+                                                            <td class="align-middle fw-bold">
+                                                                {{ row.firstname }} {{ row.lastname }}
+                                                            </td>
+                                                            <td class="align-middle text-muted small">{{ row.group_name }}</td>
+                                                            <td class="text-end align-middle font-monospace">{{ row.value }}</td>
+                                                            <td class="text-end align-middle">
+                                                                {% if row.points == 3 %}
+                                                                    <span class="badge bg-warning text-dark">3</span>
+                                                                {% elseif row.points == 2 %}
+                                                                    <span class="badge bg-secondary">2</span>
+                                                                {% else %}
+                                                                    <span class="badge bg-danger" style="background-color: #cd7f32 !important;">1</span>
+                                                                {% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <small>Keine Ergebnisse</small>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    </div> {# End Row #}
+                </div> {# End Card Body #}
+            </div> {# End Card #}
+        {% endfor %}
+    {% endif %}
+
+</div>
+{% endblock %}

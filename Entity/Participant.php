@@ -23,10 +23,6 @@ class Participant implements CrudInterface
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $username = null;
     
-    // --- NEU & WICHTIG: Laut DB ist dies NOT NULL und UNIQUE ---
-    #[ORM\Column(type: 'string', unique: true, name: 'import_id')]
-    private string $importId = '';
-
     #[ORM\ManyToOne(targetEntity: User::class, fetch: 'LAZY')] // Wichtig: LAZY
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $user = null;
@@ -65,9 +61,6 @@ class Participant implements CrudInterface
         return $this;
     }
     
-    public function getImportId(): string { return $this->importId; }
-    public function setImportId(string $importId): self { $this->importId = $importId; return $this; }
-
     public function getUser(): ?User { return $this->user; }
     public function setUser(?User $user): self { $this->user = $user; return $this; }
 
@@ -93,6 +86,6 @@ class Participant implements CrudInterface
 
     public function __toString(): string
     {
-        return $this->user ? (string)$this->user : ($this->importId ?: 'Unbekannt');
+        return $this->user ? (string)$this->user : ($this->username ?: 'Unbekannt');    
     }
 }

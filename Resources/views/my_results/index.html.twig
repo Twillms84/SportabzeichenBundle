@@ -1,0 +1,126 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    {# --- HEADER --- #}
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1">Mein Sportabzeichen {{ year }}</h1>
+            <p class="text-muted mb-0">
+                Altersklasse <strong>{{ age }}</strong> &bull; 
+                {% if gender == 'MALE' %}<i class="fa fa-mars text-primary"></i> Männlich
+                {% elseif gender == 'FEMALE' %}<i class="fa fa-venus text-danger"></i> Weiblich
+                {% else %}Divers{% endif %}
+            </p>
+        </div>
+        <div>
+             <span class="badge bg-light text-dark border p-2">Saison {{ year }}</span>
+        </div>
+    </div>
+
+    {# --- FLASH MESSAGES --- #}
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {# --- KATEGORIEN --- #}
+    {% for catName, disciplines in categories %}
+        {% if disciplines is not empty %}
+        <div class="card shadow-sm mb-4 border-left-{{ cycle(['primary', 'success', 'warning', 'info'], loop.index0) }}">
+            <div class="card-header bg-white py-3">
+                <h5 class="m-0 font-weight-bold text-dark">
+                    {{ catName }}
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="bg-light text-muted small text-uppercase">
+                        <tr>
+                            <th style="width: 25%;" class="ps-4">Disziplin</th>
+                            <th style="width: 10%;" class="text-center text-bronze">B</th>
+                            <th style="width: 10%;" class="text-center text-secondary">S</th>
+                            <th style="width: 10%;" class="text-center text-warning">G</th>
+                            <th style="width: 20%;" class="text-end">Offiziell</th>
+                            <th style="width: 25%;" class="ps-4">Mein Training</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in disciplines %}
+                            {% set offRes = row.official_result %}
+                            {% set hasOff = offRes is not null %}
+                            
+                            <tr class="{{ hasOff ? 'bg-light-success' : '' }}">
+                                <td class="ps-4">
+                                    <strong>{{ row.name }}</strong><br>
+                                    <small class="text-muted">{{ row.einheit }}</small>
+                                </td>
+                                
+                                {# Anforderungen #}
+                                <td class="text-center small">{{ row.bronze }}</td>
+                                <td class="text-center small">{{ row.silber }}</td>
+                                <td class="text-center small">{{ row.gold }}</td>
+
+                                {# Offizielles Ergebnis (Lehrer) #}
+                                <td class="text-end">
+                                    {% if hasOff %}
+                                        <span class="fw-bold font-monospace">{{ offRes.leistung }}</span>
+                                        <i class="fa fa-check-circle text-success ms-1" title="Vom Lehrer bestätigt"></i>
+                                        <br>
+                                        <span class="badge rounded-pill 
+                                            {% if offRes.points == 3 %}bg-warning text-dark
+                                            {% elseif offRes.points == 2 %}bg-secondary
+                                            {% else %}bg-danger{% endif %}">
+                                            {% if offRes.points == 3 %}Gold{% elseif offRes.points == 2 %}Silber{% else %}Bronze{% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted small">-</span>
+                                    {% endif %}
+                                </td>
+
+                                {# Mein Training (Eingabe) #}
+                                <td class="ps-4">
+                                    <form method="post" class="d-flex align-items-center">
+                                        <input type="hidden" name="discipline_id" value="{{ row.discipline_id }}">
+                                        <input type="hidden" name="save_training" value="1">
+                                        
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" 
+                                                   name="training_value" 
+                                                   class="form-control" 
+                                                   placeholder="Wert..." 
+                                                   value="{{ row.training_value }}">
+                                            <button class="btn btn-outline-primary" type="submit" title="Speichern">
+                                                <i class="fa fa-save"></i>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    <div class="alert alert-light border small mt-4">
+        <i class="fa fa-info-circle me-1"></i>
+        Die Spalte <strong>"Offiziell"</strong> zeigt die vom Lehrer bei der Prüfung eingetragenen Werte. 
+        Unter <strong>"Mein Training"</strong> kannst du deine eigenen Übungswerte festhalten.
+    </div>
+
+</div>
+
+<style>
+    .text-bronze { color: #cd7f32; }
+    .bg-light-success { background-color: rgba(25, 135, 84, 0.05); }
+    .border-left-primary { border-left: 4px solid #0d6efd; }
+    .border-left-success { border-left: 4px solid #198754; }
+    .border-left-warning { border-left: 4px solid #ffc107; }
+    .border-left-info { border-left: 4px solid #0dcaf0; }
+</style>
+{% endblock %}

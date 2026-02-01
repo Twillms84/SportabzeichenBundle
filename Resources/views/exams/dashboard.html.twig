@@ -44,7 +44,7 @@
                             
                             <td class="text-end">
                                 <div class="btn-group">
-                                    
+
                                     {# Ergebnisse erfassen #}
                                     <a href="{{ path('sportabzeichen_results_index', {'id': exam.id}) }}" 
                                        class="btn btn-sm btn-success"
@@ -57,6 +57,12 @@
                                        class="btn btn-sm btn-secondary"
                                        title="{{ 'Stammdaten bearbeiten'|trans }}">
                                         {{ icon('pencil') }}
+                                    </a>
+
+                                    <a href="{{ path('sportabzeichen_exams_stats', {'id': exam.id}) }}" 
+                                        class="btn btn-sm btn-info text-white"
+                                        title="{{ 'Statistik ansehen'|trans }}">
+                                            {{ icon('chart-pie') }}
                                     </a>
 
                                     {# Löschen #}
