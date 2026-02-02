@@ -39,6 +39,7 @@
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="bg-light text-muted small text-uppercase">
                         <tr>
+                            
                             <th style="width: 25%;" class="ps-4">Disziplin</th>
                             <th style="width: 10%;" class="text-center text-bronze">B</th>
                             <th style="width: 10%;" class="text-center text-secondary">S</th>
@@ -54,7 +55,8 @@
                             
                             <tr class="{{ hasOff ? 'bg-light-success' : '' }}">
                                 <td class="ps-4">
-                                    <strong>{{ row.name }}</strong><br>
+                                    {# DEBUG: ID anzeigen #}
+                                    <strong>({{ row.discipline_id }}) {{ row.name }}</strong><br>
                                     <small class="text-muted">{{ row.einheit }}</small>
                                 </td>
                                 
