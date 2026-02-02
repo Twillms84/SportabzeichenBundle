@@ -152,15 +152,17 @@ class MyResultsController extends AbstractController
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex 
               AND :age BETWEEN r.age_min AND r.age_max
-              AND d.einheit != 'NONE'  -- <--- HIER FILTERN WIR UNIT_NONE RAUS
+              AND d.einheit != 'UNIT_NONE'
+              AND r.jahr = :year  -- <--- NEU: Nur das aktuelle Jahr laden!
             ORDER BY d.kategorie ASC, r.auswahlnummer ASC, d.name ASC
         ";
         
         $rows = $this->conn->fetchAllAssociative($sqlReq, [
-            'sex' => $participant['geschlecht'],
-            'age' => $age
+            'sex'  => $participant['geschlecht'],
+            'age'  => $age,
+            'year' => $currentYear // <--- NEU: Parameter übergeben
         ]);
-
+        
         // --- 5. ZUSAMMENBAU ---
         $categories = ['Ausdauer' => [], 'Kraft' => [], 'Schnelligkeit' => [], 'Koordination' => []];
         $addedDisciplines = [];
