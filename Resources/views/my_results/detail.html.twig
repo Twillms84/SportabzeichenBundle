@@ -2,10 +2,9 @@
 
 {% block title %}{{ discipline.name }} - Training{% endblock %}
 
-{# CSS einbinden #}
 {% block stylesheets %}
     {{ parent() }}
-    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+    <link rel="stylesheet" href="{{ asset('bundles/pulsrsportabzeichen/css/sportabzeichen.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -21,7 +20,7 @@
 <div class="container py-4 sa-container-narrow">
 
     <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block text-muted">
-        <i class="fa fa-arrow-left me-1"></i> Zurück zur Übersicht
+        <span class="glyphicon glyphicon-arrow-left me-1" aria-hidden="true"></span> Zurück zur Übersicht
     </a>
 
     <div class="d-flex justify-content-between align-items-start mb-4">
@@ -37,8 +36,9 @@
     {% if analysis is defined and analysis is not empty %}
         {% if analysis.next_goal_label is not null %}
             <div class="alert alert-info border-info shadow-sm d-flex align-items-center">
-                <i class="fa fa-chart-line fa-2x me-3 text-info"></i>
-                <div>
+                {# Icon: Stats/Chart #}
+                <span class="glyphicon glyphicon-stats me-3 text-info" style="font-size: 2em;" aria-hidden="true"></span>
+                <div style="margin-left: 15px;">
                     <h5 class="alert-heading h6 m-0">Nächstes Ziel: <strong>{{ analysis.next_goal_label }}</strong></h5>
                     <p class="mb-0 small mt-1">
                         Dir fehlen noch <strong>
@@ -49,17 +49,20 @@
                         {% endif %}
                         {{ einheit_label }}</strong>.
                         {% if analysis.less_is_better %}
-                            <i class="fa fa-tachometer-alt ms-1"></i> Du musst schneller werden!
+                            {# Tacho Icon für "Schneller werden" #}
+                            <span class="glyphicon glyphicon-dashboard ms-1" aria-hidden="true"></span> Du musst schneller werden!
                         {% else %}
-                            <i class="fa fa-arrow-up ms-1"></i> Du musst dich steigern!
+                            {# Pfeil Hoch für "Mehr schaffen" #}
+                            <span class="glyphicon glyphicon-arrow-up ms-1" aria-hidden="true"></span> Du musst dich steigern!
                         {% endif %}
                     </p>
                 </div>
             </div>
         {% else %}
             <div class="alert alert-success shadow-sm d-flex align-items-center">
-                 <i class="fa fa-trophy fa-2x me-3 sa-text-gold"></i>
-                 <div>
+                 {# Stern für Gold/Erfolg #}
+                 <span class="glyphicon glyphicon-star me-3 sa-text-gold" style="font-size: 2em;" aria-hidden="true"></span>
+                 <div style="margin-left: 15px;">
                     <h5 class="m-0">Gold erreicht!</h5>
                     <small>Du hast die Anforderungen für Gold erfüllt.</small>
                  </div>
@@ -81,7 +84,7 @@
                             <span class="input-group-text text-muted">{{ einheit_label }}</span>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
-                            <i class="fa fa-save me-2"></i> Speichern
+                            <span class="glyphicon glyphicon-floppy-disk me-2" aria-hidden="true"></span> Speichern
                         </button>
                     </form>
 
@@ -127,7 +130,7 @@
                             
                             <div class="text-end">
                                 <div class="small text-muted">
-                                    <i class="fa fa-calendar-alt me-1"></i>{{ entry.created_at|date('d.m.Y') }}
+                                    <span class="glyphicon glyphicon-calendar me-1" aria-hidden="true"></span> {{ entry.created_at|date('d.m.Y') }}
                                 </div>
                                 <div class="text-muted sa-text-xs">
                                     {{ entry.created_at|date('H:i') }} Uhr
@@ -136,7 +139,7 @@
                         </div>
                     {% else %}
                         <div class="text-center p-5 text-muted">
-                            <i class="fa fa-clipboard-list fa-2x mb-3 sa-icon-placeholder"></i><br>
+                            <span class="glyphicon glyphicon-list-alt mb-3 sa-icon-placeholder" style="font-size: 2em;" aria-hidden="true"></span><br>
                             Noch keine Trainingsdaten.<br>Leg los!
                         </div>
                     {% endfor %}
