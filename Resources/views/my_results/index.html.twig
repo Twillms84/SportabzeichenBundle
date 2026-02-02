@@ -2,29 +2,24 @@
 
 {% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
 
+{# CSS einbinden #}
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
+
 {% block content %}
 
-{# --- GENAUE MAPPING VORGABE --- #}
+{# --- MAPPING --- #}
 {% set unitMap = {
-    'UNIT_METERS': 'm', 
-    'UNIT_CENTIMETERS': 'cm', 
-    'UNIT_SECONDS': 'Sek.', 
-    'UNIT_MINUTES': 'Min.', 
-    'UNIT_HOURS': 'Std.', 
-    'UNIT_NUMBER': 'Anz.', 
-    'UNIT_PIECES': 'Wert', 
-    'NONE': 'Verband', 
-    'UNIT_NONE': 'Verband'
+    'UNIT_METERS': 'm', 'UNIT_CENTIMETERS': 'cm', 'UNIT_SECONDS': 'Sek.', 
+    'UNIT_MINUTES': 'Min.', 'UNIT_HOURS': 'Std.', 'UNIT_NUMBER': 'Anz.', 
+    'UNIT_PIECES': 'Wert', 'NONE': 'Verband', 'UNIT_NONE': 'Verband'
 } %}
-
-{# --- WELCHE EINHEITEN SIND ZEIT? (Doppelpunkt statt Komma) --- #}
 {% set time_units = ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
-
 {% set cat_icons = {
-    'Ausdauer': 'fa-heartbeat',
-    'Kraft': 'fa-dumbbell',
-    'Schnelligkeit': 'fa-running',
-    'Koordination': 'fa-balance-scale'
+    'Ausdauer': 'fa-heartbeat', 'Kraft': 'fa-dumbbell',
+    'Schnelligkeit': 'fa-running', 'Koordination': 'fa-balance-scale'
 } %}
 
 <div class="container py-4">
@@ -35,7 +30,6 @@
         </div>
     </div>
 
-    {# Flash Messages #}
     {% for label, messages in app.flashes %}
         {% for message in messages %}
             <div class="alert alert-{{ label == 'error' ? 'danger' : label }} shadow-sm">{{ message }}</div>
@@ -45,11 +39,12 @@
     {% for catName, disciplines in categories %}
         {% if disciplines is not empty %}
         
-        {% set colorClass = cycle(['primary', 'success', 'warning', 'info'], loop.index0) %}
+        {# CSS-Klasse dynamisch wählen #}
+        {% set colorName = cycle(['primary', 'success', 'warning', 'info'], loop.index0) %}
         
-        <div class="card shadow-sm mb-4 border-left-{{ colorClass }}">
+        <div class="card shadow-sm mb-4 sa-border-{{ colorName }}">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa {{ cat_icons[catName]|default('fa-list') }} text-{{ colorClass }} me-2"></i>
+                <i class="fa {{ cat_icons[catName]|default('fa-list') }} text-{{ colorName }} me-2"></i>
                 <h5 class="m-0 font-weight-bold text-dark">{{ catName }}</h5>
             </div>
             
@@ -57,11 +52,11 @@
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="bg-light text-muted small text-uppercase">
                         <tr>
-                            <th style="width: 30%;" class="ps-4">Disziplin</th>
-                            <th style="width: 10%;" class="text-center text-bronze">Bronze</th>
-                            <th style="width: 10%;" class="text-center text-secondary">Silber</th>
-                            <th style="width: 10%;" class="text-center text-warning">Gold</th>
-                            <th style="width: 40%;" class="ps-4">Mein Training</th>
+                            <th class="ps-4 sa-col-discipline">Disziplin</th>
+                            <th class="text-center sa-col-medal sa-text-bronze">Bronze</th>
+                            <th class="text-center sa-col-medal sa-text-silver">Silber</th>
+                            <th class="text-center sa-col-medal sa-text-gold">Gold</th>
+                            <th class="ps-4 sa-col-training">Mein Training</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -75,14 +70,11 @@
                                     <span class="badge bg-light text-muted border">{{ einheit_label }}</span>
                                 </td>
                                 
-                                {# --- FORMATIERUNGSLOGIK --- #}
                                 {% if is_time %}
-                                    {# Zeit: Doppelpunkt (z.B. 12.30 -> 12:30) #}
                                     <td class="text-center small font-monospace">{{ row.bronze|number_format(2, '.', '')|replace({'.': ':'}) }}</td>
                                     <td class="text-center small font-monospace">{{ row.silber|number_format(2, '.', '')|replace({'.': ':'}) }}</td>
                                     <td class="text-center small font-monospace">{{ row.gold|number_format(2, '.', '')|replace({'.': ':'}) }}</td>
                                 {% else %}
-                                    {# Strecke: Komma (z.B. 12.50 -> 12,5) #}
                                     <td class="text-center small font-monospace">{{ row.bronze|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</td>
                                     <td class="text-center small font-monospace">{{ row.silber|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</td>
                                     <td class="text-center small font-monospace">{{ row.gold|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</td>
@@ -90,14 +82,11 @@
 
                                 <td class="ps-4">
                                     <a href="{{ path('pulsr_sportabzeichen_training_detail', { disciplineId: row.discipline_id }) }}" 
-                                       class="btn btn-outline-primary btn-sm w-100 d-flex justify-content-between align-items-center group-hover">
-                                        
+                                       class="btn btn-outline-primary btn-sm w-100 d-flex justify-content-between align-items-center sa-btn-hover">
                                         <span>
                                             {% if row.training_value is not empty %}
-                                                {# User Input formatieren #}
                                                 {% if row.training_value matches '/^\\d+(\\.\\d+)?$/' %}
                                                     {% if is_time %}
-                                                        {# User hat z.B. 12.30 eingegeben -> Anzeige 12:30 #}
                                                         <span class="fw-bold">{{ row.training_value|replace({'.': ':'}) }}</span>
                                                     {% else %}
                                                         <span class="fw-bold">{{ row.training_value|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</span>
@@ -110,7 +99,6 @@
                                                 <span class="small text-muted fst-italic">Eintragen...</span>
                                             {% endif %}
                                         </span>
-
                                         <i class="fa fa-chevron-right small text-muted"></i>
                                     </a>
                                 </td>
@@ -123,13 +111,4 @@
         {% endif %}
     {% endfor %}
 </div>
-
-<style>
-    .text-bronze { color: #cd7f32; font-weight: bold; }
-    .border-left-primary { border-left: 4px solid #0d6efd; }
-    .border-left-success { border-left: 4px solid #198754; }
-    .border-left-warning { border-left: 4px solid #ffc107; }
-    .border-left-info { border-left: 4px solid #0dcaf0; }
-    .group-hover:hover .fa-chevron-right { transform: translateX(3px); transition: transform 0.2s; }
-</style>
 {% endblock %}

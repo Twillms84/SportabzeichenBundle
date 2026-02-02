@@ -1,0 +1,55 @@
+/* Resources/public/css/sportabzeichen.css */
+
+/* --- Farben für Medaillen --- */
+.sa-text-bronze {
+    color: #cd7f32 !important;
+    font-weight: bold;
+}
+
+.sa-text-silver {
+    color: #6c757d !important; /* Standard Bootstrap Secondary, aber explizit */
+    font-weight: bold;
+}
+
+.sa-text-gold {
+    color: #ffc107 !important;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.1);
+    font-weight: bold;
+}
+
+/* --- Farbige Ränder für Kategorien (Übersicht) --- */
+.sa-border-primary { border-left: 4px solid #0d6efd; }
+.sa-border-success { border-left: 4px solid #198754; }
+.sa-border-warning { border-left: 4px solid #ffc107; }
+.sa-border-info    { border-left: 4px solid #0dcaf0; }
+
+/* --- Tabellen-Layout (Übersicht) --- */
+.sa-col-discipline { width: 30%; }
+.sa-col-medal      { width: 10%; }
+.sa-col-training   { width: 40%; }
+
+/* --- Hover-Effekt für den Button --- */
+.sa-btn-hover:hover .fa-chevron-right {
+    transform: translateX(3px);
+    transition: transform 0.2s ease-in-out;
+}
+
+/* --- Detailseite Layout --- */
+.sa-container-narrow {
+    max-width: 800px;
+}
+
+/* --- Hintergrund für den neuesten Eintrag --- */
+.sa-bg-newest {
+    background-color: #f0fdf4; /* Sehr helles Grün */
+}
+
+/* --- Platzhalter-Icon Farbe --- */
+.sa-icon-placeholder {
+    color: #e0e0e0;
+}
+
+/* --- Sehr kleiner Text (Zeitstempel) --- */
+.sa-text-xs {
+    font-size: 0.75rem;
+}

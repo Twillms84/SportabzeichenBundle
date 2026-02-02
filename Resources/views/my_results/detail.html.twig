@@ -2,20 +2,23 @@
 
 {% block title %}{{ discipline.name }} - Training{% endblock %}
 
+{# CSS einbinden #}
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
+
 {% block content %}
 
-{# --- MAPPING --- #}
 {% set unitMap = {
     'UNIT_METERS': 'm', 'UNIT_CENTIMETERS': 'cm', 'UNIT_SECONDS': 'Sek.', 
     'UNIT_MINUTES': 'Min.', 'UNIT_HOURS': 'Std.', 'UNIT_NUMBER': 'Anz.', 
     'UNIT_PIECES': 'Wert', 'NONE': 'Verband', 'UNIT_NONE': 'Verband'
 } %}
-
-{# --- ZEIT ODER STRECKE? --- #}
 {% set is_time = discipline.einheit in ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
 {% set einheit_label = unitMap[discipline.einheit]|default(discipline.einheit) %}
 
-<div class="container py-4" style="max-width: 800px;">
+<div class="container py-4 sa-container-narrow">
 
     <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block text-muted">
         <i class="fa fa-arrow-left me-1"></i> Zurück zur Übersicht
@@ -31,7 +34,6 @@
         </div>
     </div>
 
-    {# --- ANALYSE BOX --- #}
     {% if analysis is defined and analysis is not empty %}
         {% if analysis.next_goal_label is not null %}
             <div class="alert alert-info border-info shadow-sm d-flex align-items-center">
@@ -56,7 +58,7 @@
             </div>
         {% else %}
             <div class="alert alert-success shadow-sm d-flex align-items-center">
-                 <i class="fa fa-trophy fa-2x me-3 text-warning"></i>
+                 <i class="fa fa-trophy fa-2x me-3 sa-text-gold"></i>
                  <div>
                     <h5 class="m-0">Gold erreicht!</h5>
                     <small>Du hast die Anforderungen für Gold erfüllt.</small>
@@ -67,7 +69,6 @@
 
     <div class="row g-4">
         
-        {# --- TEIL 1: EINGABE --- #}
         <div class="col-md-6">
             <div class="card h-100 shadow-sm border-0 bg-light">
                 <div class="card-body">
@@ -88,11 +89,10 @@
                     
                     <h6 class="small text-muted text-uppercase mb-3 fw-bold">Ziele</h6>
                     <div class="d-flex justify-content-between text-center">
-                        {# MACRO ODER INLINE FÜR ZIEL-FORMATIERUNG #}
                         {% for stufe, val in {'Bronze': discipline.bronze, 'Silber': discipline.silber, 'Gold': discipline.gold} %}
                             <div>
                                 <div class="small text-muted mb-1">{{ stufe }}</div>
-                                <div class="fw-bold {{ stufe == 'Bronze' ? 'text-bronze' : (stufe == 'Silber' ? 'text-secondary' : 'text-warning') }}">
+                                <div class="fw-bold {{ stufe == 'Bronze' ? 'sa-text-bronze' : (stufe == 'Silber' ? 'sa-text-silver' : 'sa-text-gold') }}">
                                     {% if is_time %}
                                         {{ val|number_format(2, '.', '')|replace({'.': ':'}) }}
                                     {% else %}
@@ -106,21 +106,17 @@
             </div>
         </div>
 
-        {# --- TEIL 2: VERLAUF --- #}
         <div class="col-md-6">
             <div class="card h-100 shadow-sm">
                 <div class="card-header bg-white fw-bold border-bottom">Verlauf</div>
                 <div class="list-group list-group-flush">
                     {% for entry in history %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center {{ loop.first ? 'bg-light-success' : '' }}">
+                        <div class="list-group-item d-flex justify-content-between align-items-center {{ loop.first ? 'sa-bg-newest' : '' }}">
                             <div>
-                                {# Werte aus DB formatieren #}
                                 {% if entry.value matches '/^\\d+(\\.\\d+)?$/' %}
                                     {% if is_time %}
-                                        {# Zeit: Punkt zu Doppelpunkt #}
                                         <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|replace({'.': ':'}) }}</span>
                                     {% else %}
-                                        {# Strecke: Deutsches Format #}
                                         <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</span>
                                     {% endif %}
                                 {% else %}
@@ -133,14 +129,14 @@
                                 <div class="small text-muted">
                                     <i class="fa fa-calendar-alt me-1"></i>{{ entry.created_at|date('d.m.Y') }}
                                 </div>
-                                <div class="small text-muted" style="font-size: 0.7rem;">
+                                <div class="text-muted sa-text-xs">
                                     {{ entry.created_at|date('H:i') }} Uhr
                                 </div>
                             </div>
                         </div>
                     {% else %}
                         <div class="text-center p-5 text-muted">
-                            <i class="fa fa-clipboard-list fa-2x mb-3 text-light-gray"></i><br>
+                            <i class="fa fa-clipboard-list fa-2x mb-3 sa-icon-placeholder"></i><br>
                             Noch keine Trainingsdaten.<br>Leg los!
                         </div>
                     {% endfor %}
@@ -150,11 +146,4 @@
 
     </div>
 </div>
-
-<style>
-    .text-bronze { color: #cd7f32; }
-    .text-warning { color: #ffc107; text-shadow: 0 1px 0 rgba(0,0,0,0.1); }
-    .bg-light-success { background-color: #f0fdf4; }
-    .text-light-gray { color: #e0e0e0; }
-</style>
 {% endblock %}
