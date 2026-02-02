@@ -54,7 +54,8 @@
                             
                             <tr class="{{ hasOff ? 'bg-light-success' : '' }}">
                                 <td class="ps-4">
-                                    <strong>{{ row.name }}</strong><br>
+                                    {# DEBUG: ID anzeigen #}
+                                    <strong>({{ row.discipline_id }}) {{ row.name }}</strong><br>
                                     <small class="text-muted">{{ row.einheit }}</small>
                                 </td>
                                 
