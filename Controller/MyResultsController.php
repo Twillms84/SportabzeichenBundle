@@ -129,13 +129,16 @@ class MyResultsController extends AbstractController
 
         // Eigene Trainingsdaten
         $trainingData = $this->conn->fetchAllAssociative("
-            SELECT discipline_id, value 
-            FROM sportabzeichen_training 
-            WHERE user_id = :uid AND year = :year
-        ", [
-            'uid' => $userId, 
-            'year' => $currentYear
-        ]);
+            SELECT t.discipline_id, t.value
+            FROM sportabzeichen_training t
+            INNER JOIN (
+                SELECT discipline_id, MAX(created_at) as max_date
+                FROM sportabzeichen_training
+                WHERE user_id = :uid AND year = :year
+                GROUP BY discipline_id
+            ) latest ON t.discipline_id = latest.discipline_id AND t.created_at = latest.max_date
+            WHERE t.user_id = :uid
+            ]);
         
         $myTraining = [];
         foreach ($trainingData as $t) {

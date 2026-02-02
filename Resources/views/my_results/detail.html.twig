@@ -1,0 +1,114 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}{{ discipline.name }} - Training{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+
+    <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block">
+        <i class="fa fa-arrow-left"></i> Zurück zur Übersicht
+    </a>
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h2 mb-1">{{ discipline.name }}</h1>
+            <p class="text-muted">Einheit: {{ discipline.einheit }}</p>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-light text-dark border">Saison {{ year }}</span>
+        </div>
+    </div>
+
+    {# --- ANALYSE BOX --- #}
+    {% if analysis is not empty and analysis.next_goal_label is not null %}
+        <div class="alert alert-info border-info shadow-sm">
+            <div class="d-flex align-items-center">
+                <i class="fa fa-chart-line fa-2x me-3 text-info"></i>
+                <div>
+                    <h5 class="alert-heading h6 m-0">Nächstes Ziel: <strong>{{ analysis.next_goal_label }}</strong></h5>
+                    <p class="mb-0 small">
+                        Dir fehlen noch <strong>{{ analysis.gap|number_format(2, ',', '.') }} {{ analysis.unit }}</strong>.
+                        {% if analysis.less_is_better %}
+                            (Du musst schneller werden)
+                        {% else %}
+                            (Du musst dich steigern)
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    {% elseif analysis is not empty %}
+        <div class="alert alert-success shadow-sm">
+            <i class="fa fa-trophy me-2"></i> Wahnsinn! Du hast bereits <strong>Gold</strong> erreicht!
+        </div>
+    {% endif %}
+
+    <div class="row g-4">
+        
+        {# --- TEIL 1: NEUER EINTRAG --- #}
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-white fw-bold">Neuen Wert erfassen</div>
+                <div class="card-body">
+                    <form method="post">
+                        <div class="mb-3">
+                            <label class="form-label small text-muted">Leistung ({{ discipline.einheit }})</label>
+                            <input type="text" name="value" class="form-control form-control-lg" placeholder="z.B. 12,5" required autofocus>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fa fa-save me-2"></i> Speichern
+                        </button>
+                    </form>
+
+                    <hr class="my-4">
+                    
+                    <h6 class="small text-muted text-uppercase mb-3">Anforderungen</h6>
+                    <ul class="list-group list-group-flush small">
+                        <li class="list-group-item d-flex justify-content-between text-bronze">
+                            <span>Bronze</span> <strong>{{ discipline.bronze }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between text-secondary">
+                            <span>Silber</span> <strong>{{ discipline.silber }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between text-warning">
+                            <span>Gold</span> <strong>{{ discipline.gold }}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        {# --- TEIL 2: VERLAUF --- #}
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-white fw-bold">Verlauf</div>
+                <div class="list-group list-group-flush">
+                    {% for entry in history %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="h5 m-0 d-block">{{ entry.value }}</span>
+                                <small class="text-muted" style="font-size: 0.75rem;">
+                                    {{ entry.created_at|date('d.m.Y H:i') }} Uhr
+                                </small>
+                            </div>
+                            {% if loop.first %}
+                                <span class="badge bg-success">Aktuell</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-center text-muted py-4">
+                            Noch keine Einträge vorhanden.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .text-bronze { color: #cd7f32; }
+    .text-warning { color: #ffc107; text-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+</style>
+{% endblock %}
