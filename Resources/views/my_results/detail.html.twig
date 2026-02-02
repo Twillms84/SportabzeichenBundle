@@ -3,77 +3,105 @@
 {% block title %}{{ discipline.name }} - Training{% endblock %}
 
 {% block content %}
+
+{# --- MAPPING --- #}
+{% set unitMap = {
+    'UNIT_METERS': 'm', 'UNIT_CENTIMETERS': 'cm', 'UNIT_SECONDS': 'Sek.', 
+    'UNIT_MINUTES': 'Min.', 'UNIT_HOURS': 'Std.', 'UNIT_NUMBER': 'Anz.', 
+    'UNIT_PIECES': 'Wert', 'NONE': 'Verband', 'UNIT_NONE': 'Verband'
+} %}
+
+{# --- ZEIT ODER STRECKE? --- #}
+{% set is_time = discipline.einheit in ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
+{% set einheit_label = unitMap[discipline.einheit]|default(discipline.einheit) %}
+
 <div class="container py-4" style="max-width: 800px;">
 
-    <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block">
-        <i class="fa fa-arrow-left"></i> Zurück zur Übersicht
+    <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block text-muted">
+        <i class="fa fa-arrow-left me-1"></i> Zurück zur Übersicht
     </a>
 
     <div class="d-flex justify-content-between align-items-start mb-4">
         <div>
             <h1 class="h2 mb-1">{{ discipline.name }}</h1>
-            <p class="text-muted">Einheit: {{ discipline.einheit }}</p>
+            <span class="badge bg-secondary">{{ einheit_label }}</span>
         </div>
         <div class="text-end">
-            <span class="badge bg-light text-dark border">Saison {{ year }}</span>
+             <span class="badge bg-light text-dark border p-2">Saison {{ year }}</span>
         </div>
     </div>
 
     {# --- ANALYSE BOX --- #}
-    {% if analysis is not empty and analysis.next_goal_label is not null %}
-        <div class="alert alert-info border-info shadow-sm">
-            <div class="d-flex align-items-center">
+    {% if analysis is defined and analysis is not empty %}
+        {% if analysis.next_goal_label is not null %}
+            <div class="alert alert-info border-info shadow-sm d-flex align-items-center">
                 <i class="fa fa-chart-line fa-2x me-3 text-info"></i>
                 <div>
                     <h5 class="alert-heading h6 m-0">Nächstes Ziel: <strong>{{ analysis.next_goal_label }}</strong></h5>
-                    <p class="mb-0 small">
-                        Dir fehlen noch <strong>{{ analysis.gap|number_format(2, ',', '.') }} {{ analysis.unit }}</strong>.
-                        {% if analysis.less_is_better %}
-                            (Du musst schneller werden)
+                    <p class="mb-0 small mt-1">
+                        Dir fehlen noch <strong>
+                        {% if is_time %}
+                            {{ analysis.gap|number_format(2, '.', '')|replace({'.': ':'}) }}
                         {% else %}
-                            (Du musst dich steigern)
+                            {{ analysis.gap|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                        {% endif %}
+                        {{ einheit_label }}</strong>.
+                        {% if analysis.less_is_better %}
+                            <i class="fa fa-tachometer-alt ms-1"></i> Du musst schneller werden!
+                        {% else %}
+                            <i class="fa fa-arrow-up ms-1"></i> Du musst dich steigern!
                         {% endif %}
                     </p>
                 </div>
             </div>
-        </div>
-    {% elseif analysis is not empty %}
-        <div class="alert alert-success shadow-sm">
-            <i class="fa fa-trophy me-2"></i> Wahnsinn! Du hast bereits <strong>Gold</strong> erreicht!
-        </div>
+        {% else %}
+            <div class="alert alert-success shadow-sm d-flex align-items-center">
+                 <i class="fa fa-trophy fa-2x me-3 text-warning"></i>
+                 <div>
+                    <h5 class="m-0">Gold erreicht!</h5>
+                    <small>Du hast die Anforderungen für Gold erfüllt.</small>
+                 </div>
+            </div>
+        {% endif %}
     {% endif %}
 
     <div class="row g-4">
         
-        {# --- TEIL 1: NEUER EINTRAG --- #}
+        {# --- TEIL 1: EINGABE --- #}
         <div class="col-md-6">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header bg-white fw-bold">Neuen Wert erfassen</div>
+            <div class="card h-100 shadow-sm border-0 bg-light">
                 <div class="card-body">
+                    <h5 class="card-title mb-3">Neuen Wert erfassen</h5>
                     <form method="post">
-                        <div class="mb-3">
-                            <label class="form-label small text-muted">Leistung ({{ discipline.einheit }})</label>
-                            <input type="text" name="value" class="form-control form-control-lg" placeholder="z.B. 12,5" required autofocus>
+                        <label class="form-label small text-muted text-uppercase fw-bold">Deine Leistung</label>
+                        <div class="input-group input-group-lg mb-3">
+                            <input type="text" name="value" class="form-control" 
+                                   placeholder="{{ is_time ? 'z.B. 12:30' : 'z.B. 12,5' }}" required autofocus>
+                            <span class="input-group-text text-muted">{{ einheit_label }}</span>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
                             <i class="fa fa-save me-2"></i> Speichern
                         </button>
                     </form>
 
                     <hr class="my-4">
                     
-                    <h6 class="small text-muted text-uppercase mb-3">Anforderungen</h6>
-                    <ul class="list-group list-group-flush small">
-                        <li class="list-group-item d-flex justify-content-between text-bronze">
-                            <span>Bronze</span> <strong>{{ discipline.bronze }}</strong>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between text-secondary">
-                            <span>Silber</span> <strong>{{ discipline.silber }}</strong>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between text-warning">
-                            <span>Gold</span> <strong>{{ discipline.gold }}</strong>
-                        </li>
-                    </ul>
+                    <h6 class="small text-muted text-uppercase mb-3 fw-bold">Ziele</h6>
+                    <div class="d-flex justify-content-between text-center">
+                        {# MACRO ODER INLINE FÜR ZIEL-FORMATIERUNG #}
+                        {% for stufe, val in {'Bronze': discipline.bronze, 'Silber': discipline.silber, 'Gold': discipline.gold} %}
+                            <div>
+                                <div class="small text-muted mb-1">{{ stufe }}</div>
+                                <div class="fw-bold {{ stufe == 'Bronze' ? 'text-bronze' : (stufe == 'Silber' ? 'text-secondary' : 'text-warning') }}">
+                                    {% if is_time %}
+                                        {{ val|number_format(2, '.', '')|replace({'.': ':'}) }}
+                                    {% else %}
+                                        {{ val|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -81,23 +109,39 @@
         {# --- TEIL 2: VERLAUF --- #}
         <div class="col-md-6">
             <div class="card h-100 shadow-sm">
-                <div class="card-header bg-white fw-bold">Verlauf</div>
+                <div class="card-header bg-white fw-bold border-bottom">Verlauf</div>
                 <div class="list-group list-group-flush">
                     {% for entry in history %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="list-group-item d-flex justify-content-between align-items-center {{ loop.first ? 'bg-light-success' : '' }}">
                             <div>
-                                <span class="h5 m-0 d-block">{{ entry.value }}</span>
-                                <small class="text-muted" style="font-size: 0.75rem;">
-                                    {{ entry.created_at|date('d.m.Y H:i') }} Uhr
-                                </small>
+                                {# Werte aus DB formatieren #}
+                                {% if entry.value matches '/^\\d+(\\.\\d+)?$/' %}
+                                    {% if is_time %}
+                                        {# Zeit: Punkt zu Doppelpunkt #}
+                                        <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|replace({'.': ':'}) }}</span>
+                                    {% else %}
+                                        {# Strecke: Deutsches Format #}
+                                        <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="h5 m-0 font-monospace fw-bold">{{ entry.value }}</span>
+                                {% endif %}
+                                <span class="small text-muted ms-1">{{ einheit_label }}</span>
                             </div>
-                            {% if loop.first %}
-                                <span class="badge bg-success">Aktuell</span>
-                            {% endif %}
+                            
+                            <div class="text-end">
+                                <div class="small text-muted">
+                                    <i class="fa fa-calendar-alt me-1"></i>{{ entry.created_at|date('d.m.Y') }}
+                                </div>
+                                <div class="small text-muted" style="font-size: 0.7rem;">
+                                    {{ entry.created_at|date('H:i') }} Uhr
+                                </div>
+                            </div>
                         </div>
                     {% else %}
-                        <div class="list-group-item text-center text-muted py-4">
-                            Noch keine Einträge vorhanden.
+                        <div class="text-center p-5 text-muted">
+                            <i class="fa fa-clipboard-list fa-2x mb-3 text-light-gray"></i><br>
+                            Noch keine Trainingsdaten.<br>Leg los!
                         </div>
                     {% endfor %}
                 </div>
@@ -109,6 +153,8 @@
 
 <style>
     .text-bronze { color: #cd7f32; }
-    .text-warning { color: #ffc107; text-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+    .text-warning { color: #ffc107; text-shadow: 0 1px 0 rgba(0,0,0,0.1); }
+    .bg-light-success { background-color: #f0fdf4; }
+    .text-light-gray { color: #e0e0e0; }
 </style>
 {% endblock %}
