@@ -2,10 +2,9 @@
 
 {% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
 
-{# CSS einbinden #}
 {% block stylesheets %}
     {{ parent() }}
-    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+        <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
 {% block content %}
@@ -18,8 +17,10 @@
 } %}
 {% set time_units = ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
 {% set cat_icons = {
-    'Ausdauer': 'fa-heartbeat', 'Kraft': 'fa-dumbbell',
-    'Schnelligkeit': 'fa-running', 'Koordination': 'fa-balance-scale'
+    'Ausdauer': 'glyphicon-road',
+    'Kraft': 'glyphicon-fire',
+    'Schnelligkeit': 'glyphicon-flash',
+    'Koordination': 'glyphicon-random'
 } %}
 
 <div class="container py-4">
@@ -39,13 +40,12 @@
     {% for catName, disciplines in categories %}
         {% if disciplines is not empty %}
         
-        {# CSS-Klasse dynamisch wählen #}
-        {% set colorName = cycle(['primary', 'success', 'warning', 'info'], loop.index0) %}
+        {% set colorClass = cycle(['primary', 'success', 'warning', 'info'], loop.index0) %}
         
-        <div class="card shadow-sm mb-4 sa-border-{{ colorName }}">
+        <div class="card shadow-sm mb-4 sa-border-{{ colorClass }}">
             <div class="card-header bg-white py-3 d-flex align-items-center">
-                <i class="fa {{ cat_icons[catName]|default('fa-list') }} text-{{ colorName }} me-2"></i>
-                <h5 class="m-0 font-weight-bold text-dark">{{ catName }}</h5>
+                <span class="glyphicon {{ cat_icons[catName]|default('glyphicon-list') }} text-{{ colorClass }} me-2" aria-hidden="true"></span>
+                <h5 class="m-0 font-weight-bold text-dark" style="display:inline-block; margin-left: 10px;">{{ catName }}</h5>
             </div>
             
             <div class="table-responsive">
@@ -56,6 +56,8 @@
                             <th class="text-center sa-col-medal sa-text-bronze">Bronze</th>
                             <th class="text-center sa-col-medal sa-text-silver">Silber</th>
                             <th class="text-center sa-col-medal sa-text-gold">Gold</th>
+                            {# NEUE SPALTE #}
+                            <th class="text-center sa-col-official text-dark">Ergebnis</th>
                             <th class="ps-4 sa-col-training">Mein Training</th>
                         </tr>
                     </thead>
@@ -70,6 +72,7 @@
                                     <span class="badge bg-light text-muted border">{{ einheit_label }}</span>
                                 </td>
                                 
+                                {# --- ANFORDERUNGEN --- #}
                                 {% if is_time %}
                                     <td class="text-center small font-monospace">{{ row.bronze|number_format(2, '.', '')|replace({'.': ':'}) }}</td>
                                     <td class="text-center small font-monospace">{{ row.silber|number_format(2, '.', '')|replace({'.': ':'}) }}</td>
@@ -79,6 +82,33 @@
                                     <td class="text-center small font-monospace">{{ row.silber|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</td>
                                     <td class="text-center small font-monospace">{{ row.gold|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</td>
                                 {% endif %}
+
+                                {# --- OFFIZIELLES ERGEBNIS (Wiedereingefügt) --- #}
+                                <td class="text-center">
+                                    {% if row.official_result %}
+                                        {# Formatierung des Wertes #}
+                                        <div class="fw-bold font-monospace">
+                                            {% if is_time %}
+                                                {{ row.official_result.leistung|number_format(2, '.', '')|replace({'.': ':'}) }}
+                                            {% else %}
+                                                {{ row.official_result.leistung|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                                            {% endif %}
+                                        </div>
+                                        
+                                        {# Punkte Anzeige #}
+                                        {% if row.official_result.points == 3 %}
+                                            <span class="label label-warning" title="Gold">Gold</span>
+                                        {% elseif row.official_result.points == 2 %}
+                                            <span class="label label-default" title="Silber">Silber</span>
+                                        {% elseif row.official_result.points == 1 %}
+                                            <span class="label label-warning" style="background-color: #cd7f32;" title="Bronze">Bronze</span>
+                                        {% else %}
+                                            <span class="label label-danger">0 Pkt</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted small">-</span>
+                                    {% endif %}
+                                </td>
 
                                 <td class="ps-4">
                                     <a href="{{ path('pulsr_sportabzeichen_training_detail', { disciplineId: row.discipline_id }) }}" 
@@ -96,10 +126,10 @@
                                                 {% endif %}
                                                 <small>{{ einheit_label }}</small>
                                             {% else %}
-                                                <span class="small text-muted fst-italic">Eintragen...</span>
+                                                <span class="small text-muted fst-italic">Training...</span>
                                             {% endif %}
                                         </span>
-                                        <i class="fa fa-chevron-right small text-muted"></i>
+                                        <span class="glyphicon glyphicon-chevron-right small text-muted" aria-hidden="true"></span>
                                     </a>
                                 </td>
                             </tr>
