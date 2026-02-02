@@ -152,7 +152,7 @@ class MyResultsController extends AbstractController
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex 
               AND :age BETWEEN r.age_min AND r.age_max
-              AND d.einheit != 'UNIT_NONE'
+              AND d.einheit != 'NONE'
               AND r.jahr = :year  -- <--- NEU: Nur das aktuelle Jahr laden!
             ORDER BY d.kategorie ASC, r.auswahlnummer ASC, d.name ASC
         ";
@@ -162,7 +162,7 @@ class MyResultsController extends AbstractController
             'age'  => $age,
             'year' => $currentYear // <--- NEU: Parameter übergeben
         ]);
-        
+
         // --- 5. ZUSAMMENBAU ---
         $categories = ['Ausdauer' => [], 'Kraft' => [], 'Schnelligkeit' => [], 'Koordination' => []];
         $addedDisciplines = [];
