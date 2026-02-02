@@ -1,11 +1,10 @@
-
 {% extends '@IServCore/page.html.twig' %}
 
 {% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
-        <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
 {% block content %}
@@ -17,8 +16,9 @@
 } %}
 {% set time_units = ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
 
+{# Icon Änderung: time statt heart (sicherer in Bootstrap 3) #}
 {% set cat_icons = {
-    'Ausdauer': 'glyphicon-heart',
+    'Ausdauer': 'glyphicon-time',
     'Kraft': 'glyphicon-fire',
     'Schnelligkeit': 'glyphicon-flash',
     'Koordination': 'glyphicon-random'
@@ -50,7 +50,7 @@
             </div>
             
             <div class="table-responsive">
-                {# HIER: Klasse sa-table-fixed hinzugefügt #}
+                {# CSS Klasse sa-table-fixed sorgt für Desktop Layout & Mobile Switch #}
                 <table class="table table-hover mb-0 align-middle sa-table-fixed">
                     <thead class="bg-light text-muted small text-uppercase">
                         <tr>
@@ -121,7 +121,7 @@
                                     {% endif %}
                                 </td>
 
-                                {# Training Button - auf Mobile ganze Breite #}
+                                {# Training Button #}
                                 <td class="ps-4 sa-mobile-action">
                                     <a href="{{ path('pulsr_sportabzeichen_training_detail', { disciplineId: row.discipline_id }) }}" 
                                        class="btn btn-outline-primary btn-sm w-100 d-flex justify-content-between align-items-center sa-btn-hover">
