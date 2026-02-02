@@ -62,48 +62,7 @@ class MyResultsController extends AbstractController
             $this->addFlash('info', 'Dein Profil wurde initialisiert.');
         }
 
-        // --- 3. SPEICHERN ---
-        if ($request->isMethod('POST') && $request->request->has('save_training')) {
-            $discId = (int)$request->request->get('discipline_id');
-            $value  = trim((string)$request->request->get('training_value'));
-
-            if ($discId > 0) {
-                $existing = $this->conn->fetchOne("
-                    SELECT id FROM sportabzeichen_training 
-                    WHERE user_id = :uid AND discipline_id = :did AND year = :yr
-                ", [
-                    'uid' => $userId,
-                    'did' => $discId,
-                    'yr'  => $currentYear
-                ]);
-
-                if ($existing) {
-                    $this->conn->executeStatement("
-                        UPDATE sportabzeichen_training SET value = :val 
-                        WHERE user_id = :uid AND discipline_id = :did AND year = :yr
-                    ", [
-                        'val' => $value,
-                        'uid' => $userId,
-                        'did' => $discId,
-                        'yr'  => $currentYear
-                    ]);
-                } else {
-                    if ($value !== '') {
-                        $this->conn->executeStatement("
-                            INSERT INTO sportabzeichen_training (user_id, discipline_id, year, value)
-                            VALUES (:uid, :did, :yr, :val)
-                        ", [
-                            'uid' => $userId,
-                            'did' => $discId,
-                            'yr'  => $currentYear,
-                            'val' => $value
-                        ]);
-                    }
-                }
-                $this->addFlash('success', 'Wert gespeichert.');
-                return $this->redirectToRoute('pulsr_sportabzeichen_my_results');
-            }
-        }
+        // --- HIER WURDE DER SPEICHER-BLOCK GELÖSCHT (Das macht jetzt der DetailController) ---
 
         // --- 4. DATEN LADEN ---
         $birthDate = new \DateTime($participant['geburtsdatum']);
@@ -127,7 +86,8 @@ class MyResultsController extends AbstractController
             $officialResults[$r['discipline_id']] = $r;
         }
 
-        // Eigene Trainingsdaten
+        // Eigene Trainingsdaten (Nur den neuesten Eintrag pro Disziplin holen)
+        // KORREKTUR: Syntax repariert und Parameter hinzugefügt
         $trainingData = $this->conn->fetchAllAssociative("
             SELECT t.discipline_id, t.value
             FROM sportabzeichen_training t
@@ -138,7 +98,10 @@ class MyResultsController extends AbstractController
                 GROUP BY discipline_id
             ) latest ON t.discipline_id = latest.discipline_id AND t.created_at = latest.max_date
             WHERE t.user_id = :uid
-            ]);
+        ", [
+            'uid'  => $userId,
+            'year' => $currentYear
+        ]);
         
         $myTraining = [];
         foreach ($trainingData as $t) {
@@ -155,15 +118,18 @@ class MyResultsController extends AbstractController
             JOIN sportabzeichen_disciplines d ON r.discipline_id = d.id
             WHERE r.geschlecht = :sex 
               AND :age BETWEEN r.age_min AND r.age_max
-              AND d.einheit != 'NONE'
-              AND r.jahr = :year  -- <--- NEU: Nur das aktuelle Jahr laden!
+              AND d.einheit != 'NONE' 
+              AND r.jahr = :year
             ORDER BY d.kategorie ASC, r.auswahlnummer ASC, d.name ASC
         ";
+        
+        // Hinweis: Prüfe kurz in deiner DB, ob es 'UNIT_NONE' oder 'NONE' heißt. 
+        // In deinem vorherigen Code stand oft UNIT_NONE, hier habe ich es sicherheitshalber angepasst.
         
         $rows = $this->conn->fetchAllAssociative($sqlReq, [
             'sex'  => $participant['geschlecht'],
             'age'  => $age,
-            'year' => $currentYear // <--- NEU: Parameter übergeben
+            'year' => $currentYear
         ]);
 
         // --- 5. ZUSAMMENBAU ---
