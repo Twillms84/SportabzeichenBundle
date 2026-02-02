@@ -1,55 +1,114 @@
 /* Resources/public/css/sportabzeichen.css */
 
-/* --- Farben für Medaillen --- */
-.sa-text-bronze {
-    color: #cd7f32 !important;
-    font-weight: bold;
+/* --- Farben & Labels --- */
+.sa-text-bronze { color: #cd7f32 !important; font-weight: bold; }
+.sa-text-silver { color: #777 !important; font-weight: bold; }
+.sa-text-gold   { color: #ffc107 !important; text-shadow: 0 1px 0 rgba(0,0,0,0.1); font-weight: bold; }
+
+/* Custom Labels für Medaillen im Ergebnis */
+.label-bronze { background-color: #cd7f32; color: white; }
+.label-silver { background-color: #777; color: white; }
+.label-gold   { background-color: #f0ad4e; color: white; }
+
+/* --- Tabellen-Layout Desktop (Fixed) --- */
+.sa-table-fixed {
+    table-layout: fixed; /* Zwingt die Spalten in die definierte Breite */
+    width: 100%;
 }
 
-.sa-text-silver {
-    color: #6c757d !important; /* Standard Bootstrap Secondary, aber explizit */
-    font-weight: bold;
+/* Textumbruch in Zellen erzwingen */
+.sa-table-fixed td {
+    word-wrap: break-word;
+    white-space: normal;
+    vertical-align: middle !important; /* Vertikal zentrieren */
 }
 
-.sa-text-gold {
-    color: #ffc107 !important;
-    text-shadow: 0 1px 0 rgba(0,0,0,0.1);
-    font-weight: bold;
-}
+/* Spaltenbreiten (Summe ca. 100%) */
+.sa-col-discipline { width: 22%; }
+.sa-col-medal      { width: 9%; }
+.sa-col-official   { width: 14%; }
+.sa-col-training   { width: 37%; }
 
-/* --- Farbige Ränder für Kategorien (Übersicht) --- */
+/* Borders für Kategorien */
 .sa-border-primary { border-left: 4px solid #0d6efd; }
 .sa-border-success { border-left: 4px solid #198754; }
 .sa-border-warning { border-left: 4px solid #ffc107; }
 .sa-border-info    { border-left: 4px solid #0dcaf0; }
 
-/* --- Tabellen-Layout (Übersicht) --- */
-.sa-col-discipline { width: 30%; }
-.sa-col-medal      { width: 10%; }
-.sa-col-training   { width: 40%; }
-
-/* --- Hover-Effekt für den Button --- */
-.sa-btn-hover:hover .fa-chevron-right {
+/* Hover Effekte */
+.sa-btn-hover:hover .glyphicon-chevron-right {
     transform: translateX(3px);
     transition: transform 0.2s ease-in-out;
 }
 
-/* --- Detailseite Layout --- */
-.sa-container-narrow {
-    max-width: 800px;
-}
+/* --- MOBILE ZAUBEREI (Responsive Card View) --- */
+@media screen and (max-width: 767px) {
+    /* Header ausblenden */
+    .sa-table-fixed thead {
+        display: none;
+    }
 
-/* --- Hintergrund für den neuesten Eintrag --- */
-.sa-bg-newest {
-    background-color: #f0fdf4; /* Sehr helles Grün */
-}
+    /* Zeile wird zur Karte */
+    .sa-table-fixed tr {
+        display: block;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
 
-/* --- Platzhalter-Icon Farbe --- */
-.sa-icon-placeholder {
-    color: #e0e0e0;
-}
+    /* Zellen werden zu Zeilen innerhalb der Karte */
+    .sa-table-fixed td {
+        display: block;
+        text-align: right; /* Werte rechtsbündig */
+        border-bottom: 1px solid #eee;
+        position: relative;
+        padding-left: 50% !important; /* Platz für das Label links */
+        min-height: 40px; /* Mindesthöhe für Touch */
+        width: 100% !important; /* Breite zurücksetzen */
+    }
 
-/* --- Sehr kleiner Text (Zeitstempel) --- */
-.sa-text-xs {
-    font-size: 0.75rem;
+    .sa-table-fixed td:last-child {
+        border-bottom: 0;
+    }
+
+    /* Das Label (z.B. "Bronze") via CSS davor kleben */
+    .sa-table-fixed td::before {
+        content: attr(data-label); /* Holt den Text aus dem HTML-Attribut */
+        position: absolute;
+        left: 15px;
+        width: 45%;
+        text-align: left;
+        font-weight: bold;
+        color: #777;
+        text-transform: uppercase;
+        font-size: 0.85em;
+        top: 8px; /* Vertikale Ausrichtung */
+    }
+
+    /* Spezielle Behandlung für Disziplin-Name (ganz oben, fett) */
+    .sa-table-fixed td.sa-mobile-header {
+        background-color: #f9f9f9;
+        text-align: left;
+        padding-left: 15px !important;
+        font-weight: bold;
+        color: #333;
+        font-size: 1.1em;
+    }
+    .sa-table-fixed td.sa-mobile-header::before {
+        content: ""; /* Kein Label für den Titel */
+    }
+    
+    /* Button volle Breite */
+    .sa-table-fixed td.sa-mobile-action {
+        padding-left: 15px !important;
+        text-align: center;
+        background-color: #fff;
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+    .sa-table-fixed td.sa-mobile-action::before {
+        display: none;
+    }
 }
