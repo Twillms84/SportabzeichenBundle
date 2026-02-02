@@ -1,6 +1,6 @@
 --
 -- Sportabzeichen Modul – Datenbankschema
--- Version 2.5.0 (DOSB + Exam Groups + Training)
+-- Version 2.6.0 (DOSB + Exam Groups + Training History)
 --
 
 ------------------------------------------------------------
@@ -124,20 +124,22 @@ CREATE INDEX IF NOT EXISTS idx_results_ep ON sportabzeichen_exam_results(ep_id);
 
 
 ------------------------------------------------------------
--- 6. Trainingstagebuch (NEU)
+-- 6. Trainingstagebuch (Historisiert)
 ------------------------------------------------------------
--- Hier speichern Schüler ihre eigenen Übungswerte
+-- Hier speichern Schüler ihre eigenen Übungswerte (mehrfach pro Jahr möglich)
 CREATE TABLE IF NOT EXISTS sportabzeichen_training (
     id              SERIAL PRIMARY KEY,
     user_id         INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     discipline_id   INT NOT NULL REFERENCES sportabzeichen_disciplines(id) ON DELETE CASCADE,
     year            INT NOT NULL,
     value           VARCHAR(255), -- Textfeld für Zeit/Weite (z.B. "12:30" oder "5.20")
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uniq_user_discipline_year UNIQUE (user_id, discipline_id, year)
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
--- Index für schnellen Zugriff beim Laden der "My Results" Seite
+
+-- Index für schnellen Zugriff (Alle Einträge eines Users pro Jahr)
 CREATE INDEX IF NOT EXISTS idx_training_lookup ON sportabzeichen_training(user_id, year);
+-- Index für korrekte Sortierung nach Zeit
+CREATE INDEX IF NOT EXISTS idx_training_created ON sportabzeichen_training(created_at);
 
 
 ------------------------------------------------------------
