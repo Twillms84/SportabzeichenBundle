@@ -4,7 +4,7 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    <link rel="stylesheet" href="{{ asset('pulsrsportabzeichen/css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/dashboard_css.css, 'pulsr-sportabzeichen') }}">
 {% endblock %}
 
 {% block content %}
@@ -160,5 +160,5 @@
 {% block javascripts %}
     {{ parent() }}
     {# Lädt nur noch die Logik für das Dashboard (Delete-Handler) #}
-    <script src="{{ asset('pulsrsportabzeichen/js/dashboard.js') }}"></script>
+    <script src="{{ asset('js/exam_dashboard.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
