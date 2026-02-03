@@ -19,44 +19,47 @@ final class MenuListener implements MainMenuListenerInterface
         $menu = $event->getMenu();
 
         /* ----------------------------------------------------------
-         * SCHÜLER: Mein Sportabzeichen
+         * SCHÜLER: Mein Sportabzeichen (GOLDIG)
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_VIEW_OWN')) {
             $menu->addChild('sportabzeichen_my_results', [
                 'route' => 'pulsr_sportabzeichen_my_results',
                 'label' => _('Mein Sportabzeichen'),
                 'extras' => [
-                    'icon' => 'medal', // Sieht in "Light" sehr edel aus
-                    'icon_style' => 'fa', // WICHTIG: 'fa' statt 'fas' (Classic Light)
+                    'icon' => 'medal',
+                    // 'text-warning' macht es gelb/gold
+                    'icon_style' => 'fa text-warning', 
                     'weight' => 10,
                 ],
             ]);
         }
 
         /* ----------------------------------------------------------
-         * LEHRER: Ergebnisse erfassen
+         * LEHRER: Ergebnisse (IServ-Blau)
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
             $menu->addChild('sportabzeichen_exams', [
                 'route' => 'sportabzeichen_exams_dashboard',
                 'label' => _('SPA-Ergebnisse'),
                 'extras' => [
-                    'icon' => 'stopwatch', // Passt perfekt zum Sportplatz
-                    'icon_style' => 'fa',
+                    'icon' => 'stopwatch',
+                    // 'text-primary' ist das IServ-Blau (Dunkelblau)
+                    'icon_style' => 'fa text-primary', 
                 ],
             ]);
         }
 
         /* ----------------------------------------------------------
-         * ADMIN: Verwaltung
+         * ADMIN: Verwaltung (Neutral / Grau)
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_ADMIN')) {
             $menu->addChild('sportabzeichen_admin', [
                 'route' => 'sportabzeichen_admin_dashboard',
                 'label' => _('SPA–Verwaltung'),
                 'extras' => [
-                    'icon' => 'gears', // 'gears' ist in Light immer sicher
-                    'icon_style' => 'fa',
+                    'icon' => 'gears',
+                    // Grau lassen oder 'text-muted' für Dezenz
+                    'icon_style' => 'fa', 
                 ],
             ]);
         }
