@@ -4,7 +4,7 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    <link rel="stylesheet" href="{{ asset('pulsrsportabzeichen/css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/dashboard.css', 'pulsr-sportabzeichen') }}">
     <style>
         /* Kleiner Hotfix, falls die Icons zicken */
         .btn .icon { margin-right: 4px; }
@@ -133,10 +133,8 @@
 
 {% block javascripts %}
     {{ parent() }}
-    
     {# 1. Lokale Chart.js Bibliothek laden (CSP compliant) #}
-    <script src="{{ asset('pulsrsportabzeichen/js/chart.min.js') }}"></script>
-    
+    <script src="{{ asset('js/chart.min.js', 'pulsr-sportabzeichen') }}"></script>
     {# 2. Dein Logik-Skript laden #}
-    <script src="{{ asset('pulsrsportabzeichen/js/dashboard.js') }}"></script>
+    <script src="{{ asset('js/dashboard.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
