@@ -1,62 +1,34 @@
-document.addEventListener('DOMContentLoaded', function () {
-    // 1. Daten Store suchen
-    const store = document.getElementById('dashboard-data-store');
+// assets/js/dashboard.js
+
+document.addEventListener('DOMContentLoaded', function() {
     
-    // Wenn kein Store da ist, brich ab (verhindert Fehler auf anderen Seiten)
-    if (!store) return;
+    // Alle Löschen-Buttons suchen (erkennbar an der Klasse .btn-delete-exam)
+    const deleteButtons = document.querySelectorAll('.btn-delete-exam');
 
-    // 2. Daten parsen
-    let allStats = {};
-    try {
-        allStats = JSON.parse(store.dataset.stats);
-    } catch (e) {
-        console.error("Fehler beim Lesen der Statistik-Daten:", e);
-        return;
-    }
+    deleteButtons.forEach(function(button) {
+        button.addEventListener('click', function(event) {
+            // Standard-Verhalten (Formular absenden) verhindern
+            event.preventDefault();
 
-    // 3. Charts erstellen
-    for (const [year, data] of Object.entries(allStats)) {
-        const ctx = document.getElementById('chart-' + year);
-        
-        if (ctx) {
-            // "Ohne Medaille" berechnen (verhindert negative Zahlen)
-            const totalParticipants = Object.keys(data.unique_users).length;
-            const noMedal = Math.max(0, totalParticipants - data.stats.Total);
+            // Daten aus den Data-Attributen lesen
+            const examName = button.dataset.name;
+            const formId = button.dataset.formId;
 
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Gold', 'Silber', 'Bronze', 'Teilgenommen (ohne)'],
-                    datasets: [{
-                        data: [
-                            data.stats.Gold, 
-                            data.stats.Silber, 
-                            data.stats.Bronze, 
-                            noMedal
-                        ],
-                        backgroundColor: [
-                            '#FFD700', // Gold
-                            '#C0C0C0', // Silber
-                            '#CD7F32', // Bronze
-                            '#e9ecef'  // Grau (Rest)
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right', // Legende rechts ist oft platzsparender
-                            labels: {
-                                boxWidth: 12,
-                                font: { size: 11 }
-                            }
-                        }
-                    }
+            // Die deutliche Sicherheitsabfrage
+            const message = 
+                `ACHTUNG: Möchten Sie die Prüfung "${examName}" wirklich löschen?\n\n` +
+                `Das löscht auch ALLE bisher eingegebenen Ergebnisse und Teilnehmerdaten dieser Prüfung.\n` +
+                `Dieser Schritt kann nicht rückgängig gemacht werden!`;
+
+            if (confirm(message)) {
+                // Wenn bestätigt, das versteckte Formular suchen und absenden
+                const form = document.getElementById(formId);
+                if (form) {
+                    form.submit();
+                } else {
+                    console.error('Lösch-Formular nicht gefunden: ' + formId);
                 }
-            });
-        }
-    }
+            }
+        });
+    });
 });
