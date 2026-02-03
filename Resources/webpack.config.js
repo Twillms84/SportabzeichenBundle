@@ -6,7 +6,7 @@ module.exports = {
     mode: 'production',
     entry: {
         'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
-        'js/dashboard_js': './assets/js/dashboard.js',
+        'js/exam_dashboard': './assets/js/exam_dashboard.js',
         'js/admin_participants': './assets/js/admin_participants.js',
         'css/sportabzeichen_results': './assets/css/results.css',
         'css/dashboard_css': './assets/css/dashboard.css',
