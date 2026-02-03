@@ -23,25 +23,28 @@ final class MenuListener implements MainMenuListenerInterface
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_VIEW_OWN')) {
             $menu->addChild('sportabzeichen_my_results', [
-                'route' => 'pulsr_sportabzeichen_my_results', // Die Route müssen wir gleich noch erstellen
+                'route' => 'pulsr_sportabzeichen_my_results',
                 'label' => _('Mein Sportabzeichen'),
                 'extras' => [
-                    'icon' => 'user-graduate', // Passendes Icon für Schüler/Absolvent
+                    // 'medal' ist perfekt für das Ziel (Gold/Silber/Bronze)
+                    'icon' => 'medal', 
                     'icon_style' => 'fas',
-                    'weight' => 10, // Damit es im Menü oben steht (optional)
+                    'weight' => 10,
                 ],
             ]);
         }
 
         /* ----------------------------------------------------------
-         * Ergebnisse eintragen
+         * Ergebnisse eintragen (LEHRER)
          * ---------------------------------------------------------- */
         if ($this->auth->isGranted('PRIV_SPORTABZEICHEN_RESULTS')) {
             $menu->addChild('sportabzeichen_exams', [
                 'route' => 'sportabzeichen_exams_dashboard',
                 'label' => _('SPA-Ergebnisse'),
                 'extras' => [
-                    'icon' => 'table',
+                    // 'stopwatch' wirkt sportlicher als eine Tabelle
+                    // Alternativ: 'clipboard-list' (für das Klemmbrett-Feeling)
+                    'icon' => 'stopwatch', 
                     'icon_style' => 'fas',
                 ],
             ]);
@@ -55,7 +58,9 @@ final class MenuListener implements MainMenuListenerInterface
                 'route' => 'sportabzeichen_admin_dashboard',
                 'label' => _('SPA–Verwaltung'),
                 'extras' => [
-                    'icon' => 'cog',
+                    // 'sliders' sieht oft moderner aus als 'cog'
+                    // Alternativ: 'toolbox'
+                    'icon' => 'sliders', 
                     'icon_style' => 'fas',
                 ],
             ]);
