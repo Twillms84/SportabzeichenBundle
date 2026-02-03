@@ -1,0 +1,363 @@
+/* =========================================
+   1. TABELLEN-GRUNDGERÜST & HEADER
+   ========================================= */
+.table-results-compact {
+    table-layout: fixed !important;
+    width: 100% !important;
+    font-size: 1.05rem !important;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    background-color: #f8f9fa;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Begrenzung der Breite, damit es nicht den ganzen Bildschirm füllt */
+.view-selector-wrapper {
+    width: 100%;
+    max-width: 500px; /* Optional: Maximale Breite wie bei deinem Formular */
+}
+
+/* =========================================
+   2. SPALTEN-DEFINITIONEN (Ersetzt Inline-Styles)
+   ========================================= */
+/* Die erste Spalte (Name) muss sticky sein */
+.col-sticky-left {
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 5 !important; /* Höher als der Rest der Zeile */
+    background-color: #fff; /* Damit man den Scroll-Inhalt nicht drunter sieht */
+    border-right: 1px solid #dee2e6;
+}
+
+/* Im Header muss der z-index noch höher sein */
+thead .col-sticky-left {
+    z-index: 1030 !important;
+    background-color: #f8f9fa;
+}
+
+.col-name {
+    width: 220px;
+    min-width: 220px;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle !important;
+}
+
+/* Schwimmen Spalte */
+.col-swimming {
+    min-width: 140px;
+    width: 140px;
+    vertical-align: middle !important;
+}
+
+/* Disziplin Spalten */
+.col-discipline {
+    min-width: 160px;
+    width: 160px;
+    vertical-align: top;
+    transition: opacity 0.2s ease;
+}
+
+/* Ausblenden für Filter */
+.col-hidden {
+    display: none !important;
+}
+
+/* =========================================
+   3. MEDAILLEN & INPUTS (KORRIGIERTE LOGIK)
+   ========================================= */
+
+/* --- A. STANDARD-DESIGN (Wenn noch keine Medaille da ist) --- */
+/* Das ist der "Normalzustand" - Weiß im Hellen, Dunkel im Dark Mode */
+
+.discipline-selector, 
+.form-control-custom,
+.swimming-select-compact {
+    background-color: #fff !important;
+    color: #212529 !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px !important;
+    font-weight: normal !important;
+    transition: all 0.2s ease-in-out;
+}
+
+/* --- B. MEDAILLEN-FARBEN (Überschreibt Standard) --- */
+
+/* GOLD */
+.medal-gold, input.medal-gold, select.medal-gold { 
+    background-color: #ffdc2e !important; 
+    color: #4a3b00 !important; 
+    border: 1px solid #cca300 !important; 
+    font-weight: 700 !important; 
+}
+
+/* SILBER */
+.medal-silber, .medal-silver, input.medal-silber, select.medal-silber { 
+    background-color: #e9ecef !important; 
+    color: #495057 !important; 
+    border: 1px solid #adb5bd !important; 
+    font-weight: 700 !important; 
+}
+
+/* BRONZE */
+.medal-bronze, input.medal-bronze, select.medal-bronze { 
+    background-color: #d98a4e !important; 
+    color: #fff !important; 
+    border: 1px solid #a65e26 !important; 
+    font-weight: 700 !important; 
+}
+
+/* --- C. INPUT FELDER FEINJUSTIERUNG --- */
+.form-control-custom {
+    font-size: 1.0rem !important; 
+    padding: 4px 2px !important; 
+    height: auto !important; 
+    width: 100% !important; 
+    text-align: center !important;
+}
+
+/* =========================================
+   4. SCHWIMM-BEREICH (SCHMALER & KOMPAKT)
+   ========================================= */
+
+.col-swimming {
+    width: 130px !important;      
+    min-width: 130px !important;
+    max-width: 130px !important;
+    vertical-align: middle !important;
+    padding: 4px !important;
+}
+
+/* Der Wrapper für den Inhalt */
+.swimming-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column !important; 
+    align-items: center;
+    justify-content: center;
+    gap: 2px; 
+}
+
+/* A) Das Dropdown (bleibt gleich) */
+.swimming-select-compact {
+    width: 100% !important;
+    font-size: 0.8rem !important;
+    padding: 2px 4px !important;
+    text-align: center;
+    border-radius: 4px !important;
+    cursor: pointer;
+}
+
+/* B) Das "Bestanden"-Badge Container */
+.swim-badge-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    
+    /* ÄNDERUNG: Transparent & Rand weg */
+    background-color: transparent !important;
+    border: none !important;
+    
+    /* Farbe: Ein schönes Grün für den Text/Haken */
+    color: #198754; 
+    padding: 2px;
+}
+
+/* Text im Badge */
+.swim-info-text {
+    /* ÄNDERUNG: Deutlich größer */
+    font-size: 0.95rem !important; 
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal; 
+}
+
+/* Löschen Button (Mülleimer) */
+.btn-delete-swimming {
+    width: 100%;
+    margin-top: 2px;
+    border: none;
+    background: transparent;
+    
+    /* ÄNDERUNG: Border-Top entfernt (sieht ohne Box besser aus) */
+    border-top: none !important;
+    
+    /* ÄNDERUNG: Icon kleiner gemacht */
+    font-size: 0.8rem !important; 
+    
+    color: #dc3545;
+    opacity: 0.5; /* Dezenter Standardzustand */
+    padding: 0;   /* Padding reduziert */
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-delete-swimming:hover {
+    /* Kein Background mehr, nur volle Deckkraft */
+    background-color: transparent; 
+    opacity: 1;
+}
+/* =========================================
+   5. NAMEN & HINTERGRÜNDE (FINAL RESULT)
+   ========================================= */
+
+.col-name {
+    vertical-align: middle !important;
+    position: relative;
+    background-color: #fff; /* Wichtig für Sticky */
+}
+
+.name-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.2;
+}
+.name-main { font-size: 1.3rem; font-weight: 700; color: #212529; }
+.name-age { font-size: 1.0rem; color: #6c757d; }
+
+/* Transparente Hintergründe für den Namen */
+.bg-gold-transparent {
+    background-color: rgba(255, 220, 46, 0.25) !important;
+    border-left: 4px solid #ffdc2e !important;
+}
+.bg-silver-transparent {
+    background-color: rgba(233, 236, 239, 0.4) !important;
+    border-left: 4px solid #adb5bd !important;
+}
+.bg-bronze-transparent {
+    background-color: rgba(217, 138, 78, 0.2) !important;
+    border-left: 4px solid #d98a4e !important;
+}
+
+
+/* =========================================
+   6. UI HELFER (Badges & Anforderungen)
+   ========================================= */
+
+.result-badge-box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    padding: 6px 0;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    line-height: 1.1;
+    font-size: 1.2rem; 
+}
+
+.badge-label-small { 
+    font-size: 0.75rem; 
+    text-transform: uppercase; 
+    opacity: 0.7; 
+}
+
+/* --- ANFORDERUNGS-HINTS (B | S | G) --- */
+
+.req-hint { 
+    font-size: 1.0rem !important;  /* GRÖSSER (war 0.75rem) */
+    font-weight: 600;               /* Fett, damit Farben besser wirken */
+    display: flex; 
+    justify-content: space-between; /* Zahlen links, Einheit rechts */
+    align-items: center;
+    color: #6c757d;                 /* Standardfarbe für Trennstriche */
+    margin-top: 3px;
+    padding: 0 2px;
+}
+
+/* Wrapper für die Zahlen, damit der Abstand stimmt */
+.req-values-wrapper {
+    display: flex;
+    gap: 4px; /* Kleiner Abstand zwischen den Zahlen */
+}
+
+/* Die spezifischen Farben zurückbringen */
+.req-val-b { color: #d98a4e !important; } /* Bronze (Kupfer) */
+.req-val-s { color: #6c757d !important; } /* Silber (Dunkelgrau) */
+.req-val-g { color: #b8860b !important; } /* Gold (Dunkelgold) */
+
+/* Einheit (z.B. "Sek.") etwas dezenter */
+.req-unit {
+    font-weight: normal;
+    font-size: 1.0rem;
+    color: #adb5bd;
+    font-style: italic;
+}
+
+/* --- DARK MODE ANPASSUNG FÜR HINTS --- */
+@media (prefers-color-scheme: dark) {
+    /* Heller im Darkmode, damit es leuchtet */
+    .req-val-b { color: #eecba9 !important; } /* Helles Bronze */
+    .req-val-s { color: #adb5bd !important; } /* Helles Silber */
+    .req-val-g { color: #ffda6a !important; } /* Helles Gold */
+    
+    .req-hint { color: #6c757d; } /* Trennstriche dunkel lassen */
+    .req-unit { color: #6c757d; }
+}
+
+/* =========================================
+   7. DARK MODE & RESPONSIVE
+   ========================================= */
+
+@media (prefers-color-scheme: dark) {
+    /* Basisfarben */
+    body { background-color: #212529; color: #f8f9fa; }
+    
+    /* Name Spalte */
+    .col-name, .col-sticky-left { background-color: #212529 !important; border-right-color: #495057; }
+    .name-main { color: #f8f9fa !important; }
+    .name-age { color: #adb5bd !important; }
+    
+    /* Sticky Header */
+    .sticky-header, thead .col-sticky-left { 
+        background-color: #343a40 !important; 
+        color: #fff;
+        border-bottom-color: #495057; 
+    }
+
+    /* Standard Inputs im Dark Mode (Grau statt Weiß) */
+    /* Nur wenn KEINE Medaillen-Klasse gesetzt ist */
+    .discipline-selector:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
+    .form-control-custom:not(.medal-gold):not(.medal-silber):not(.medal-bronze),
+    .swimming-select-compact {
+        background-color: #2b3035 !important;
+        color: #dee2e6 !important;
+        border-color: #495057 !important;
+    }
+    
+    /* Result Badge Box */
+    .result-badge-box {
+        background-color: #343a40;
+        border-color: #495057;
+        color: #e9ecef;
+    }
+
+    /* Hintergründe Namen (angepasst für Lesbarkeit auf Dunkel) */
+    .bg-gold-transparent { background-color: rgba(255, 220, 46, 0.15) !important; color: #ffda6a !important; }
+    .bg-silver-transparent { background-color: rgba(255, 255, 255, 0.1) !important; color: #dee2e6 !important; }
+    .bg-bronze-transparent { background-color: rgba(217, 138, 78, 0.15) !important; color: #eecba9 !important; }
+}
+
+@media (max-width: 768px) {
+    .col-name { width: 140px !important; min-width: 140px; }
+    .col-swimming { width: 50px !important; min-width: 50px; }
+    .swim-info-text, .swimming-select-compact { display: none; }
+    .swim-badge-container { background: transparent; border: none; padding: 0; }
+    .swim-badge-container::before { content: "✓"; font-size: 1.5rem; color: #198754; width: auto; height: auto; background: none; }
+}
