@@ -133,46 +133,10 @@
 
 {% block javascripts %}
     {{ parent() }}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const store = document.getElementById('dashboard-data-store');
-        if (!store) return;
-
-        const allStats = JSON.parse(store.dataset.stats);
-
-        for (const [year, data] of Object.entries(allStats)) {
-            const ctx = document.getElementById('chart-' + year);
-            if (ctx) {
-                // Berechne "Ohne Medaille"
-                const noMedal = Math.max(0, Object.keys(data.unique_users).length - data.stats.Total);
-
-                new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Gold', 'Silber', 'Bronze', 'Teilgenommen (ohne)'],
-                        datasets: [{
-                            data: [
-                                data.stats.Gold, 
-                                data.stats.Silber, 
-                                data.stats.Bronze, 
-                                noMedal
-                            ],
-                            backgroundColor: ['#FFD700', '#C0C0C0', '#CD7F32', '#f0f0f0'],
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false, // Wichtig damit es in die Box passt
-                        plugins: {
-                            legend: { position: 'bottom' }
-                        }
-                    }
-                });
-            }
-        }
-    });
-    </script>
+    {# 1. Lokale Chart.js Bibliothek laden (CSP compliant) #}
+    <script src="{{ asset('pulsrsportabzeichen/js/chart.min.js') }}"></script>
+    
+    {# 2. Dein Logik-Skript laden #}
+    <script src="{{ asset('pulsrsportabzeichen/js/dashboard.js') }}"></script>
 {% endblock %}

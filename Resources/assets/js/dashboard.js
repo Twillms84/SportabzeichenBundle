@@ -1,30 +1,38 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // 1. Daten aus dem HTML-Attribut auslesen
-    const dataStore = document.getElementById('dashboard-data-store');
+    // 1. Daten Store suchen
+    const store = document.getElementById('dashboard-data-store');
     
-    if (!dataStore) return; // Nichts zu tun, wenn keine Daten da sind
+    // Wenn kein Store da ist, brich ab (verhindert Fehler auf anderen Seiten)
+    if (!store) return;
 
-    // JSON parsen
-    const yearlyStats = JSON.parse(dataStore.dataset.stats);
+    // 2. Daten parsen
+    let allStats = {};
+    try {
+        allStats = JSON.parse(store.dataset.stats);
+    } catch (e) {
+        console.error("Fehler beim Lesen der Statistik-Daten:", e);
+        return;
+    }
 
-    // 2. Durch alle Jahre iterieren
-    for (const [year, data] of Object.entries(yearlyStats)) {
-        
-        // Canvas Element suchen: id="chart-2023", id="chart-2024" usw.
+    // 3. Charts erstellen
+    for (const [year, data] of Object.entries(allStats)) {
         const ctx = document.getElementById('chart-' + year);
-
+        
         if (ctx) {
+            // "Ohne Medaille" berechnen (verhindert negative Zahlen)
+            const totalParticipants = Object.keys(data.unique_users).length;
+            const noMedal = Math.max(0, totalParticipants - data.stats.Total);
+
             new Chart(ctx, {
-                type: 'doughnut', // Oder 'pie', 'bar'
+                type: 'doughnut',
                 data: {
-                    labels: ['Gold', 'Silber', 'Bronze', 'Ohne Medaille'],
+                    labels: ['Gold', 'Silber', 'Bronze', 'Teilgenommen (ohne)'],
                     datasets: [{
                         data: [
-                            data.stats.Gold,
-                            data.stats.Silber,
-                            data.stats.Bronze,
-                            // "Ohne Medaille" berechnen: Alle Teilnehmer - (Gold+Silber+Bronze)
-                            (Object.keys(data.unique_users).length - data.stats.Total)
+                            data.stats.Gold, 
+                            data.stats.Silber, 
+                            data.stats.Bronze, 
+                            noMedal
                         ],
                         backgroundColor: [
                             '#FFD700', // Gold
@@ -40,9 +48,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'bottom',
+                            position: 'right', // Legende rechts ist oft platzsparender
                             labels: {
-                                boxWidth: 12
+                                boxWidth: 12,
+                                font: { size: 11 }
                             }
                         }
                     }
