@@ -8,7 +8,6 @@ module.exports = {
         'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
         'js/exam_dashboard': './assets/js/exam_dashboard.js',
         'js/admin_participants': './assets/js/admin_participants.js',
-        'js/chart.min': './assets/js/chart.min.js',
         'css/sportabzeichen_results': './assets/css/results.css',
         'css/dashboard_css': './assets/css/dashboard_css.css',
         'css/print_groupcard':'./assets/css/print_groupcard.css',
