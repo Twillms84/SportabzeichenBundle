@@ -4,25 +4,7 @@
 
 {% block stylesheets %}
     {{ parent() }}
-    <style>
-        .chart-wrapper {
-            position: relative; 
-            height: 220px; 
-            width: 100%;
-        }
-        .stat-card {
-            transition: all 0.2s;
-            border-left: 4px solid transparent;
-        }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
-        
-        .border-gold { border-left-color: #FFD700 !important; }
-        .border-silver { border-left-color: #A9A9A9 !important; }
-        .border-bronze { border-left-color: #cd7f32 !important; }
-        .text-gold { color: #FFD700; }
-        .text-silver { color: #A9A9A9; }
-        .text-bronze { color: #cd7f32; }
-    </style>
+    <link rel="stylesheet" href="{{ asset('pulsrsportabzeichen/css/dashboard.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -43,6 +25,13 @@
         </div>
     {% else %}
 
+        {# --- DATEN-BRÜCKE --- #}
+        {# Hier speichern wir das JSON sicher ab, damit die JS-Datei es lesen kann #}
+        <div id="dashboard-data-store" 
+             data-stats="{{ yearlyStats|json_encode|e('html_attr') }}" 
+             style="display: none;">
+        </div>
+
         {% for year, data in yearlyStats %}
             <div class="panel panel-default mb-4">
                 <div class="panel-heading d-flex justify-content-between align-items-center" style="background-color: #f8f9fa;">
@@ -56,8 +45,6 @@
                     <div class="row">
                         {# --- LINKS: STATISTIK & LISTE --- #}
                         <div class="col-md-8">
-                            
-                            {# Info Cards #}
                             <div class="row mb-4">
                                 <div class="col-sm-6 col-lg-3">
                                     <div class="card shadow-sm p-3 mb-2 bg-white rounded text-center border-gold stat-card">
@@ -84,10 +71,7 @@
                                     </div>
                                 </div>
                             </div>
-
                             <hr>
-
-                            {# Liste der Prüfungen #}
                             <h5 class="text-muted text-uppercase font-weight-bold mb-3" style="font-size: 0.85rem;">Prüfungstermine</h5>
                             <div class="list-group">
                                 {% for exam in data.exams %}
@@ -101,7 +85,6 @@
                                             </p>
                                         </div>
                                         <div>
-                                            {# Buttons für Aktionen #}
                                             <span class="btn btn-sm btn-default" title="Zur Auswertung">
                                                 <span class="icon icon-chart-bar"></span> Auswertung
                                             </span>
@@ -141,54 +124,9 @@
 
 {% block javascripts %}
     {{ parent() }}
-    {# Chart.js via CDN laden. Falls IServ das blockt, muss es lokal in Assets liegen #}
+    {# Chart.js Library #}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const yearlyData = {{ yearlyStats|json_encode|raw }};
-
-            Object.keys(yearlyData).forEach(function(year) {
-                const data = yearlyData[year];
-                const stats = data.stats;
-                
-                // Prüfen ob Daten da sind, sonst leeres Chart vermeiden
-                const totalMedals = stats.Gold + stats.Silber + stats.Bronze;
-                const noMedal = stats.Ohne;
-
-                const ctx = document.getElementById('chart-' + year);
-                if (ctx) {
-                    new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Gold', 'Silber', 'Bronze', 'Ohne Abzeichen'],
-                            datasets: [{
-                                data: [stats.Gold, stats.Silber, stats.Bronze, noMedal],
-                                backgroundColor: [
-                                    '#FFD700', // Gold
-                                    '#C0C0C0', // Silber
-                                    '#cd7f32', // Bronze
-                                    '#e9ecef'  // Ohne (Hellgrau)
-                                ],
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                    labels: { boxWidth: 12, padding: 15 }
-                                }
-                            },
-                            layout: {
-                                padding: 10
-                            }
-                        }
-                    });
-                }
-            });
-        });
-    </script>
+    
+    {# Dein externes Script #}
+    <script src="{{ asset('pulsrsportabzeichen/js/dashboard.js') }}"></script>
 {% endblock %}
