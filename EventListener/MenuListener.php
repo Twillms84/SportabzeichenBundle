@@ -58,9 +58,9 @@ final class MenuListener implements MainMenuListenerInterface
                 'route' => 'sportabzeichen_admin_dashboard',
                 'label' => _('SPA–Verwaltung'),
                 'extras' => [
-                    // 'sliders' sieht oft moderner aus als 'cog'
-                    // Alternativ: 'toolbox'
-                    'icon' => 'sliders', 
+                    // 'cogs' (Mehrere Zahnräder) funktioniert immer in IServ
+                    // Alternativ: 'wrench' (Schraubenschlüssel)
+                    'icon' => 'cogs', 
                     'icon_style' => 'fas',
                 ],
             ]);
