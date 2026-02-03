@@ -2,103 +2,147 @@
 
 {% block title %}Mein Sportabzeichen {{ year }}{% endblock %}
 
-{% block content %}
-<div class="container py-4">
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
 
-    {# --- HEADER --- #}
+{% block content %}
+
+{% set unitMap = {
+    'UNIT_METERS': 'm', 'UNIT_CENTIMETERS': 'cm', 'UNIT_SECONDS': 'Sek.', 
+    'UNIT_MINUTES': 'Min.', 'UNIT_HOURS': 'Std.', 'UNIT_NUMBER': 'Anz.', 
+    'UNIT_PIECES': 'Wert', 'NONE': 'Verband', 'UNIT_NONE': 'Verband'
+} %}
+{% set time_units = ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
+
+{# Icon Änderung: time statt heart (sicherer in Bootstrap 3) #}
+{% set cat_icons = {
+    'Ausdauer': 'glyphicon-time',
+    'Kraft': 'glyphicon-fire',
+    'Schnelligkeit': 'glyphicon-flash',
+    'Koordination': 'glyphicon-random'
+} %}
+
+<div class="container py-4">
     <div class="d-flex align-items-center justify-content-between mb-4">
         <div>
             <h1 class="h3 mb-1">Mein Sportabzeichen {{ year }}</h1>
-            <p class="text-muted mb-0">
-                Altersklasse <strong>{{ age }}</strong> &bull; 
-                {% if gender == 'MALE' %}<i class="fa fa-mars text-primary"></i> Männlich
-                {% elseif gender == 'FEMALE' %}<i class="fa fa-venus text-danger"></i> Weiblich
-                {% else %}Divers{% endif %}
-            </p>
-        </div>
-        <div>
-             <span class="badge bg-light text-dark border p-2">Saison {{ year }}</span>
+            <p class="text-muted mb-0">Übersicht deiner Leistungen und Ziele</p>
         </div>
     </div>
 
-    {# --- FLASH MESSAGES --- #}
-    {% for message in app.flashes('success') %}
-        <div class="alert alert-success">{{ message }}</div>
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : label }} shadow-sm">{{ message }}</div>
+        {% endfor %}
     {% endfor %}
 
-    {# --- KATEGORIEN --- #}
     {% for catName, disciplines in categories %}
         {% if disciplines is not empty %}
-        <div class="card shadow-sm mb-4 border-left-{{ cycle(['primary', 'success', 'warning', 'info'], loop.index0) }}">
-            <div class="card-header bg-white py-3">
-                <h5 class="m-0 font-weight-bold text-dark">
-                    {{ catName }}
-                </h5>
+        
+        {% set colorClass = cycle(['primary', 'success', 'warning', 'info'], loop.index0) %}
+        
+        <div class="card shadow-sm mb-4 sa-border-{{ colorClass }}">
+            <div class="card-header bg-white py-3 d-flex align-items-center">
+                <span class="glyphicon {{ cat_icons[catName]|default('glyphicon-list') }} text-{{ colorClass }} me-2" aria-hidden="true"></span>
+                <h5 class="m-0 font-weight-bold text-dark" style="display:inline-block; margin-left: 10px;">{{ catName }}</h5>
             </div>
+            
             <div class="table-responsive">
-                <table class="table table-hover mb-0 align-middle">
+                {# CSS Klasse sa-table-fixed sorgt für Desktop Layout & Mobile Switch #}
+                <table class="table table-hover mb-0 align-middle sa-table-fixed">
                     <thead class="bg-light text-muted small text-uppercase">
                         <tr>
-                            
-                            <th style="width: 25%;" class="ps-4">Disziplin</th>
-                            <th style="width: 10%;" class="text-center text-bronze">B</th>
-                            <th style="width: 10%;" class="text-center text-secondary">S</th>
-                            <th style="width: 10%;" class="text-center text-warning">G</th>
-                            <th style="width: 20%;" class="text-end">Offiziell</th>
-                            <th style="width: 25%;" class="ps-4">Mein Training</th>
+                            <th class="ps-4 sa-col-discipline">Disziplin</th>
+                            <th class="text-center sa-col-medal sa-text-bronze">Bronze</th>
+                            <th class="text-center sa-col-medal sa-text-silver">Silber</th>
+                            <th class="text-center sa-col-medal sa-text-gold">Gold</th>
+                            <th class="text-center sa-col-official text-dark">Ergebnis</th>
+                            <th class="ps-4 sa-col-training">Mein Training</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in disciplines %}
-                            {% set offRes = row.official_result %}
-                            {% set hasOff = offRes is not null %}
+                            {% set einheit_label = unitMap[row.einheit]|default(row.einheit) %}
+                            {% set is_time = row.einheit in time_units %}
                             
-                            <tr class="{{ hasOff ? 'bg-light-success' : '' }}">
-                                <td class="ps-4">
-                                    {# DEBUG: ID anzeigen #}
-                                    <strong>({{ row.discipline_id }}) {{ row.name }}</strong><br>
-                                    <small class="text-muted">{{ row.einheit }}</small>
+                            <tr>
+                                {# Mobile Header: Disziplin Name #}
+                                <td class="ps-4 sa-mobile-header" data-label="Disziplin">
+                                    <div class="fw-bold">{{ row.name }}</div>
+                                    <span class="badge bg-light text-muted border">{{ einheit_label }}</span>
                                 </td>
                                 
-                                {# Anforderungen #}
-                                <td class="text-center small">{{ row.bronze }}</td>
-                                <td class="text-center small">{{ row.silber }}</td>
-                                <td class="text-center small">{{ row.gold }}</td>
+                                {# Formatierung Variablen vorbereiten #}
+                                {% if is_time %}
+                                    {% set val_bronze = row.bronze|number_format(2, '.', '')|replace({'.': ':'}) %}
+                                    {% set val_silver = row.silber|number_format(2, '.', '')|replace({'.': ':'}) %}
+                                    {% set val_gold   = row.gold|number_format(2, '.', '')|replace({'.': ':'}) %}
+                                {% else %}
+                                    {% set val_bronze = row.bronze|number_format(2, ',', '.')|trim('0', 'right')|trim(',') %}
+                                    {% set val_silver = row.silber|number_format(2, ',', '.')|trim('0', 'right')|trim(',') %}
+                                    {% set val_gold   = row.gold|number_format(2, ',', '.')|trim('0', 'right')|trim(',') %}
+                                {% endif %}
 
-                                {# Offizielles Ergebnis (Lehrer) #}
-                                <td class="text-end">
-                                    {% if hasOff %}
-                                        <span class="fw-bold font-monospace">{{ offRes.leistung }}</span>
-                                        <i class="fa fa-check-circle text-success ms-1" title="Vom Lehrer bestätigt"></i>
-                                        <br>
-                                        <span class="badge rounded-pill 
-                                            {% if offRes.points == 3 %}bg-warning text-dark
-                                            {% elseif offRes.points == 2 %}bg-secondary
-                                            {% else %}bg-danger{% endif %}">
-                                            {% if offRes.points == 3 %}Gold{% elseif offRes.points == 2 %}Silber{% else %}Bronze{% endif %}
-                                        </span>
+                                {# Werte mit data-label für Mobile #}
+                                <td class="text-center small font-monospace" data-label="Bronze">
+                                    <span class="visible-xs-inline sa-text-bronze me-1"></span> {{ val_bronze }}
+                                </td>
+                                <td class="text-center small font-monospace" data-label="Silber">
+                                    <span class="visible-xs-inline sa-text-silver me-1"></span> {{ val_silver }}
+                                </td>
+                                <td class="text-center small font-monospace" data-label="Gold">
+                                    <span class="visible-xs-inline sa-text-gold me-1"></span> {{ val_gold }}
+                                </td>
+
+                                {# Offizielles Ergebnis #}
+                                <td class="text-center" data-label="Ergebnis">
+                                    {% if row.official_result %}
+                                        <div class="fw-bold font-monospace" style="display:inline-block;">
+                                            {% if is_time %}
+                                                {{ row.official_result.leistung|number_format(2, '.', '')|replace({'.': ':'}) }}
+                                            {% else %}
+                                                {{ row.official_result.leistung|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                                            {% endif %}
+                                        </div>
+                                        
+                                        {% if row.official_result.points == 3 %}
+                                            <span class="label label-gold" title="Gold">Gold</span>
+                                        {% elseif row.official_result.points == 2 %}
+                                            <span class="label label-silver" title="Silber">Silber</span>
+                                        {% elseif row.official_result.points == 1 %}
+                                            <span class="label label-bronze" title="Bronze">Bronze</span>
+                                        {% else %}
+                                            <span class="label label-danger">0 Pkt</span>
+                                        {% endif %}
                                     {% else %}
                                         <span class="text-muted small">-</span>
                                     {% endif %}
                                 </td>
 
-                                {# Mein Training (Eingabe) #}
-                                <td class="ps-4">
-                                    <form method="post" class="d-flex align-items-center">
-                                        <input type="hidden" name="discipline_id" value="{{ row.discipline_id }}">
-                                        <input type="hidden" name="save_training" value="1">
-                                        
-                                        <div class="input-group input-group-sm">
-                                            <input type="text" 
-                                                   name="training_value" 
-                                                   class="form-control" 
-                                                   placeholder="Wert..." 
-                                                   value="{{ row.training_value }}">
-                                            <button class="btn btn-outline-primary" type="submit" title="Speichern">
-                                                <i class="fa fa-save"></i>
-                                            </button>
-                                        </div>
-                                    </form>
+                                {# Training Button #}
+                                <td class="ps-4 sa-mobile-action">
+                                    <a href="{{ path('pulsr_sportabzeichen_training_detail', { disciplineId: row.discipline_id }) }}" 
+                                       class="btn btn-outline-primary btn-sm w-100 d-flex justify-content-between align-items-center sa-btn-hover">
+                                        <span>
+                                            {% if row.training_value is not empty %}
+                                                {% if row.training_value matches '/^\\d+(\\.\\d+)?$/' %}
+                                                    {% if is_time %}
+                                                        <span class="fw-bold">{{ row.training_value|replace({'.': ':'}) }}</span>
+                                                    {% else %}
+                                                        <span class="fw-bold">{{ row.training_value|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                     <span class="fw-bold">{{ row.training_value }}</span>
+                                                {% endif %}
+                                                <small>{{ einheit_label }}</small>
+                                            {% else %}
+                                                <span class="small text-muted fst-italic">Training...</span>
+                                            {% endif %}
+                                        </span>
+                                        <span class="glyphicon glyphicon-chevron-right small text-muted" aria-hidden="true"></span>
+                                    </a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -108,21 +152,5 @@
         </div>
         {% endif %}
     {% endfor %}
-
-    <div class="alert alert-light border small mt-4">
-        <i class="fa fa-info-circle me-1"></i>
-        Die Spalte <strong>"Offiziell"</strong> zeigt die vom Lehrer bei der Prüfung eingetragenen Werte. 
-        Unter <strong>"Mein Training"</strong> kannst du deine eigenen Übungswerte festhalten.
-    </div>
-
 </div>
-
-<style>
-    .text-bronze { color: #cd7f32; }
-    .bg-light-success { background-color: rgba(25, 135, 84, 0.05); }
-    .border-left-primary { border-left: 4px solid #0d6efd; }
-    .border-left-success { border-left: 4px solid #198754; }
-    .border-left-warning { border-left: 4px solid #ffc107; }
-    .border-left-info { border-left: 4px solid #0dcaf0; }
-</style>
 {% endblock %}

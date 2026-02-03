@@ -9,6 +9,7 @@ module.exports = {
         'js/admin_participants': './assets/js/admin_participants.js',
         'css/sportabzeichen_results': './assets/css/results.css',
         'css/print_groupcard':'./assets/css/print_groupcard.css',
+        'css/sportabzeichen_my_results':'./assets/css/my_results.css',
         'svg/dsa_groupcard':'./assets/svg/dsa_groupcard.svg'
     },
     output: {

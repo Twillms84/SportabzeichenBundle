@@ -1,0 +1,111 @@
+/* Resources/public/css/sportabzeichen_my_results.css */
+
+/* --- Farben & Labels (Medaillen) --- */
+.sa-text-bronze { color: #cd7f32 !important; font-weight: bold; }
+.sa-text-silver { color: #888 !important; font-weight: bold; } /* Etwas heller für Darkmode-Lesbarkeit */
+.sa-text-gold   { color: #ffc107 !important; text-shadow: 0 1px 0 rgba(0,0,0,0.1); font-weight: bold; }
+
+/* Labels für Ergebnisse */
+.label-bronze { background-color: #cd7f32; color: white; }
+.label-silver { background-color: #777; color: white; }
+.label-gold   { background-color: #f0ad4e; color: white; }
+
+/* --- Tabellen-Layout Desktop (Fixed) --- */
+.sa-table-fixed {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.sa-table-fixed td {
+    word-wrap: break-word;
+    white-space: normal;
+    vertical-align: middle !important;
+}
+
+/* Spaltenbreiten Desktop */
+.sa-col-discipline { width: 22%; }
+.sa-col-medal      { width: 9%; }
+.sa-col-official   { width: 14%; }
+.sa-col-training   { width: 37%; }
+
+/* Borders für Kategorien (Überschrift) */
+.sa-border-primary { border-left: 4px solid #0d6efd; }
+.sa-border-success { border-left: 4px solid #198754; }
+.sa-border-warning { border-left: 4px solid #ffc107; }
+.sa-border-info    { border-left: 4px solid #0dcaf0; }
+
+/* Hover Effekt Button */
+.sa-btn-hover:hover .glyphicon-chevron-right {
+    transform: translateX(3px);
+    transition: transform 0.2s ease-in-out;
+}
+
+/* --- MOBILE & DARK MODE OPTIMIERUNG --- */
+@media screen and (max-width: 767px) {
+    
+    /* Desktop Header ausblenden */
+    .sa-table-fixed thead { display: none; }
+
+    /* Die Zeile wird zur "Karte" */
+    .sa-table-fixed tr {
+        display: block;
+        margin-bottom: 15px;
+        /* WICHTIG für Dark Mode: Transparenter Border statt festes Grau */
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        border-radius: 4px;
+        /* Kein fester Background (#fff), damit Dark Mode greift */
+        background-color: inherit; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    /* Zellen styling */
+    .sa-table-fixed td {
+        display: block;
+        text-align: right;
+        /* Subtiler Border unten */
+        border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+        border-top: none !important;
+        position: relative;
+        padding-left: 45% !important;
+        min-height: 40px;
+        width: 100% !important;
+    }
+
+    .sa-table-fixed td:last-child { border-bottom: 0; }
+
+    /* Das Label (z.B. "Bronze") vor dem Wert */
+    .sa-table-fixed td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 15px;
+        width: 40%;
+        text-align: left;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.85em;
+        top: 8px;
+        /* Farbe: Inherit + Opacity sorgt für Lesbarkeit in Hell & Dunkel */
+        color: inherit;
+        opacity: 0.6; 
+    }
+
+    /* Header der Karte (Disziplin Name) */
+    .sa-table-fixed td.sa-mobile-header {
+        /* Leichter Hintergrund-Tint, funktioniert meist in beiden Modi */
+        background-color: rgba(127, 127, 127, 0.05);
+        text-align: left;
+        padding-left: 15px !important;
+        font-size: 1.1em;
+        color: inherit; /* Textfarbe vom Theme erben */
+    }
+    .sa-table-fixed td.sa-mobile-header::before { display: none; }
+    
+    /* Button Bereich */
+    .sa-table-fixed td.sa-mobile-action {
+        padding-left: 15px !important;
+        text-align: center;
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+    .sa-table-fixed td.sa-mobile-action::before { display: none; }
+}

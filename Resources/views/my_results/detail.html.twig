@@ -1,0 +1,152 @@
+{% extends '@IServCore/page.html.twig' %}
+
+{% block title %}{{ discipline.name }} - Training{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+        <link rel="stylesheet" href="{{ asset('css/sportabzeichen_my_results.css', 'pulsr-sportabzeichen') }}">
+{% endblock %}
+
+{% block content %}
+
+{% set unitMap = {
+    'UNIT_METERS': 'm', 'UNIT_CENTIMETERS': 'cm', 'UNIT_SECONDS': 'Sek.', 
+    'UNIT_MINUTES': 'Min.', 'UNIT_HOURS': 'Std.', 'UNIT_NUMBER': 'Anz.', 
+    'UNIT_PIECES': 'Wert', 'NONE': 'Verband', 'UNIT_NONE': 'Verband'
+} %}
+{% set is_time = discipline.einheit in ['UNIT_SECONDS', 'UNIT_MINUTES', 'UNIT_HOURS'] %}
+{% set einheit_label = unitMap[discipline.einheit]|default(discipline.einheit) %}
+
+<div class="container py-4 sa-container-narrow">
+
+    <a href="{{ path('pulsr_sportabzeichen_my_results') }}" class="text-decoration-none mb-3 d-inline-block text-muted">
+        <span class="glyphicon glyphicon-arrow-left me-1" aria-hidden="true"></span> Zurück zur Übersicht
+    </a>
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h2 mb-1">{{ discipline.name }}</h1>
+            <span class="badge bg-secondary">{{ einheit_label }}</span>
+        </div>
+        <div class="text-end">
+             <span class="badge bg-light text-dark border p-2">Saison {{ year }}</span>
+        </div>
+    </div>
+
+    {% if analysis is defined and analysis is not empty %}
+        {% if analysis.next_goal_label is not null %}
+            <div class="alert alert-info border-info shadow-sm d-flex align-items-center">
+                {# Icon: Stats/Chart #}
+                <span class="glyphicon glyphicon-stats me-3 text-info" style="font-size: 2em;" aria-hidden="true"></span>
+                <div style="margin-left: 15px;">
+                    <h5 class="alert-heading h6 m-0">Nächstes Ziel: <strong>{{ analysis.next_goal_label }}</strong></h5>
+                    <p class="mb-0 small mt-1">
+                        Dir fehlen noch <strong>
+                        {% if is_time %}
+                            {{ analysis.gap|number_format(2, '.', '')|replace({'.': ':'}) }}
+                        {% else %}
+                            {{ analysis.gap|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                        {% endif %}
+                        {{ einheit_label }}</strong>.
+                        {% if analysis.less_is_better %}
+                            {# Tacho Icon für "Schneller werden" #}
+                            <span class="glyphicon glyphicon-dashboard ms-1" aria-hidden="true"></span> Du musst schneller werden!
+                        {% else %}
+                            {# Pfeil Hoch für "Mehr schaffen" #}
+                            <span class="glyphicon glyphicon-arrow-up ms-1" aria-hidden="true"></span> Du musst dich steigern!
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        {% else %}
+            <div class="alert alert-success shadow-sm d-flex align-items-center">
+                 {# Stern für Gold/Erfolg #}
+                 <span class="glyphicon glyphicon-star me-3 sa-text-gold" style="font-size: 2em;" aria-hidden="true"></span>
+                 <div style="margin-left: 15px;">
+                    <h5 class="m-0">Gold erreicht!</h5>
+                    <small>Du hast die Anforderungen für Gold erfüllt.</small>
+                 </div>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <div class="row g-4">
+        
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Neuen Wert erfassen</h5>
+                    <form method="post">
+                        <label class="form-label small text-muted text-uppercase fw-bold">Deine Leistung</label>
+                        <div class="input-group input-group-lg mb-3">
+                            <input type="text" name="value" class="form-control" 
+                                   placeholder="{{ is_time ? 'z.B. 12:30' : 'z.B. 12,5' }}" required autofocus>
+                            <span class="input-group-text text-muted">{{ einheit_label }}</span>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
+                            <span class="glyphicon glyphicon-floppy-disk me-2" aria-hidden="true"></span> Speichern
+                        </button>
+                    </form>
+
+                    <hr class="my-4">
+                    
+                    <h6 class="small text-muted text-uppercase mb-3 fw-bold">Ziele</h6>
+                    <div class="d-flex justify-content-between text-center">
+                        {% for stufe, val in {'Bronze': discipline.bronze, 'Silber': discipline.silber, 'Gold': discipline.gold} %}
+                            <div>
+                                <div class="small text-muted mb-1">{{ stufe }}</div>
+                                <div class="fw-bold {{ stufe == 'Bronze' ? 'sa-text-bronze' : (stufe == 'Silber' ? 'sa-text-silver' : 'sa-text-gold') }}">
+                                    {% if is_time %}
+                                        {{ val|number_format(2, '.', '')|replace({'.': ':'}) }}
+                                    {% else %}
+                                        {{ val|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-white fw-bold border-bottom">Verlauf</div>
+                <div class="list-group list-group-flush">
+                    {% for entry in history %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center {{ loop.first ? 'sa-bg-newest' : '' }}">
+                            <div>
+                                {% if entry.value matches '/^\\d+(\\.\\d+)?$/' %}
+                                    {% if is_time %}
+                                        <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|replace({'.': ':'}) }}</span>
+                                    {% else %}
+                                        <span class="h5 m-0 font-monospace fw-bold">{{ entry.value|number_format(2, ',', '.')|trim('0', 'right')|trim(',') }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="h5 m-0 font-monospace fw-bold">{{ entry.value }}</span>
+                                {% endif %}
+                                <span class="small text-muted ms-1">{{ einheit_label }}</span>
+                            </div>
+                            
+                            <div class="text-end">
+                                <div class="small text-muted">
+                                    <span class="glyphicon glyphicon-calendar me-1" aria-hidden="true"></span> {{ entry.created_at|date('d.m.Y') }}
+                                </div>
+                                <div class="text-muted sa-text-xs">
+                                    {{ entry.created_at|date('H:i') }} Uhr
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="text-center p-5 text-muted">
+                            <span class="glyphicon glyphicon-list-alt mb-3 sa-icon-placeholder" style="font-size: 2em;" aria-hidden="true"></span><br>
+                            Noch keine Trainingsdaten.<br>Leg los!
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
