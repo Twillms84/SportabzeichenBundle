@@ -5,6 +5,12 @@
 {% block stylesheets %}
     {{ parent() }}
     <link rel="stylesheet" href="{{ asset('pulsrsportabzeichen/css/dashboard.css') }}">
+    <style>
+        /* Kleiner Hotfix, falls die Icons zicken */
+        .btn .icon { margin-right: 4px; }
+        /* Damit die Toolbar nicht umbricht */
+        .btn-toolbar { display: flex; gap: 5px; }
+    </style>
 {% endblock %}
 
 {% block content %}
@@ -23,7 +29,7 @@
         </div>
     {% else %}
 
-        {# --- DATEN-BRÜCKE: Hier liegen die Daten für das JS --- #}
+        {# --- DATEN-BRÜCKE --- #}
         <div id="dashboard-data-store" 
              data-stats="{{ yearlyStats|json_encode|e('html_attr') }}" 
              style="display: none;">
@@ -40,85 +46,56 @@
                 
                 <div class="panel-body">
                     <div class="row">
-                        {# --- LINKS: KACHELN & LISTE --- #}
+                        {# --- LINKS: LISTE --- #}
                         <div class="col-md-8">
                             
-                            {# Info Kacheln #}
-                            <div class="row mb-4">
-                                <div class="col-sm-6 col-lg-3">
-                                    <div class="card shadow-sm p-3 mb-2 bg-white rounded text-center border-gold stat-card">
-                                        <div class="h3 m-0 font-weight-bold text-gold">{{ data.stats.Gold }}</div>
-                                        <small class="text-muted text-uppercase">Gold</small>
-                                    </div>
-                                </div>
-                                <div class="col-sm-6 col-lg-3">
-                                    <div class="card shadow-sm p-3 mb-2 bg-white rounded text-center border-silver stat-card">
-                                        <div class="h3 m-0 font-weight-bold text-silver">{{ data.stats.Silber }}</div>
-                                        <small class="text-muted text-uppercase">Silber</small>
-                                    </div>
-                                </div>
-                                <div class="col-sm-6 col-lg-3">
-                                    <div class="card shadow-sm p-3 mb-2 bg-white rounded text-center border-bronze stat-card">
-                                        <div class="h3 m-0 font-weight-bold text-bronze">{{ data.stats.Bronze }}</div>
-                                        <small class="text-muted text-uppercase">Bronze</small>
-                                    </div>
-                                </div>
-                                <div class="col-sm-6 col-lg-3">
-                                    <div class="card shadow-sm p-3 mb-2 bg-white rounded text-center stat-card" style="border-left: 4px solid #0d6efd;">
-                                        <div class="h3 m-0 font-weight-bold text-primary">{{ data.unique_users|length }}</div>
-                                        <small class="text-muted text-uppercase">Teilnehmer</small>
-                                    </div>
-                                </div>
-                            </div>
+                            {# Info Kacheln (Gold/Silber/Bronze) hier ausgeblendet für Übersicht, oder einkommentieren wenn gewünscht #}
+                            {# Hier direkt die Liste #}
                             
-                            <hr>
-                            
-                            {# Liste der Prüfungen #}
-                            <h5 class="text-muted text-uppercase font-weight-bold mb-3" style="font-size: 0.85rem;">Prüfungstermine</h5>
+                            <h5 class="text-muted text-uppercase font-weight-bold mb-3">Prüfungstermine</h5>
                             <div class="list-group">
                                 {% for exam in data.exams %}
-                                    <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center">
-                                        <div class="mb-2 mb-md-0 mr-3">
-                                            <h5 class="list-group-item-heading mb-1 font-weight-bold">
-                                                <a href="{{ path('sportabzeichen_results_index', {id: exam.id}) }}" style="color: inherit; text-decoration: none;">
+                                    <div class="list-group-item clearfix" style="display: flex; justify-content: space-between; align-items: center;">
+                                        
+                                        {# Linker Teil: Name #}
+                                        <div>
+                                            <h4 class="list-group-item-heading mt-0 mb-1">
+                                                <a href="{{ path('sportabzeichen_results_index', {id: exam.id}) }}" class="text-primary font-weight-bold">
                                                     {{ exam.exam_name }}
                                                 </a>
-                                            </h5>
-                                            <p class="list-group-item-text text-muted mb-0 small">
-                                                <span class="icon icon-calendar"></span> {{ exam.exam_date ? exam.exam_date|date('d.m.Y') : 'Kein Datum' }}
+                                            </h4>
+                                            <p class="list-group-item-text text-muted small">
+                                                <span class="icon icon-calendar"></span> 
+                                                {{ exam.exam_date ? exam.exam_date|date('d.m.Y') : 'Kein Datum' }}
                                             </p>
                                         </div>
 
-                                        <div class="btn-toolbar" role="toolbar">
-                                            {# Button: Ergebnisse #}
-                                            <div class="btn-group mr-2" role="group">
-                                                <a href="{{ path('sportabzeichen_results_index', {id: exam.id}) }}" class="btn btn-sm btn-primary" title="Ergebnisse eintragen">
-                                                    <span class="icon icon-pencil"></span> Ergebnisse
-                                                </a>
-                                            </div>
-
-                                            {# Button: Statistik #}
-                                            <div class="btn-group mr-2" role="group">
-                                                <a href="{{ path('sportabzeichen_exams_stats', {id: exam.id}) }}" class="btn btn-sm btn-default" title="Statistik ansehen">
-                                                    <span class="icon icon-chart-bar"></span> Statistik
-                                                </a>
-                                            </div>
-
-                                            {# Admin Buttons: Ändern & Löschen #}
-                                            <div class="btn-group" role="group">
-                                                <a href="{{ path('sportabzeichen_exams_edit', {id: exam.id}) }}" class="btn btn-sm btn-default" title="Einstellungen ändern">
-                                                    <span class="icon icon-cog"></span> Ändern
-                                                </a>
-                                                
-                                                {# Der Löschen-Button triggert das Formular per JS #}
-                                                <button type="button" class="btn btn-sm btn-danger" title="Löschen" 
-                                                        onclick="if(confirm('Prüfung wirklich unwiderruflich löschen?')) { document.getElementById('delete-form-{{ exam.id }}').submit(); }">
-                                                    <span class="icon icon-trash"></span>
-                                                </button>
-                                            </div>
+                                        {# Rechter Teil: Buttons #}
+                                        <div class="btn-toolbar" style="margin-left: auto;">
                                             
-                                            {# Das Formular liegt jetzt AUẞERHALB der btn-group, damit das CSS nicht kaputt geht #}
-                                            <form id="delete-form-{{ exam.id }}" action="{{ path('sportabzeichen_exams_delete', {id: exam.id}) }}" method="post" style="display: none;">
+                                            {# Ergebnisse #}
+                                            <a href="{{ path('sportabzeichen_results_index', {id: exam.id}) }}" class="btn btn-sm btn-primary" title="Ergebnisse">
+                                                <span class="icon icon-pencil"></span> Ergebnisse
+                                            </a>
+
+                                            {# Statistik #}
+                                            <a href="{{ path('sportabzeichen_exams_stats', {id: exam.id}) }}" class="btn btn-sm btn-default" title="Statistik">
+                                                <span class="icon icon-chart-bar"></span> Statistik
+                                            </a>
+
+                                            {# Ändern #}
+                                            <a href="{{ path('sportabzeichen_exams_edit', {id: exam.id}) }}" class="btn btn-sm btn-default" title="Bearbeiten">
+                                                <span class="icon icon-cog"></span> Ändern
+                                            </a>
+
+                                            {# Löschen - JETZT SEPARAT UND MIT TEXT #}
+                                            <button type="button" class="btn btn-sm btn-danger" 
+                                                    onclick="if(confirm('Wirklich löschen?')) { document.getElementById('del-{{ exam.id }}').submit(); }">
+                                                <span class="icon icon-trash"></span> Löschen
+                                            </button>
+
+                                            {# Das versteckte Formular (ganz sicher hier) #}
+                                            <form id="del-{{ exam.id }}" action="{{ path('sportabzeichen_exams_delete', {id: exam.id}) }}" method="post" style="display:none;">
                                                 <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ exam.id) }}">
                                             </form>
 
@@ -130,11 +107,13 @@
 
                         {# --- RECHTS: CHART --- #}
                         <div class="col-md-4 border-left">
-                            <h5 class="text-center text-muted mb-3">Medaillenspiegel {{ year }}</h5>
-                            <div class="chart-wrapper">
-                                {# Das Canvas Element für Chart.js #}
+                            <h5 class="text-center text-muted">Medaillenspiegel {{ year }}</h5>
+                            
+                            {# Container mit fester Höhe, damit ChartJS rendert #}
+                            <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="chart-{{ year }}"></canvas>
                             </div>
+
                             <div class="text-center mt-3 small text-muted">
                                 Erfolgsquote: 
                                 {% if data.unique_users|length > 0 %}
@@ -154,9 +133,46 @@
 
 {% block javascripts %}
     {{ parent() }}
-    {# Chart.js muss geladen sein #}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    {# Dein JS Script (Inhalt siehe unten) #}
-    <script src="{{ asset('pulsrsportabzeichen/js/dashboard.js') }}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const store = document.getElementById('dashboard-data-store');
+        if (!store) return;
+
+        const allStats = JSON.parse(store.dataset.stats);
+
+        for (const [year, data] of Object.entries(allStats)) {
+            const ctx = document.getElementById('chart-' + year);
+            if (ctx) {
+                // Berechne "Ohne Medaille"
+                const noMedal = Math.max(0, Object.keys(data.unique_users).length - data.stats.Total);
+
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Gold', 'Silber', 'Bronze', 'Teilgenommen (ohne)'],
+                        datasets: [{
+                            data: [
+                                data.stats.Gold, 
+                                data.stats.Silber, 
+                                data.stats.Bronze, 
+                                noMedal
+                            ],
+                            backgroundColor: ['#FFD700', '#C0C0C0', '#CD7F32', '#f0f0f0'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false, // Wichtig damit es in die Box passt
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+            }
+        }
+    });
+    </script>
 {% endblock %}
