@@ -1,37 +1,36 @@
-/* Resources/public/js/dashboard.js */
-
-document.addEventListener("DOMContentLoaded", function() {
-    // 1. Daten aus dem HTML-Element holen (Brücke zwischen Twig und JS)
+document.addEventListener('DOMContentLoaded', function () {
+    // 1. Daten aus dem HTML-Attribut auslesen
     const dataStore = document.getElementById('dashboard-data-store');
     
-    // Abbrechen, wenn das Element nicht existiert (z.B. keine Daten vorhanden)
-    if (!dataStore) return;
+    if (!dataStore) return; // Nichts zu tun, wenn keine Daten da sind
 
-    // 2. JSON parsen
-    const rawJson = dataStore.getAttribute('data-stats');
-    if (!rawJson) return;
+    // JSON parsen
+    const yearlyStats = JSON.parse(dataStore.dataset.stats);
 
-    const yearlyData = JSON.parse(rawJson);
-
-    // 3. Charts initialisieren
-    Object.keys(yearlyData).forEach(function(year) {
-        const data = yearlyData[year];
-        const stats = data.stats;
+    // 2. Durch alle Jahre iterieren
+    for (const [year, data] of Object.entries(yearlyStats)) {
         
-        // Canvas Element suchen
+        // Canvas Element suchen: id="chart-2023", id="chart-2024" usw.
         const ctx = document.getElementById('chart-' + year);
+
         if (ctx) {
             new Chart(ctx, {
-                type: 'doughnut',
+                type: 'doughnut', // Oder 'pie', 'bar'
                 data: {
-                    labels: ['Gold', 'Silber', 'Bronze', 'Ohne Abzeichen'],
+                    labels: ['Gold', 'Silber', 'Bronze', 'Ohne Medaille'],
                     datasets: [{
-                        data: [stats.Gold, stats.Silber, stats.Bronze, stats.Ohne],
+                        data: [
+                            data.stats.Gold,
+                            data.stats.Silber,
+                            data.stats.Bronze,
+                            // "Ohne Medaille" berechnen: Alle Teilnehmer - (Gold+Silber+Bronze)
+                            (Object.keys(data.unique_users).length - data.stats.Total)
+                        ],
                         backgroundColor: [
                             '#FFD700', // Gold
                             '#C0C0C0', // Silber
-                            '#cd7f32', // Bronze
-                            '#e9ecef'  // Ohne (Hellgrau)
+                            '#CD7F32', // Bronze
+                            '#e9ecef'  // Grau (Rest)
                         ],
                         borderWidth: 1
                     }]
@@ -42,28 +41,13 @@ document.addEventListener("DOMContentLoaded", function() {
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: { boxWidth: 12, padding: 15 }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    let value = context.raw;
-                                    let total = context.chart._metasets[context.datasetIndex].total;
-                                    let percentage = Math.round((value / total) * 100) + '%';
-                                    return label + value + ' (' + percentage + ')';
-                                }
+                            labels: {
+                                boxWidth: 12
                             }
                         }
-                    },
-                    layout: {
-                        padding: 10
                     }
                 }
             });
         }
-    });
+    }
 });
