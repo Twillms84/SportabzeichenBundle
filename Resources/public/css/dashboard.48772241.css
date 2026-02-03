@@ -1,0 +1,26 @@
+/* Resources/public/css/dashboard.css */
+
+.chart-wrapper {
+    position: relative; 
+    height: 220px; 
+    width: 100%;
+}
+
+.stat-card {
+    transition: all 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.stat-card:hover { 
+    transform: translateY(-2px); 
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; 
+}
+
+/* Farben */
+.border-gold { border-left-color: #FFD700 !important; }
+.border-silver { border-left-color: #A9A9A9 !important; }
+.border-bronze { border-left-color: #cd7f32 !important; }
+
+.text-gold { color: #FFD700; }
+.text-silver { color: #A9A9A9; }
+.text-bronze { color: #cd7f32; }
