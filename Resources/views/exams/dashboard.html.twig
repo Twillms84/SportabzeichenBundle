@@ -134,7 +134,7 @@
 {% block javascripts %}
     {{ parent() }}
     {# 1. Lokale Chart.js Bibliothek laden (CSP compliant) #}
-    <script src="{{ asset('js/chart.min.js', 'pulsr-sportabzeichen') }}"></script>
+    <script src="{{ asset('pulsrsportabzeichen/js/chart.min.js') }}"></script>
     {# 2. Dein Logik-Skript laden #}
     <script src="{{ asset('js/dashboard.js', 'pulsr-sportabzeichen') }}"></script>
 {% endblock %}
