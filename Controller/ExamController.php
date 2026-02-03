@@ -18,17 +18,80 @@ use Symfony\Component\Routing\Annotation\Route;
 final class ExamController extends AbstractPageController
 {
     #[Route('/', name: 'dashboard')]
-    public function index(ExamRepository $examRepository): Response
+    public function index(Connection $conn): Response
     {
         $this->denyAccessUnlessGranted('PRIV_SPORTABZEICHEN_RESULTS');
+
+        // 1. Alle Prüfungen laden (als Array für einfache Handhabung)
+        $exams = $conn->fetchAllAssociative("
+            SELECT * FROM sportabzeichen_exams 
+            ORDER BY exam_year DESC, exam_date DESC
+        ");
+
+        // 2. Performance-Query: Punkte aller Teilnehmer aller Prüfungen auf einmal holen
+        // Wir gruppieren nach Prüfung und Teilnehmer und summieren die Punkte
+        $sqlResults = "
+            SELECT 
+                e.exam_year,
+                e.id as exam_id,
+                p.user_id,
+                SUM(COALESCE(r.points, 0)) as total_points
+            FROM sportabzeichen_exams e
+            JOIN sportabzeichen_exam_participants ep ON e.id = ep.exam_id
+            JOIN sportabzeichen_participants p ON ep.participant_id = p.id
+            LEFT JOIN sportabzeichen_exam_results r ON ep.id = r.ep_id
+            GROUP BY e.id, ep.id, p.user_id
+        ";
         
-        $exams = $examRepository->findBy(
-            [], 
-            ['year' => 'DESC', 'date' => 'DESC']
-        );
+        $rawResults = $conn->fetchAllAssociative($sqlResults);
+
+        // 3. Daten aggregieren nach Jahr
+        $yearlyStats = [];
+
+        // Schritt A: Struktur vorbereiten basierend auf den Exams
+        foreach ($exams as $exam) {
+            $year = $exam['exam_year'];
+            
+            if (!isset($yearlyStats[$year])) {
+                $yearlyStats[$year] = [
+                    'year' => $year,
+                    'exams' => [],
+                    'stats' => ['Gold' => 0, 'Silber' => 0, 'Bronze' => 0, 'Ohne' => 0, 'Total' => 0],
+                    'unique_users' => [] // Um Teilnehmer pro Jahr eindeutig zu zählen
+                ];
+            }
+            $yearlyStats[$year]['exams'][] = $exam;
+        }
+
+        // Schritt B: Ergebnisse zuordnen
+        foreach ($rawResults as $row) {
+            $year = $row['exam_year'];
+            
+            // Falls Prüfung existiert (sollte immer so sein)
+            if (isset($yearlyStats[$year])) {
+                $pts = (int)$row['total_points'];
+                
+                // Teilnehmer zählen (pro Jahr eindeutig machen durch user_id als Key)
+                $yearlyStats[$year]['unique_users'][$row['user_id']] = true;
+
+                // Medaillen berechnen (Logik analog zu deiner stats-Methode)
+                if ($pts >= 11) {
+                    $yearlyStats[$year]['stats']['Gold']++;
+                    $yearlyStats[$year]['stats']['Total']++;
+                } elseif ($pts >= 8) {
+                    $yearlyStats[$year]['stats']['Silber']++;
+                    $yearlyStats[$year]['stats']['Total']++;
+                } elseif ($pts >= 4) {
+                    $yearlyStats[$year]['stats']['Bronze']++;
+                    $yearlyStats[$year]['stats']['Total']++;
+                } else {
+                    $yearlyStats[$year]['stats']['Ohne']++;
+                }
+            }
+        }
 
         return $this->render('@PulsRSportabzeichen/exams/dashboard.html.twig', [
-            'exams' => $exams,
+            'yearlyStats' => $yearlyStats,
         ]);
     }
 
