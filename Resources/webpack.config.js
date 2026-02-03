@@ -7,7 +7,7 @@ module.exports = {
     entry: {
         'js/exam_results_autosave': './assets/js/exam_results_autosave.js',
         'js/dashboard': './assets/js/dashboard.js',
-        'js/chart.min': './assets/js/chart.min.js',
+        'js/chart': './assets/js/chart.min.js',
         'js/admin_participants': './assets/js/admin_participants.js',
         'css/sportabzeichen_results': './assets/css/results.css',
         'css/dashboard': './assets/css/dashboard.css',
